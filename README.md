@@ -1,5 +1,8 @@
 # DCF Universal MX
 
+[![GitHub](https://img.shields.io/badge/github-dcf--universal--mx-181717?logo=github)](https://github.com/CompositeManTrader/dcf-universal-mx)
+[![Streamlit](https://img.shields.io/badge/streamlit-deploy-FF4B4B?logo=streamlit)](https://share.streamlit.io)
+
 Valuacion DCF de las **35 emisoras del IPC mexicano** a partir del XBRL oficial de la CNBV/BMV.
 
 Pipeline end-to-end:
@@ -35,10 +38,17 @@ streamlit run app.py
 
 ## Streamlit Cloud
 
-1. Push este repo a GitHub.
-2. En [share.streamlit.io](https://share.streamlit.io) -> New app -> selecciona el repo, branch y `app.py`.
-3. Asegurate que `requirements.txt` esta en raiz (Streamlit Cloud lo detecta automaticamente).
-4. Los XBRLs deben estar commiteados en `data/raw_xbrl/` o subirse via UI (modo *Upload XBRL*).
+Repo: https://github.com/CompositeManTrader/dcf-universal-mx
+
+1. Ir a [share.streamlit.io](https://share.streamlit.io) y autenticar con GitHub.
+2. Click **New app** -> selecciona:
+   - Repository: `CompositeManTrader/dcf-universal-mx`
+   - Branch: `main`
+   - Main file path: `app.py`
+3. Click **Deploy**. Streamlit Cloud detecta `requirements.txt` automaticamente.
+4. La primera build tarda ~3-5 minutos. Cada `git push` re-despliega.
+
+Los 30 XBRL ya estan en el repo (`data/raw_xbrl/`). El batch corre sobre 27 / 35 (faltan 8 financieras + ALFA).
 
 ## Estructura
 
