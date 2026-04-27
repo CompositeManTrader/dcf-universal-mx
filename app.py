@@ -81,7 +81,11 @@ def _style_upside_table(df: pd.DataFrame, upside_col: str = "upside_pct") -> pd.
         else:
             intensity = min(1.0, abs(v) / 50.0)
             return f"background-color: rgba(218, 54, 51, {0.3 + 0.5 * intensity}); color: white"
-    return df.style.applymap(color, subset=[upside_col])
+    # pandas 3.x: usar .map(); applymap fue removido
+    styler = df.style
+    if hasattr(styler, "map"):
+        return styler.map(color, subset=[upside_col])
+    return styler.applymap(color, subset=[upside_col])
 
 
 def _bar_chart_upside(df: pd.DataFrame) -> alt.Chart:
