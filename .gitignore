@@ -1,0 +1,59 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Venvs
+venv/
+.venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.spyproject/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data dumps (no commitear diagnosticos)
+data/parsed/_*.txt
+data/parsed/_wip*
+data/parsed/_damodaran*
+data/parsed/_labels*
+
+# Outputs generados (regenerables)
+data/parsed/*.xlsx
+data/parsed/*.parquet
+data/valuations/*.xlsx
+
+# XBRL crudos del IPC: SI commitear (necesarios para que Streamlit Cloud funcione)
+# Pero EXCLUIR archivos privados/licenciados:
+data/raw_xbrl/CUERVO_WIP.xlsx
+data/raw_xbrl/CUERVO - WIP.xlsx
+data/raw_xbrl/fcffsimpleginzu.xlsx
+tests/fixtures/CUERVO_WIP.xlsx
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Claude Code local settings
+.claude/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Logs
+*.log

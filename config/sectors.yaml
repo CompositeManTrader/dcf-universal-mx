@@ -1,0 +1,115 @@
+# Defaults sectoriales calibrados a MX (referencia: Damodaran ajustado a Mexico).
+#
+# Estrategia: el runner usa por default los valores ACTUALES del XBRL para target_op_margin
+# y sales_to_capital. Estos defaults sectoriales solo se usan como FALLBACK cuando los
+# valores actuales son anomalos (ej. EBIT negativo, S2C extremo).
+#
+# beta_unlevered: bottom-up beta sin apalancar (DAMODARAN, sigue valido)
+# sales_to_capital: ratio reinversion default (FALLBACK)
+# target_op_margin: margen objetivo default (FALLBACK)
+# is_financial: True para bancos/aseguradoras (usar Justified P/B + Excess Returns)
+# is_reit: True para REITs (FCFF no aplica - usar P/AFFO o NAV - por ahora se valua con FCFF pero con warning)
+
+beverage_alcoholic:
+  name: "Beverage (Alcoholic)"
+  beta_unlevered: 0.78
+  sales_to_capital: 0.70             # CUERVO actual (agave aging deprime S2C)
+  target_op_margin: 0.22
+
+beverage_soft:
+  name: "Beverage (Soft)"
+  beta_unlevered: 0.65
+  sales_to_capital: 1.65             # MX promedio (KOF/AC/FEMSA)
+  target_op_margin: 0.13             # MX trailing promedio (no industry global de 18%)
+
+food_processing:
+  name: "Food Processing"
+  beta_unlevered: 0.55
+  sales_to_capital: 1.55
+  target_op_margin: 0.10
+
+food_retail:
+  name: "Food Retail (Wholesale)"
+  beta_unlevered: 0.45
+  sales_to_capital: 3.20             # WALMEX/CHDRAUI MX (vs US ~5.5)
+  target_op_margin: 0.06             # mejorado vs default 0.04
+
+restaurant:
+  name: "Restaurant / Dining"
+  beta_unlevered: 0.95
+  sales_to_capital: 1.60             # ALSEA actual MX
+  target_op_margin: 0.10
+
+retail_general:
+  name: "Retail (General)"
+  beta_unlevered: 0.90
+  sales_to_capital: 1.10             # LIVEPOL MX (mucho mas bajo que US ~4.5)
+  target_op_margin: 0.13             # LIVEPOL trailing
+
+telecom:
+  name: "Telecom Services"
+  beta_unlevered: 0.55
+  sales_to_capital: 0.80             # AMX/MEGA MX
+  target_op_margin: 0.19             # promedio AMX/MEGA
+
+infrastructure_airports:
+  name: "Airports / Toll Roads"
+  beta_unlevered: 0.65
+  sales_to_capital: 0.60
+  target_op_margin: 0.50             # promedio ASUR/GAP/OMA, excluyendo PINFRA outlier
+
+building_materials:
+  name: "Building Materials / Cement"
+  beta_unlevered: 1.05
+  sales_to_capital: 0.75
+  target_op_margin: 0.15             # mid-cycle MX (CEMEX bottom 7%, GCC peak 26%)
+
+mining_metals:
+  name: "Metals & Mining"
+  beta_unlevered: 1.10
+  sales_to_capital: 1.00
+  target_op_margin: 0.30             # GMEXICO/PE_OLES MX promedio
+
+conglomerate:
+  name: "Conglomerate / Diversified"
+  beta_unlevered: 0.90
+  sales_to_capital: 1.20
+  target_op_margin: 0.10
+
+healthcare:
+  name: "Healthcare / Pharma"
+  beta_unlevered: 0.85
+  sales_to_capital: 1.00             # LAB MX
+  target_op_margin: 0.20
+
+consumer_goods:
+  name: "Household Products"
+  beta_unlevered: 0.65
+  sales_to_capital: 3.00             # KIMBER MX (capital-light)
+  target_op_margin: 0.22
+
+real_estate_reit:
+  name: "REIT (FCFF NO APLICA - usar P/AFFO)"
+  beta_unlevered: 0.65
+  sales_to_capital: 0.10
+  target_op_margin: 0.55
+  is_reit: true
+
+media:
+  name: "Media / Broadcasting"
+  beta_unlevered: 0.95
+  sales_to_capital: 0.80
+  target_op_margin: 0.10             # MX media en restructure (TLEVISA actual 7%)
+
+chemicals:
+  name: "Chemicals (Specialty)"
+  beta_unlevered: 1.00
+  sales_to_capital: 1.10             # ORBIA actual
+  target_op_margin: 0.10             # ORBIA en down-cycle
+
+financial:
+  name: "Financial Services (NO DCF)"
+  beta_unlevered: 0.95
+  sales_to_capital: 0.50
+  target_op_margin: 0.30
+  is_financial: true

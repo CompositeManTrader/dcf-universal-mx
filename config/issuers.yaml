@@ -1,0 +1,259 @@
+# 35 emisoras del IPC (Indice de Precios y Cotizaciones, BMV).
+# Formato: ticker -> {name, sector, market_price (placeholder), notes}
+# Actualizar `market_price` con cierre del dia para corridas frescas.
+# El sector debe coincidir con keys de sectors.yaml.
+
+market_defaults:
+  risk_free: 0.0921           # M-BONO 10Y nominal (calibrado vs analista WIP)
+  erp: 0.0610                 # ERP MX = ERP US + CRP MX (calibrado)
+  marginal_tax: 0.30
+  terminal_growth: 0.03       # ~ inflacion MX largo plazo
+  terminal_wacc_override: 0.0850   # Fade a costo maduro (replica analista)
+  revenue_growth_high: 0.05   # Default conservador 5y
+  forecast_years: 10
+  high_growth_years: 5
+  fx_rate_usdmxn: 19.50        # Para emisoras que reportan en USD (GMEXICO, CEMEX, ORBIA, etc)
+
+issuers:
+
+  AC:
+    name: "Arca Continental"
+    sector: beverage_soft
+    market_price: 175.0
+    yahoo: AC.MX
+
+  ALFA:
+    name: "Alfa"
+    sector: conglomerate
+    market_price: 14.0
+    yahoo: ALFAA.MX
+
+  ALSEA:
+    name: "Alsea"
+    sector: restaurant
+    market_price: 50.0
+    yahoo: ALSEA.MX
+
+  AMX:
+    name: "America Movil"
+    sector: telecom
+    market_price: 17.0
+    yahoo: AMXB.MX
+
+  ASUR:
+    name: "Grupo Aeroportuario del Sureste"
+    sector: infrastructure_airports
+    market_price: 575.0
+    yahoo: ASURB.MX
+
+  BBAJIO:
+    name: "Banco del Bajio"
+    sector: financial
+    market_price: 60.0
+    yahoo: BBAJIOO.MX
+
+  BIMBO:
+    name: "Grupo Bimbo"
+    sector: food_processing
+    market_price: 65.0
+    yahoo: BIMBOA.MX
+
+  BOLSA:
+    name: "Bolsa Mexicana de Valores"
+    sector: financial
+    market_price: 35.0
+    yahoo: BOLSAA.MX
+
+  CEMEX:
+    name: "Cemex"
+    sector: building_materials
+    market_price: 14.0
+    yahoo: CEMEXCPO.MX
+    dcf_override:
+      target_op_margin: 0.13         # mid-cycle, actual 7% es bottom
+      revenue_growth_high: 0.05
+
+  CHDRAUI:
+    name: "Grupo Comercial Chedraui"
+    sector: food_retail
+    market_price: 130.0
+    yahoo: CHDRAUIB.MX
+
+  CUERVO:
+    name: "Becle (Jose Cuervo)"
+    sector: beverage_alcoholic
+    market_price: 22.0
+    yahoo: CUERVO.MX
+    # Para downloader automatico: pega aqui la URL del .zip/.xls del XBRL
+    # (la encuentras en https://www.bmv.com.mx/es/emisoras/perfil/CUERVO -> seccion 'Anexo T')
+    # xbrl_url: https://www.bmv.com.mx/docs-pub/anexotbol/anexotbol_CUERVO_2025-12-31_4_XXXX.zip
+
+  ELEKTRA:
+    name: "Grupo Elektra"
+    sector: financial
+    market_price: 600.0
+    yahoo: ELEKTRA.MX
+
+  FEMSA:
+    name: "FEMSA"
+    sector: beverage_soft
+    market_price: 200.0
+    yahoo: FEMSAUBD.MX
+    dcf_override:
+      target_op_margin: 0.13         # FEMSA holding (OXXO + KOF + Heineken) margin normalizado
+      sales_to_capital: 1.50
+
+  GAP:
+    name: "Grupo Aeroportuario del Pacifico"
+    sector: infrastructure_airports
+    market_price: 380.0
+    yahoo: GAPB.MX
+
+  GCARSO:
+    name: "Grupo Carso"
+    sector: conglomerate
+    market_price: 120.0
+    yahoo: GCARSOA1.MX
+
+  GCC:
+    name: "GCC (Grupo Cementos de Chihuahua)"
+    sector: building_materials
+    market_price: 220.0
+    yahoo: GCC.MX
+
+  GENTERA:
+    name: "Gentera"
+    sector: financial
+    market_price: 28.0
+    yahoo: GENTERA.MX
+
+  GFINBUR:
+    name: "Grupo Financiero Inbursa"
+    sector: financial
+    market_price: 50.0
+    yahoo: GFINBURO.MX
+
+  GFNORTE:
+    name: "Grupo Financiero Banorte"
+    sector: financial
+    market_price: 165.0
+    yahoo: GFNORTEO.MX
+
+  GMEXICO:
+    name: "Grupo Mexico"
+    sector: mining_metals
+    market_price: 130.0
+    yahoo: GMEXICOB.MX
+    dcf_override:
+      target_op_margin: 0.40         # GMEXICO consistentemente >40% (cobre)
+      sales_to_capital: 0.55         # capital-heavy mining
+
+  GRUMA:
+    name: "Gruma"
+    sector: food_processing
+    market_price: 350.0
+    yahoo: GRUMAB.MX
+
+  KIMBER:
+    name: "Kimberly-Clark de Mexico"
+    sector: consumer_goods
+    market_price: 30.0
+    yahoo: KIMBERA.MX
+
+  KOF:
+    name: "Coca-Cola FEMSA"
+    sector: beverage_soft
+    market_price: 175.0
+    yahoo: KOFUBL.MX
+
+  LAB:
+    name: "Genomma Lab Internacional"
+    sector: healthcare
+    market_price: 12.0
+    yahoo: LABB.MX
+
+  LIVEPOL:
+    name: "El Puerto de Liverpool"
+    sector: retail_general
+    market_price: 105.0
+    yahoo: LIVEPOLC-1.MX
+
+  MEGA:
+    name: "Megacable Holdings"
+    sector: telecom
+    market_price: 55.0
+    yahoo: MEGACPO.MX
+
+  OMA:
+    name: "Grupo Aeroportuario Centro Norte"
+    sector: infrastructure_airports
+    market_price: 230.0
+    yahoo: OMAB.MX
+
+  ORBIA:
+    name: "Orbia Advance Corporation"
+    sector: chemicals
+    market_price: 14.0
+    yahoo: ORBIA.MX
+    dcf_override:
+      target_op_margin: 0.10         # recuperacion mid-cycle vs actual 5%
+      revenue_growth_high: 0.04
+
+  PE_OLES:
+    name: "Industrias Penoles"
+    sector: mining_metals
+    market_price: 250.0
+    yahoo: PE&OLES.MX
+    dcf_override:
+      revenue_growth_high: 0.04      # normalizar (XBRL trim trae +30% one-off)
+      target_op_margin: 0.20         # mid-cycle conservador
+
+  PINFRA:
+    name: "Promotora y Operadora de Infraestructura"
+    sector: infrastructure_airports
+    market_price: 175.0
+    yahoo: PINFRA.MX
+    dcf_override:
+      target_op_margin: 0.55         # PINFRA actual 111% es contable, normalizar
+      sales_to_capital: 0.30
+      revenue_growth_high: 0.07
+
+  Q:
+    name: "Qualitas Controladora"
+    sector: financial
+    market_price: 175.0
+    yahoo: Q.MX
+
+  RA:
+    name: "Regional"
+    sector: financial
+    market_price: 145.0
+    yahoo: RA.MX
+
+  TLEVISA:
+    name: "Grupo Televisa"
+    sector: media
+    market_price: 9.0
+    yahoo: TLEVISACPO.MX
+    dcf_override:
+      target_op_margin: 0.12         # asumir recuperacion vs actual 7%
+      sales_to_capital: 0.50
+      revenue_growth_high: 0.03      # cable MX maduro
+
+  VESTA:
+    name: "Corporacion Inmobiliaria Vesta"
+    sector: real_estate_reit
+    market_price: 50.0
+    yahoo: VESTA.MX
+    dcf_override:
+      # REIT: FCFF clasico no aplica (capital intensive con largo aging),
+      # estos valores son APROXIMACION cruda hasta implementar P/AFFO o NAV.
+      target_op_margin: 0.65
+      sales_to_capital: 0.20
+      revenue_growth_high: 0.08
+
+  WALMEX:
+    name: "Wal-Mart de Mexico"
+    sector: food_retail
+    market_price: 60.0
+    yahoo: WALMEX.MX
