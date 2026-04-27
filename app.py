@@ -350,7 +350,261 @@ if mode == "Single DCF":
     with st.expander("Tabla tornado"):
         st.dataframe(torn, hide_index=True, use_container_width=True)
 
-    # Matriz heatmap growth × margin
+    # ========================================================================
+    # SECCIONES ESTILO DAMODARAN GINZU
+    # ========================================================================
+    st.divider()
+    st.header("Damodaran-style outputs")
+
+    # Helper: invested capital y ROIC implicitos (usando S2C constante)
+    def _compute_ic_roic(out, base, a):
+        """IC_0 = Revenue_0 / S2C; IC_t = IC_{t-1} + Reinv_t; ROIC_t = NOPAT_t / IC_{t-1}."""
+        ic0 = base.revenue / a.sales_to_capital if a.sales_to_capital > 0 else 1.0
+        ic_series = [ic0]
+        roic_series = []
+        for i in range(len(out.nopat)):
+            prev_ic = ic_series[-1]
+            roic_series.append(out.nopat[i] / prev_ic if prev_ic > 0 else 0)
+            ic_series.append(prev_ic + out.reinvestment[i])
+        return ic_series, roic_series
+
+    ic_series, roic_series = _compute_ic_roic(out, base, a)
+
+    # ---- 1) Valuation Output ----
+    st.subheader("1. Valuation Output")
+    st.caption("Snapshot por hito: año 1 (proyectado), año 5 (fin alto crecimiento), año 10 (estable), terminal.")
+    idxs = [0, 4, 9]   # Y1, Y5, Y10
+    val_rows = []
+    for label, i in zip(["Y1", "Y5", "Y10"], idxs):
+        val_rows.append({
+            "Periodo":           label,
+            "Revenue (MDP)":     round(out.revenue[i], 1),
+            "Op Margin":         f"{out.op_margin[i]:.2%}",
+            "EBIT (MDP)":        round(out.ebit[i], 1),
+            "NOPAT (MDP)":       round(out.nopat[i], 1),
+            "Reinversion (MDP)": round(out.reinvestment[i], 1),
+            "FCFF (MDP)":        round(out.fcff[i], 1),
+            "Inv. Capital":      round(ic_series[i], 1),
+            "ROIC":              f"{roic_series[i]:.2%}",
+            "WACC":              f"{out.wacc_yearly[i]:.2%}",
+            "PV FCFF (MDP)":     round(out.pv_fcff[i], 1),
+        })
+    # Terminal
+    rev_t11 = out.revenue[-1] * (1 + a.terminal_growth)
+    ebit_t11 = rev_t11 * a.target_op_margin
+    nopat_t11 = ebit_t11 * (1 - a.marginal_tax_terminal)
+    reinv_t11 = (rev_t11 - out.revenue[-1]) / a.sales_to_capital if a.sales_to_capital > 0 else 0
+    val_rows.append({
+        "Periodo":           "Terminal (Y11+)",
+        "Revenue (MDP)":     round(rev_t11, 1),
+        "Op Margin":         f"{a.target_op_margin:.2%}",
+        "EBIT (MDP)":        round(ebit_t11, 1),
+        "NOPAT (MDP)":       round(nopat_t11, 1),
+        "Reinversion (MDP)": round(reinv_t11, 1),
+        "FCFF (MDP)":        round(out.terminal_fcff, 1),
+        "Inv. Capital":      round(ic_series[-1], 1),
+        "ROIC":              f"{nopat_t11 / ic_series[-1]:.2%}" if ic_series[-1] else "-",
+        "WACC":              f"{out.terminal_wacc:.2%}",
+        "PV FCFF (MDP)":     round(out.pv_terminal, 1),
+    })
+    st.dataframe(pd.DataFrame(val_rows), hide_index=True, use_container_width=True)
+
+    # KPI strip de la valuation
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("PV FCFF (10y)",  f"{out.sum_pv_fcff:,.0f} MDP")
+    c2.metric("PV Terminal",    f"{out.pv_terminal:,.0f} MDP",
+              f"{out.pv_terminal/out.enterprise_value*100:.0f}% del EV")
+    c3.metric("Enterprise Value", f"{out.enterprise_value:,.0f} MDP")
+    c4.metric("Equity Value", f"{out.equity_value:,.0f} MDP",
+              f"{out.value_per_share:.2f} MXN/sh")
+
+    # ---- 2) Stories to Numbers ----
+    st.subheader("2. Stories to Numbers")
+    st.caption("Narrativa que conecta cada driver con la realidad del negocio.")
+
+    current_margin = base.ebit / base.revenue if base.revenue else 0
+    growth_5y = (1 + a.revenue_growth_high) ** 5 - 1
+    margin_delta_pp = (a.target_op_margin - current_margin) * 100
+    s2c_label = ("Capital-light (alto S2C)" if a.sales_to_capital > 2.5
+                 else "Capital-intensive" if a.sales_to_capital < 1.0
+                 else "Mid-range")
+    roic_terminal = roic_series[-1] if roic_series else 0
+    wacc_terminal = out.terminal_wacc
+    value_creation = "**crea valor**" if roic_terminal > wacc_terminal else "**destruye valor**"
+
+    st.markdown(f"""
+**Crecimiento de ingresos:** **{a.revenue_growth_high:.1%}** anual entre Y1-Y5.
+- Implica un acumulado de **+{growth_5y:.0%}** en 5 años.
+- Crecimiento histórico 12M observado: **{res.dcf.revenue_growth:.1%}**.
+
+**Margen operativo objetivo (Y10):** **{a.target_op_margin:.1%}**
+- Margen actual reportado: **{current_margin:.1%}**.
+- Movimiento implícito: **{margin_delta_pp:+.0f}pp** en 10 años. {'Expansion fuerte' if margin_delta_pp > 5 else 'Contraccion fuerte' if margin_delta_pp < -5 else 'Conservar margen'}.
+
+**Sales-to-Capital:** **{a.sales_to_capital:.2f}** ({s2c_label})
+- Por cada peso de reinversion, genera ${a.sales_to_capital:.2f} de revenue adicional.
+- Determina cuanto necesita reinvertir la empresa para sostener el crecimiento.
+
+**Beta:** unlevered **{a.unlevered_beta:.2f}** -> levered **{out.wacc_result.levered_beta:.2f}** (con D/E {out.wacc_result.debt_to_equity:.2f}).
+- Cost of Equity = Rf + β × ERP = {a.risk_free:.2%} + {out.wacc_result.levered_beta:.2f} × {a.erp:.2%} = **{out.wacc_result.cost_equity:.2%}**.
+
+**WACC:** **{out.wacc_result.wacc:.2%}** inicial → **{out.terminal_wacc:.2%}** en estado estable.
+- Synthetic rating de la deuda: **{out.wacc_result.rating}** (interest coverage {out.wacc_result.interest_coverage:.1f}x).
+- Cost of Debt pretax: **{out.wacc_result.pretax_cost_debt:.2%}**.
+
+**Crecimiento terminal:** **{a.terminal_growth:.1%}**.
+- Cap a inflacion MX largo plazo. Empresa madura en perpetuidad.
+- Verifica regla Gordon: terminal growth ({a.terminal_growth:.1%}) < risk-free ({a.risk_free:.2%}) ✓.
+
+**ROIC vs WACC en estado estable:** {roic_terminal:.1%} vs {wacc_terminal:.1%} → la empresa {value_creation}.
+""")
+
+    # ---- 3) Valuation as Picture (waterfall) ----
+    st.subheader("3. Valuation as Picture")
+    st.caption("De Sum PV FCFF a Equity Value: bridge en cascada.")
+
+    # Build waterfall data
+    net_debt = base.financial_debt - base.cash
+    items = [
+        ("1. PV FCFF (10y)",      out.sum_pv_fcff,         "add"),
+        ("2. + PV Terminal",      out.pv_terminal,         "add"),
+        ("3. = Enterprise Value", None,                     "subtotal"),
+        ("4. + Cash",             base.cash,                "add"),
+        ("5. (-) Total Debt",     -base.financial_debt,    "subtract"),
+        ("6. (-) Minority",       -base.minority_interest, "subtract"),
+        ("7. (+) Non-op Assets",  base.non_operating_assets, "add"),
+        ("8. = Equity Value",     None,                     "total"),
+    ]
+    cum = 0
+    waterfall_rows = []
+    for label, val, kind in items:
+        if kind == "subtotal":
+            waterfall_rows.append({"step": label, "start": 0, "end": cum, "delta": cum, "kind": kind})
+        elif kind == "total":
+            waterfall_rows.append({"step": label, "start": 0, "end": cum, "delta": cum, "kind": kind})
+        else:
+            new_cum = cum + val
+            waterfall_rows.append({"step": label, "start": cum, "end": new_cum, "delta": val, "kind": kind})
+            cum = new_cum
+
+    wf_df = pd.DataFrame(waterfall_rows)
+    color_scale = alt.Scale(
+        domain=["add", "subtract", "subtotal", "total"],
+        range=["#2EA043", "#DA3633", "#5B6B7E", "#1F4E79"],
+    )
+    waterfall_chart = (
+        alt.Chart(wf_df)
+        .mark_bar(size=40)
+        .encode(
+            x=alt.X("step:N", sort=None, title=None,
+                    axis=alt.Axis(labelAngle=-30)),
+            y=alt.Y("start:Q", title="MDP"),
+            y2="end:Q",
+            color=alt.Color("kind:N", scale=color_scale, legend=None),
+            tooltip=[
+                alt.Tooltip("step:N"),
+                alt.Tooltip("delta:Q", title="Δ MDP", format=",.0f"),
+                alt.Tooltip("end:Q",   title="Cumulative MDP", format=",.0f"),
+            ],
+        )
+        .properties(height=400)
+    )
+    label_chart = (
+        alt.Chart(wf_df)
+        .mark_text(dy=-8, fontSize=11)
+        .encode(x="step:N", y="end:Q",
+                text=alt.Text("delta:Q", format=",.0f"))
+    )
+    st.altair_chart(waterfall_chart + label_chart, use_container_width=True)
+
+    # ---- 4) Diagnostics ----
+    st.subheader("4. Diagnostics")
+    st.caption("Sanity checks sobre los supuestos y el output.")
+
+    diag = []
+    # ROIC vs WACC
+    spread = roic_terminal - wacc_terminal
+    diag.append({
+        "Check": "ROIC > WACC (estado estable)",
+        "Valor": f"{roic_terminal:.2%} vs {wacc_terminal:.2%}  (spread {spread*10000:+.0f}bps)",
+        "Status": "OK" if spread > 0 else "WARN",
+        "Comment": "Empresa crea valor" if spread > 0 else "Destruye valor en steady state - no debe sostenerse",
+    })
+    # Terminal growth < Rf
+    diag.append({
+        "Check": "Terminal growth < Risk-free",
+        "Valor": f"{a.terminal_growth:.2%} vs {a.risk_free:.2%}",
+        "Status": "OK" if a.terminal_growth < a.risk_free else "ERROR",
+        "Comment": "Regla Gordon (sino terminal value explota)",
+    })
+    # Margin convergence
+    margin_move_pp = abs(a.target_op_margin - current_margin) * 100
+    diag.append({
+        "Check": "Margin convergence vs current",
+        "Valor": f"{current_margin:.1%} → {a.target_op_margin:.1%}  ({margin_move_pp:+.0f}pp)",
+        "Status": "OK" if margin_move_pp < 5 else "WARN" if margin_move_pp < 10 else "AGGRESSIVE",
+        "Comment": "Movimientos >10pp requieren tesis fuerte",
+    })
+    # Effective tax rate sanity
+    etr = base.effective_tax_rate
+    diag.append({
+        "Check": "Effective tax rate en [10%, 40%]",
+        "Valor": f"{etr:.2%}",
+        "Status": "OK" if 0.10 <= etr <= 0.40 else "WARN",
+        "Comment": "Marginal MX = 30%. Fuera de rango sugiere one-offs",
+    })
+    # Debt-to-Equity reasonable
+    de = out.wacc_result.debt_to_equity
+    diag.append({
+        "Check": "Debt/Equity < 2.0",
+        "Valor": f"{de:.2f}",
+        "Status": "OK" if de < 2.0 else "WARN",
+        "Comment": "Apalancamiento razonable. >2 sugiere distress o financiera",
+    })
+    # Reinvestment rate vs growth
+    reinv_rate_y5 = out.reinvestment[4] / out.nopat[4] if out.nopat[4] else 0
+    diag.append({
+        "Check": "Reinvestment rate (Y5)",
+        "Valor": f"{reinv_rate_y5:.0%} de NOPAT",
+        "Status": "OK" if 0 <= reinv_rate_y5 <= 0.80 else "WARN",
+        "Comment": ">80% es muy alto; <0% sugiere desinversion",
+    })
+    # Terminal value share of EV
+    tv_share = out.pv_terminal / out.enterprise_value if out.enterprise_value else 0
+    diag.append({
+        "Check": "PV Terminal / EV",
+        "Valor": f"{tv_share:.0%}",
+        "Status": "OK" if tv_share < 0.75 else "WARN",
+        "Comment": ">75% del valor en terminal sugiere supuestos finales muy sensibles",
+    })
+    # Interest coverage
+    cov = out.wacc_result.interest_coverage
+    diag.append({
+        "Check": "Interest Coverage Ratio",
+        "Valor": f"{cov:.1f}x  (rating {out.wacc_result.rating})",
+        "Status": "OK" if cov >= 3.0 else "WARN" if cov >= 1.5 else "DISTRESS",
+        "Comment": "<1.5x = riesgo de default. >5x = grado de inversion",
+    })
+
+    diag_df = pd.DataFrame(diag)
+    # Color coding
+    def _color_status(v):
+        if v == "OK": return "background-color: rgba(46, 160, 67, 0.45); color: white"
+        if v == "WARN": return "background-color: rgba(245, 158, 11, 0.55); color: white"
+        if v in ("ERROR", "DISTRESS"): return "background-color: rgba(218, 54, 51, 0.65); color: white"
+        if v == "AGGRESSIVE": return "background-color: rgba(245, 100, 11, 0.55); color: white"
+        return ""
+    styler = diag_df.style
+    if hasattr(styler, "map"):
+        styler = styler.map(_color_status, subset=["Status"])
+    else:
+        styler = styler.applymap(_color_status, subset=["Status"])
+    st.dataframe(styler, hide_index=True, use_container_width=True)
+
+    # ========================================================================
+    # MATRIZ HEATMAP (mantener al final)
+    # ========================================================================
+    st.divider()
     st.subheader("Matriz growth × margin (heatmap)")
     grid_x = [0.02, 0.04, 0.05, 0.06, 0.08, 0.10]
     grid_y = [op_margin - 0.04, op_margin - 0.02, op_margin,
