@@ -617,7 +617,7 @@ if mode == "Single DCF":
             [_num(ic_series_bs[i]) for i in range(1, 11)] + [_num(ic_t)]))},
         {"Concepto": "ROIC",
          **dict(zip(implied_cols,
-            [_pct(roic_series_bs[i]) for i in range(1, 11)] + [_pct(roic_t)]))},
+            [_pct(roic_series_bs[i]) for i in range(10)] + [_pct(roic_t)]))},
     ]
     implied_df = pd.DataFrame(implied_rows)
 
@@ -968,7 +968,7 @@ if mode == "Single DCF":
             ("Cost of Capital",  [_pct(v) for v in out.wacc_yearly] + [_pct(out.terminal_wacc)]),
             ("Cumulated WACC",   [f"{v:.4f}" for v in out.discount_factor] + [""]),
             ("Sales to Capital", [f"{a.sales_to_capital:.2f}"] * 10 + [""]),
-            ("ROIC",             [_pct(roic_series_bs[i]) for i in range(1, 11)] + [_pct(roic_t)]),
+            ("ROIC",             [_pct(roic_series_bs[i]) for i in range(10)] + [_pct(roic_t)]),
         ]
         big_data = []
         for label, vals in big_rows:
