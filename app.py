@@ -33,6 +33,7 @@ from dcf_mexico.valuation import (
     FinancialBase,
     value_financial,
 )
+from dcf_mexico.view import build_all_sheets, BLOOMBERG_HEADER
 
 
 st.set_page_config(
@@ -86,6 +87,56 @@ def _style_upside_table(df: pd.DataFrame, upside_col: str = "upside_pct") -> pd.
     if hasattr(styler, "map"):
         return styler.map(color, subset=[upside_col])
     return styler.applymap(color, subset=[upside_col])
+
+
+def _style_bloomberg(df: pd.DataFrame, period_label: str = "FY 2025") -> "pd.io.formats.style.Styler":
+    """Estilo Damodaran/Bloomberg:
+       - header: azul oscuro, blanco, bold
+       - total: gris claro, bold, borde superior
+       - sub: italica suave
+       - line: regular
+       - format numerico: 1 decimal con separador miles
+    """
+    df_show = df.copy()
+    df_show = df_show.rename(columns={"Valor (MDP)": period_label})
+
+    def _fmt_num(v):
+        if v is None:
+            return "—"
+        if isinstance(v, str):
+            return v
+        if isinstance(v, (int, float)):
+            if v == 0:
+                return "0.0"
+            return f"{v:,.1f}"
+        return str(v)
+
+    df_show[period_label] = df_show[period_label].apply(_fmt_num)
+
+    def _row_style(row):
+        kind = row.get("Tipo", "")
+        if kind == "header":
+            return ["background-color: #1F4E79; color: white; font-weight: bold; "
+                     "padding: 6px;"] * len(row)
+        if kind == "total":
+            return ["background-color: #E7EEF7; font-weight: bold; "
+                     "border-top: 1px solid #1F4E79; padding: 4px;"] * len(row)
+        if kind == "sub":
+            return ["color: #4a5568; font-style: italic;"] * len(row)
+        return [""] * len(row)
+
+    styler = df_show.drop(columns=["Tipo"]).style.apply(
+        lambda r: [_row_style(df_show.iloc[r.name])[i] for i in range(len(r))],
+        axis=1,
+    )
+    # Right-align number column
+    styler = styler.set_properties(subset=[period_label], **{"text-align": "right"})
+    styler = styler.set_properties(subset=["Concepto"], **{"text-align": "left"})
+    styler = styler.set_properties(subset=["BBG Code"], **{"color": "#9CA3AF",
+                                                              "font-family": "monospace",
+                                                              "font-size": "11px"})
+    styler = styler.hide(axis="index")
+    return styler
 
 
 def _bar_chart_upside(df: pd.DataFrame) -> alt.Chart:
@@ -225,6 +276,28 @@ if mode == "Single DCF":
     # Snapshot
     with st.expander("Snapshot financiero", expanded=False):
         st.dataframe(res.summary(), hide_index=True, use_container_width=True)
+
+    # ========================================================================
+    # ESTADOS FINANCIEROS ESTILO BLOOMBERG (5 hojas)
+    # ========================================================================
+    period_label = f"FY {res.info.fiscal_year}" if res.info.fiscal_year else "Period"
+    st.subheader("Estados Financieros (estilo Bloomberg)")
+    st.caption(f"{BLOOMBERG_HEADER}  •  Periodo: {res.info.period_end} (Q{res.info.quarter})")
+    bb_sheets = build_all_sheets(res, market_price=issuer.market_price)
+    bb_tabs = st.tabs(list(bb_sheets.keys()))
+    for tab, (sheet_name, sheet_df) in zip(bb_tabs, bb_sheets.items()):
+        with tab:
+            st.markdown(f"**{sheet_name}** — In Millions of MXN")
+            try:
+                st.dataframe(
+                    _style_bloomberg(sheet_df, period_label),
+                    use_container_width=True,
+                    height=min(800, 35 + 35 * len(sheet_df)),
+                )
+            except Exception as e:
+                # Fallback sin styling si falla
+                st.warning(f"Styler error: {e}")
+                st.dataframe(sheet_df, hide_index=True, use_container_width=True)
 
     # ----- FINANCIAL ISSUER (DDM/Excess Returns) -----
     if sector.is_financial:
