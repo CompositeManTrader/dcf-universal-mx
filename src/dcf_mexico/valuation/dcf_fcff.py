@@ -74,6 +74,8 @@ class CompanyBase:
     non_operating_assets: float                 # MDP
     shares_outstanding: float                   # absoluto (no millones)
     effective_tax_rate: float
+    equity_book: float = 0.0                    # MDP, BV equity controladora
+    invested_capital: float = 0.0               # MDP, IC = equity + debt - cash (BS-based)
 
     @classmethod
     def from_parser_dcf(cls, dcf, include_leases_as_debt: bool = True,
@@ -84,6 +86,8 @@ class CompanyBase:
         Las acciones (shares) y tasas (%) NO se multiplican."""
         debt = dcf.total_debt if include_leases_as_debt else dcf.financial_debt
         m = currency_multiplier
+        equity_bv = dcf.equity_bv * m
+        ic = (equity_bv + debt * m - dcf.cash * m)
         return cls(
             ticker=dcf.ticker,
             revenue=dcf.revenue * m,
@@ -95,6 +99,8 @@ class CompanyBase:
             non_operating_assets=dcf.non_operating_assets * m,
             shares_outstanding=dcf.shares_outstanding,    # NO multiplicar (es count)
             effective_tax_rate=dcf.effective_tax_rate,    # NO multiplicar (ratio)
+            equity_book=equity_bv,
+            invested_capital=ic,
         )
 
 

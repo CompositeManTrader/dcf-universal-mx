@@ -443,52 +443,202 @@ if mode == "Single DCF":
 
     ic_series, roic_series = _compute_ic_roic(out, base, a)
 
-    # ---- 1) Valuation Output ----
+    # ---- 1) Valuation Output (Damodaran-style wide projection) ----
     st.subheader("1. Valuation Output")
-    st.caption("Snapshot por hito: año 1 (proyectado), año 5 (fin alto crecimiento), año 10 (estable), terminal.")
-    idxs = [0, 4, 9]   # Y1, Y5, Y10
-    val_rows = []
-    for label, i in zip(["Y1", "Y5", "Y10"], idxs):
-        val_rows.append({
-            "Periodo":           label,
-            "Revenue (MDP)":     round(out.revenue[i], 1),
-            "Op Margin":         f"{out.op_margin[i]:.2%}",
-            "EBIT (MDP)":        round(out.ebit[i], 1),
-            "NOPAT (MDP)":       round(out.nopat[i], 1),
-            "Reinversion (MDP)": round(out.reinvestment[i], 1),
-            "FCFF (MDP)":        round(out.fcff[i], 1),
-            "Inv. Capital":      round(ic_series[i], 1),
-            "ROIC":              f"{roic_series[i]:.2%}",
-            "WACC":              f"{out.wacc_yearly[i]:.2%}",
-            "PV FCFF (MDP)":     round(out.pv_fcff[i], 1),
-        })
-    # Terminal
-    rev_t11 = out.revenue[-1] * (1 + a.terminal_growth)
-    ebit_t11 = rev_t11 * a.target_op_margin
-    nopat_t11 = ebit_t11 * (1 - a.marginal_tax_terminal)
-    reinv_t11 = (rev_t11 - out.revenue[-1]) / a.sales_to_capital if a.sales_to_capital > 0 else 0
-    val_rows.append({
-        "Periodo":           "Terminal (Y11+)",
-        "Revenue (MDP)":     round(rev_t11, 1),
-        "Op Margin":         f"{a.target_op_margin:.2%}",
-        "EBIT (MDP)":        round(ebit_t11, 1),
-        "NOPAT (MDP)":       round(nopat_t11, 1),
-        "Reinversion (MDP)": round(reinv_t11, 1),
-        "FCFF (MDP)":        round(out.terminal_fcff, 1),
-        "Inv. Capital":      round(ic_series[-1], 1),
-        "ROIC":              f"{nopat_t11 / ic_series[-1]:.2%}" if ic_series[-1] else "-",
-        "WACC":              f"{out.terminal_wacc:.2%}",
-        "PV FCFF (MDP)":     round(out.pv_terminal, 1),
-    })
-    st.dataframe(pd.DataFrame(val_rows), hide_index=True, use_container_width=True)
+    st.caption("Damodaran-style wide projection: Base year | Y1-Y10 | Terminal year")
 
-    # KPI strip de la valuation
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("PV FCFF (10y)",  f"{out.sum_pv_fcff:,.0f} MDP")
-    c2.metric("PV Terminal",    f"{out.pv_terminal:,.0f} MDP",
+    # Compute per-year revenue growth (incluye base->Y1 y Y10->terminal)
+    base_rev = base.revenue
+    base_margin = base.ebit / base.revenue if base.revenue else 0
+    base_tax = base.effective_tax_rate
+    base_nopat = base.ebit * (1 - base_tax)
+
+    # Use BS-based invested capital if available
+    ic_base = base.invested_capital if base.invested_capital > 0 else (base.revenue / a.sales_to_capital if a.sales_to_capital > 0 else 1.0)
+    base_roic = base_nopat / ic_base if ic_base > 0 else 0
+
+    # Recompute IC series anchored on BS IC_0
+    ic_series_bs = [ic_base]
+    roic_series_bs = []
+    for i in range(len(out.nopat)):
+        roic_series_bs.append(out.nopat[i] / ic_series_bs[-1] if ic_series_bs[-1] > 0 else 0)
+        ic_series_bs.append(ic_series_bs[-1] + out.reinvestment[i])
+
+    # Terminal year values
+    rev_t = out.revenue[-1] * (1 + a.terminal_growth)
+    margin_t = a.target_op_margin
+    ebit_t = rev_t * margin_t
+    tax_t = a.marginal_tax_terminal
+    nopat_t = ebit_t * (1 - tax_t)
+    delta_rev_t = rev_t - out.revenue[-1]
+    reinv_t = delta_rev_t / a.sales_to_capital if a.sales_to_capital > 0 else 0
+    fcff_t = out.terminal_fcff
+    ic_t = ic_series_bs[-1] + reinv_t
+    roic_t = nopat_t / ic_series_bs[-1] if ic_series_bs[-1] > 0 else 0
+
+    # Revenue growth per year
+    rev_growth_per_year = []
+    rev_seq = [base_rev] + list(out.revenue) + [rev_t]
+    for i in range(1, len(rev_seq)):
+        g = (rev_seq[i] / rev_seq[i-1] - 1) if rev_seq[i-1] else 0
+        rev_growth_per_year.append(g)
+    # rev_growth_per_year[0..9] = Y1..Y10 growth, rev_growth_per_year[10] = Terminal growth
+
+    year_cols = ["Base year"] + [str(i) for i in range(1, 11)] + ["Terminal year"]
+
+    def _pct(v):  return f"{v*100:.2f}%" if v is not None else "—"
+    def _num(v):  return f"{v:,.2f}" if v is not None else "—"
+
+    # Build wide table - Damodaran exact rows
+    wide_rows = [
+        {"Concepto": "Revenue growth rate", **dict(zip(year_cols,
+            [""] + [_pct(g) for g in rev_growth_per_year[:10]] + [_pct(rev_growth_per_year[10])]))},
+        {"Concepto": "Revenues", **dict(zip(year_cols,
+            [_num(base_rev)] + [_num(v) for v in out.revenue] + [_num(rev_t)]))},
+        {"Concepto": "EBIT (Operating) margin", **dict(zip(year_cols,
+            [_pct(base_margin)] + [_pct(v) for v in out.op_margin] + [_pct(margin_t)]))},
+        {"Concepto": "EBIT (Operating income)", **dict(zip(year_cols,
+            [_num(base.ebit)] + [_num(v) for v in out.ebit] + [_num(ebit_t)]))},
+        {"Concepto": "Tax rate", **dict(zip(year_cols,
+            [_pct(base_tax)] + [_pct(v) for v in out.tax_rate] + [_pct(tax_t)]))},
+        {"Concepto": "EBIT(1-t)", **dict(zip(year_cols,
+            [_num(base_nopat)] + [_num(v) for v in out.nopat] + [_num(nopat_t)]))},
+        {"Concepto": " - Reinvestment", **dict(zip(year_cols,
+            [""] + [_num(v) for v in out.reinvestment] + [_num(reinv_t)]))},
+        {"Concepto": "FCFF", **dict(zip(year_cols,
+            [""] + [_num(v) for v in out.fcff] + [_num(fcff_t)]))},
+        {"Concepto": "NOL", **dict(zip(year_cols,
+            ["—"] + ["—"]*10 + ["—"]))},
+        {"Concepto": "", **dict(zip(year_cols, [""]*12))},
+        {"Concepto": "Cost of capital", **dict(zip(year_cols,
+            [""] + [_pct(v) for v in out.wacc_yearly] + [_pct(out.terminal_wacc)]))},
+        {"Concepto": "Cumulated discount factor", **dict(zip(year_cols,
+            [""] + [f"{v:.4f}" for v in out.discount_factor] + [""]))},
+        {"Concepto": "PV(FCFF)", **dict(zip(year_cols,
+            [""] + [_num(v) for v in out.pv_fcff] + [""]))},
+    ]
+    wide_df = pd.DataFrame(wide_rows)
+
+    # Damodaran-style green styling
+    def _style_damodaran_wide(df):
+        styler = df.style
+        # Highlight key rows
+        def _row_highlight(row):
+            concept = row.get("Concepto", "")
+            if concept in ("Revenues", "EBIT (Operating income)", "FCFF", "PV(FCFF)"):
+                return ["background-color: #DCEDC8; font-weight: 600;"] * len(row)
+            if concept in ("Revenue growth rate", "EBIT (Operating) margin", "Tax rate", "Cost of capital"):
+                return ["background-color: #F1F8E9;"] * len(row)
+            if concept == "":
+                return ["background-color: white;"] * len(row)
+            return ["background-color: #F9FBF7;"] * len(row)
+        styler = styler.apply(lambda r: _row_highlight(df.iloc[r.name]), axis=1)
+        styler = styler.set_properties(**{"text-align": "right", "padding": "4px 8px"})
+        styler = styler.set_properties(subset=["Concepto"], **{"text-align": "left", "font-weight": "500"})
+        styler = styler.hide(axis="index")
+        return styler
+
+    try:
+        st.dataframe(_style_damodaran_wide(wide_df),
+                      use_container_width=True,
+                      height=35 + 35 * len(wide_df))
+    except Exception:
+        st.dataframe(wide_df, hide_index=True, use_container_width=True)
+
+    # ---- Bridge / Valuation summary (left) + Implied variables (bottom) ----
+    bcol1, bcol2 = st.columns([1, 1])
+    with bcol1:
+        st.markdown("**Valuation Bridge**")
+        net_debt = base.financial_debt - base.cash
+        equity_value = out.equity_value
+        bridge_rows = [
+            ("Terminal cash flow",         f"{out.terminal_fcff:,.2f}"),
+            ("Terminal cost of capital",   f"{out.terminal_wacc*100:.2f}%"),
+            ("Terminal value",             f"{out.terminal_value:,.2f}"),
+            ("PV(Terminal value)",         f"{out.pv_terminal:,.2f}"),
+            ("PV (CF over next 10 years)", f"{out.sum_pv_fcff:,.2f}"),
+            ("Sum of PV",                  f"{out.enterprise_value:,.2f}"),
+            ("Probability of failure",     "0.00%"),
+            ("Proceeds if firm fails",     f"{0.5 * base.equity_book:,.2f}"),
+            ("Value of operating assets",  f"{out.enterprise_value:,.2f}"),
+            (" - Debt",                    f"{base.financial_debt:,.2f}"),
+            (" - Minority interests",      f"{base.minority_interest:,.2f}"),
+            (" + Cash",                    f"{base.cash:,.2f}"),
+            (" + Non-operating assets",    f"{base.non_operating_assets:,.2f}"),
+            ("Value of equity",            f"{equity_value:,.2f}"),
+            (" - Value of options",        "0.00"),
+            ("Value of equity in common",  f"{equity_value:,.2f}"),
+            ("Number of shares (mn)",      f"{base.shares_outstanding/1e6:,.2f}"),
+            ("Estimated value /share",     f"{out.value_per_share:,.2f}"),
+            ("Price",                      f"{a.market_price:,.2f}" if a.market_price else "—"),
+            ("Price as % of value",        f"{(a.market_price/out.value_per_share*100):.2f}%" if (a.market_price and out.value_per_share) else "—"),
+        ]
+        bridge_df = pd.DataFrame(bridge_rows, columns=["Concepto", "Valor (MDP / MXN)"])
+        # Styling
+        def _bridge_style(row):
+            c = row["Concepto"]
+            if c in ("Sum of PV", "Value of operating assets", "Value of equity",
+                     "Value of equity in common", "Estimated value /share"):
+                return ["background-color: #DCEDC8; font-weight: 600;"] * len(row)
+            return ["background-color: #F9FBF7;"] * len(row)
+        try:
+            styler = bridge_df.style.apply(_bridge_style, axis=1).hide(axis="index")
+            styler = styler.set_properties(**{"padding": "4px 8px"})
+            styler = styler.set_properties(subset=["Valor (MDP / MXN)"], **{"text-align": "right"})
+            st.dataframe(styler, use_container_width=True, height=35 + 35 * len(bridge_df))
+        except Exception:
+            st.dataframe(bridge_df, hide_index=True, use_container_width=True)
+
+    with bcol2:
+        st.markdown("**Annotations**")
+        st.info(
+            f"📈 **Operating income growth (10y):** {(out.ebit[-1] - base.ebit):+,.0f} MDP\n\n"
+            f"This is how much your operating income grew over the ten-year period."
+        )
+        st.info(
+            f"💰 **Capital invested (10y):** {sum(out.reinvestment):+,.0f} MDP\n\n"
+            f"This is how much capital you invested over the ten year period."
+        )
+        st.warning(
+            f"⚠️ **Check these revenues against:**\n"
+            f"a. Overall market size\n"
+            f"b. Largest companies in this market\n\n"
+            f"Y10 Revenue projected: **{out.revenue[-1]:,.0f} MDP**"
+        )
+
+    # Implied variables sub-table (Sales-to-capital, Invested capital, ROIC)
+    st.markdown("**Implied variables**")
+    implied_cols = [str(i) for i in range(1, 11)] + ["After year 10"]
+    implied_rows = [
+        {"Concepto": "Sales to capital ratio",
+         **dict(zip(implied_cols, [f"{a.sales_to_capital:.2f}"] * 11))},
+        {"Concepto": "Invested capital",
+         **dict(zip(implied_cols,
+            [_num(ic_series_bs[i]) for i in range(1, 11)] + [_num(ic_t)]))},
+        {"Concepto": "ROIC",
+         **dict(zip(implied_cols,
+            [_pct(roic_series_bs[i]) for i in range(1, 11)] + [_pct(roic_t)]))},
+    ]
+    implied_df = pd.DataFrame(implied_rows)
+
+    def _style_implied(df):
+        styler = df.style.set_properties(**{"text-align": "right", "padding": "4px 8px"})
+        styler = styler.set_properties(subset=["Concepto"], **{"text-align": "left", "font-weight": "500"})
+        styler = styler.hide(axis="index")
+        return styler.apply(lambda r: ["background-color: #F1F8E9;"] * len(r), axis=1)
+
+    try:
+        st.dataframe(_style_implied(implied_df), use_container_width=True, height=35 + 35 * 3)
+    except Exception:
+        st.dataframe(implied_df, hide_index=True, use_container_width=True)
+
+    # KPI strip
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("PV FCFF (10y)",  f"{out.sum_pv_fcff:,.0f} MDP")
+    k2.metric("PV Terminal",    f"{out.pv_terminal:,.0f} MDP",
               f"{out.pv_terminal/out.enterprise_value*100:.0f}% del EV")
-    c3.metric("Enterprise Value", f"{out.enterprise_value:,.0f} MDP")
-    c4.metric("Equity Value", f"{out.equity_value:,.0f} MDP",
+    k3.metric("Enterprise Value", f"{out.enterprise_value:,.0f} MDP")
+    k4.metric("Equity Value", f"{out.equity_value:,.0f} MDP",
               f"{out.value_per_share:.2f} MXN/sh")
 
     # ---- 2) Stories to Numbers ----
@@ -531,6 +681,134 @@ if mode == "Single DCF":
 
 **ROIC vs WACC en estado estable:** {roic_terminal:.1%} vs {wacc_terminal:.1%} → la empresa {value_creation}.
 """)
+
+    # ---- Damodaran "The Assumptions" table ----
+    st.markdown("##### The Assumptions")
+    company_story_short = f"{issuer.name} continues operations in {sector.name}."
+    assumption_rows = [
+        ("Revenues (a)",
+         f"{base.revenue:,.0f}",
+         f"{a.revenue_growth_high*100:.1f}%",
+         f"{a.revenue_growth_high*100:.1f}%",
+         "Changes to",
+         f"{a.terminal_growth*100:.2f}%",
+         "Sustained growth driven by sector dynamics"),
+        ("Operating margin (b)",
+         f"{base.ebit/base.revenue*100:.2f}%" if base.revenue else "—",
+         f"{(base.ebit/base.revenue + (a.target_op_margin - base.ebit/base.revenue)/10)*100:.1f}%" if base.revenue else "—",
+         "Moves to",
+         f"{a.target_op_margin*100:.2f}%",
+         f"{a.target_op_margin*100:.2f}%",
+         "Margin convergence to sector target"),
+        ("Tax rate",
+         f"{base.effective_tax_rate*100:.2f}%",
+         f"{base.effective_tax_rate*100:.2f}%",
+         f"{base.effective_tax_rate*100:.2f}%",
+         "Changes to",
+         f"{a.marginal_tax_terminal*100:.2f}%",
+         "Marginal MX tax rate over time"),
+        ("Sales to Capital (c)",
+         "—",
+         f"{a.sales_to_capital:.2f}",
+         f"{a.sales_to_capital:.2f}",
+         f"{a.sales_to_capital:.2f}",
+         f"{a.sales_to_capital:.2f}",
+         "Maintained at current capital efficiency"),
+        ("Return on capital",
+         f"{(base.ebit*(1-base.effective_tax_rate))/ic_base*100:.2f}%" if ic_base else "—",
+         "Marginal ROIC =",
+         f"{a.target_op_margin*(1-a.marginal_tax_terminal)*a.sales_to_capital*100:.2f}%",
+         "",
+         f"{wacc_terminal*100:.2f}%",
+         "Strong competitive edges drive value"),
+        ("Cost of capital (d)",
+         "",
+         f"{out.wacc_result.wacc*100:.2f}%",
+         f"{out.wacc_result.wacc*100:.2f}%",
+         "Changes to",
+         f"{wacc_terminal*100:.2f}%",
+         "Cost of capital fades to mature company level"),
+    ]
+    assumptions_df = pd.DataFrame(assumption_rows, columns=[
+        "", "Base year", "Next year", "Years 2-5", "Years 6-10", "After year 10", "Link to story"
+    ])
+    try:
+        styler = assumptions_df.style.apply(
+            lambda r: ["background-color: #F1F8E9;"] * len(r), axis=1
+        ).hide(axis="index")
+        styler = styler.set_properties(**{"padding": "4px 8px"})
+        st.dataframe(styler, use_container_width=True,
+                      height=35 + 35 * len(assumptions_df))
+    except Exception:
+        st.dataframe(assumptions_df, hide_index=True, use_container_width=True)
+
+    # ---- Damodaran "The Cash Flows" table ----
+    st.markdown("##### The Cash Flows")
+    cf_rows = []
+    for i in range(len(out.years)):
+        cf_rows.append({
+            "Year":             str(out.years[i]),
+            "Revenues":         f"{out.revenue[i]:,.2f}",
+            "Operating Margin": f"{out.op_margin[i]*100:.2f}%",
+            "EBIT":             f"{out.ebit[i]:,.2f}",
+            "EBIT (1-t)":       f"{out.nopat[i]:,.2f}",
+            "Reinvestment":     f"{out.reinvestment[i]:,.2f}",
+            "FCFF":             f"{out.fcff[i]:,.2f}",
+        })
+    cf_rows.append({
+        "Year":             "Terminal year",
+        "Revenues":         f"{rev_t:,.2f}",
+        "Operating Margin": f"{margin_t*100:.2f}%",
+        "EBIT":             f"{ebit_t:,.2f}",
+        "EBIT (1-t)":       f"{nopat_t:,.2f}",
+        "Reinvestment":     f"{reinv_t:,.2f}",
+        "FCFF":             f"{fcff_t:,.2f}",
+    })
+    cf_df = pd.DataFrame(cf_rows)
+    try:
+        styler = cf_df.style.apply(
+            lambda r: (["background-color: #DCEDC8; font-weight: 600;"] * len(r)
+                       if r["Year"] == "Terminal year"
+                       else ["background-color: #F9FBF7;"] * len(r)),
+            axis=1,
+        ).hide(axis="index")
+        styler = styler.set_properties(**{"text-align": "right", "padding": "4px 8px"})
+        styler = styler.set_properties(subset=["Year"], **{"text-align": "left", "font-weight": "500"})
+        st.dataframe(styler, use_container_width=True, height=35 + 35 * len(cf_df))
+    except Exception:
+        st.dataframe(cf_df, hide_index=True, use_container_width=True)
+
+    # ---- Damodaran "The Value" table ----
+    st.markdown("##### The Value")
+    value_rows = [
+        ("Terminal value",                            f"{out.terminal_value:,.2f}", ""),
+        ("PV(Terminal value)",                        f"{out.pv_terminal:,.2f}", ""),
+        ("PV (CF over next 10 years)",                f"{out.sum_pv_fcff:,.2f}", ""),
+        ("Value of operating assets =",               f"{out.enterprise_value:,.2f}", ""),
+        ("Adjustment for distress",                   "0.00", "Probability of failure = 0.00%"),
+        (" - Debt & Minority Interests",              f"{base.financial_debt + base.minority_interest:,.2f}", ""),
+        (" + Cash & Other Non-operating assets",      f"{base.cash + base.non_operating_assets:,.2f}", ""),
+        ("Value of equity",                           f"{out.equity_value:,.2f}", ""),
+        (" - Value of equity options",                "0.00", ""),
+        ("Number of shares (mn)",                     f"{base.shares_outstanding/1e6:,.2f}", ""),
+        ("Value per share (MXN)",                     f"{out.value_per_share:,.2f}",
+         f"Stock was trading at = {a.market_price:,.2f}" if a.market_price else ""),
+    ]
+    value_df = pd.DataFrame(value_rows, columns=["Concepto", "Valor", "Nota"])
+
+    def _value_style(row):
+        c = row["Concepto"]
+        if c in ("Value of operating assets =", "Value of equity", "Value per share (MXN)"):
+            return ["background-color: #1F4E79; color: white; font-weight: 700;"] * len(row)
+        return ["background-color: #F9FBF7;"] * len(row)
+
+    try:
+        styler = value_df.style.apply(_value_style, axis=1).hide(axis="index")
+        styler = styler.set_properties(**{"padding": "4px 8px"})
+        styler = styler.set_properties(subset=["Valor"], **{"text-align": "right"})
+        st.dataframe(styler, use_container_width=True, height=35 + 35 * len(value_df))
+    except Exception:
+        st.dataframe(value_df, hide_index=True, use_container_width=True)
 
     # ---- 3) Valuation as Picture (waterfall) ----
     st.subheader("3. Valuation as Picture")
@@ -589,6 +867,144 @@ if mode == "Single DCF":
                 text=alt.Text("delta:Q", format=",.0f"))
     )
     st.altair_chart(waterfall_chart + label_chart, use_container_width=True)
+
+    # ---- Damodaran Picture-style summary (Image 3 layout) ----
+    st.markdown("##### Picture-style Valuation Summary")
+
+    pic_col1, pic_col2 = st.columns([1, 2])
+
+    # LEFT: Base Year & Comparison + Bridge
+    with pic_col1:
+        st.markdown("**Base Year and Comparison**")
+        comp_rows = [
+            ("Revenue Growth",   f"{res.dcf.revenue_growth*100:.2f}%",   f"{a.revenue_growth_high*100:.2f}%"),
+            ("Revenue (MDP)",    f"{base.revenue:,.0f}",                  "—"),
+            ("Operating Margin", f"{base.ebit/base.revenue*100:.2f}%" if base.revenue else "—",
+                                  f"{a.target_op_margin*100:.2f}%"),
+            ("Operating Income", f"{base.ebit:,.0f}",                     "—"),
+            ("EBIT (1-t)",       f"{base.ebit*(1-base.effective_tax_rate):,.0f}", "—"),
+        ]
+        comp_df = pd.DataFrame(comp_rows, columns=["Concepto", "Company", "Sector target"])
+        try:
+            styler = comp_df.style.apply(
+                lambda r: ["background-color: #F1F8E9;"] * len(r), axis=1
+            ).hide(axis="index")
+            styler = styler.set_properties(**{"padding": "4px 8px"})
+            st.dataframe(styler, use_container_width=True, height=35 + 35 * len(comp_df))
+        except Exception:
+            st.dataframe(comp_df, hide_index=True, use_container_width=True)
+
+        st.markdown("**Equity Bridge**")
+        net_debt = base.financial_debt - base.cash
+        bridge_rows = [
+            ("PV(Terminal value)",         f"{out.pv_terminal:,.0f}"),
+            ("PV (CF over next 10 years)", f"{out.sum_pv_fcff:,.0f}"),
+            ("Probability of failure",     "0.00%"),
+            ("Value of operating assets =",f"{out.enterprise_value:,.0f}"),
+            (" - Debt",                    f"{base.financial_debt:,.0f}"),
+            (" - Minority interests",      f"{base.minority_interest:,.0f}"),
+            (" + Cash",                    f"{base.cash:,.0f}"),
+            (" + Non-operating assets",    f"{base.non_operating_assets:,.0f}"),
+            ("Value of equity",            f"{out.equity_value:,.0f}"),
+            (" - Value of options",        "0"),
+            ("Value of equity in common",  f"{out.equity_value:,.0f}"),
+            ("Number of shares (mn)",      f"{base.shares_outstanding/1e6:,.2f}"),
+            ("Estimated value /share",     f"{out.value_per_share:,.2f}"),
+        ]
+        bridge_pic_df = pd.DataFrame(bridge_rows, columns=["Concepto", "MDP / MXN"])
+
+        def _pic_bridge_style(row):
+            c = row["Concepto"]
+            if c in ("Value of operating assets =", "Value of equity",
+                     "Value of equity in common", "Estimated value /share"):
+                return ["background-color: #1F4E79; color: white; font-weight: 700;"] * len(row)
+            return ["background-color: #F9FBF7;"] * len(row)
+        try:
+            styler = bridge_pic_df.style.apply(_pic_bridge_style, axis=1).hide(axis="index")
+            styler = styler.set_properties(**{"padding": "4px 8px"})
+            styler = styler.set_properties(subset=["MDP / MXN"], **{"text-align": "right"})
+            st.dataframe(styler, use_container_width=True, height=35 + 35 * len(bridge_pic_df))
+        except Exception:
+            st.dataframe(bridge_pic_df, hide_index=True, use_container_width=True)
+
+        # Verdict
+        if a.market_price:
+            verdict_pct = (a.market_price / out.value_per_share - 1) * 100 if out.value_per_share else 0
+            verdict_color = "#DA3633" if verdict_pct > 0 else "#2EA043"
+            st.markdown(
+                f"<div style='background-color:{verdict_color};color:white;padding:10px;"
+                f"border-radius:6px;font-weight:700;text-align:center;'>"
+                f"Price per share: {a.market_price:,.2f}  |  "
+                f"% Under/Over Valued: {verdict_pct:+.2f}%</div>",
+                unsafe_allow_html=True,
+            )
+
+    # RIGHT: Stories (text boxes) + Big projection table
+    with pic_col2:
+        st.markdown("**Story panels**")
+        sb1, sb2, sb3 = st.columns(3)
+        with sb1:
+            st.info(f"**Growth Story**\n\n"
+                     f"{a.revenue_growth_high*100:.1f}% growth driven by "
+                     f"{sector.name} dynamics and market share gains.")
+        with sb2:
+            st.info(f"**Profitability Story**\n\n"
+                     f"Margins {'improve' if a.target_op_margin > base.ebit/base.revenue else 'sustain'} "
+                     f"toward {a.target_op_margin*100:.1f}% by Y10.")
+        with sb3:
+            st.info(f"**Growth Efficiency Story**\n\n"
+                     f"Sales-to-Capital of {a.sales_to_capital:.2f} reflects "
+                     f"{'capital-light' if a.sales_to_capital > 2.5 else 'capital-intensive' if a.sales_to_capital < 1 else 'mid-range'} model.")
+
+        st.markdown("**Big Projection (Y1-Y10 + Terminal)**")
+        big_rows = [
+            ("Revenue Growth",   [_pct(g) for g in rev_growth_per_year[:10]] + [_pct(rev_growth_per_year[10])]),
+            ("Revenue",          [_num(v) for v in out.revenue] + [_num(rev_t)]),
+            ("Operating Margin", [_pct(v) for v in out.op_margin] + [_pct(margin_t)]),
+            ("Operating Income", [_num(v) for v in out.ebit] + [_num(ebit_t)]),
+            ("EBIT (1-t)",       [_num(v) for v in out.nopat] + [_num(nopat_t)]),
+            ("Reinvestment",     [_num(v) for v in out.reinvestment] + [_num(reinv_t)]),
+            ("FCFF",             [_num(v) for v in out.fcff] + [_num(fcff_t)]),
+            ("Cost of Capital",  [_pct(v) for v in out.wacc_yearly] + [_pct(out.terminal_wacc)]),
+            ("Cumulated WACC",   [f"{v:.4f}" for v in out.discount_factor] + [""]),
+            ("Sales to Capital", [f"{a.sales_to_capital:.2f}"] * 10 + [""]),
+            ("ROIC",             [_pct(roic_series_bs[i]) for i in range(1, 11)] + [_pct(roic_t)]),
+        ]
+        big_data = []
+        for label, vals in big_rows:
+            big_data.append({"Concepto": label, **dict(zip(year_cols[1:], vals))})
+        big_df = pd.DataFrame(big_data)
+
+        def _big_style(row):
+            c = row["Concepto"]
+            if c in ("Revenue", "Operating Income", "FCFF"):
+                return ["background-color: #DCEDC8; font-weight: 600;"] * len(row)
+            return ["background-color: #F9FBF7;"] * len(row)
+
+        try:
+            styler = big_df.style.apply(_big_style, axis=1).hide(axis="index")
+            styler = styler.set_properties(**{"text-align": "right", "padding": "4px 8px",
+                                                "font-size": "11px"})
+            styler = styler.set_properties(subset=["Concepto"],
+                                              **{"text-align": "left", "font-weight": "500"})
+            st.dataframe(styler, use_container_width=True,
+                          height=35 + 32 * len(big_df))
+        except Exception:
+            st.dataframe(big_df, hide_index=True, use_container_width=True)
+
+        # Risk Story / Competitive Advantages
+        rs1, rs2 = st.columns(2)
+        with rs1:
+            st.warning(f"**Risk Story**\n\n"
+                        f"WACC {out.wacc_result.wacc*100:.2f}% reflects synthetic rating "
+                        f"{out.wacc_result.rating} with interest coverage "
+                        f"{out.wacc_result.interest_coverage:.1f}x.")
+        with rs2:
+            spread = roic_terminal - wacc_terminal
+            st.success(f"**Competitive Advantages**\n\n"
+                        f"ROIC vs WACC spread: {spread*10000:+.0f}bps. "
+                        f"{'Strong' if spread > 0.03 else 'Modest' if spread > 0 else 'Negative'} "
+                        f"competitive moat.")
 
     # ---- 4) Diagnostics ----
     st.subheader("4. Diagnostics")
