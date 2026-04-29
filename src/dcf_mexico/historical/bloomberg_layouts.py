@@ -485,11 +485,304 @@ def _income_adjusted_lines(use_quarter_data: bool):
     ]
 
 
-# ---------------------------------------------------------------------------
-# BAL SHEET - Standardized (estilo Bloomberg)
+# ===========================================================================
+# BAL SHEET - Standardized EXACTO Bloomberg
 # Balance es snapshot, no requiere quarter vs annual distintos
-# ---------------------------------------------------------------------------
+# ===========================================================================
 
+# Layout: (display_label, key_in_metrics, kind)
+BLOOMBERG_BS_LAYOUT = [
+    ("Total Assets",                              None,                  "section"),
+    ("  + Cash, Cash Equivalents & STI",          "cash_sti",            "line"),
+    ("    + Cash & Cash Equivalents",             "cash_eq",             "sub"),
+    ("    + ST Investments",                      "st_invest",           "sub"),
+    ("  + Accounts & Notes Receiv",               "accts_notes_rec",     "line"),
+    ("    + Accounts Receivable, Net",            "accts_rec_net",       "sub"),
+    ("    + Notes Receivable, Net",               "notes_rec_net",       "sub"),
+    ("  + Inventories",                           "inventories_total",   "line"),
+    ("    + Raw Materials",                       "inv_raw",             "sub"),
+    ("    + Work In Process",                     "inv_wip",             "sub"),
+    ("    + Finished Goods",                      "inv_finished",        "sub"),
+    ("    + Other Inventory",                     "inv_other",           "sub"),
+    ("  + Other ST Assets",                       "other_st_assets",     "line"),
+    ("    + Prepaid Expenses",                    "prepaid_exp_full",    "sub"),
+    ("    + Assets Held-for-Sale",                "assets_hfs",          "sub"),
+    ("    + Taxes Receivable",                    "taxes_rec",           "sub"),
+    ("    + Misc ST Assets",                      "misc_st_assets",      "sub"),
+    ("Total Current Assets",                      "total_current_assets","subtotal"),
+    ("  + Property, Plant & Equip, Net",          "ppe_net",             "line"),
+    ("    + Property, Plant & Equip",             "ppe_gross",           "sub"),
+    ("    - Accumulated Depreciation",            "accum_depr",          "sub"),
+    ("  + LT Investments & Receivables",          "lt_inv_rec",          "line"),
+    ("    + LT Investments",                      "lt_invest",           "sub"),
+    ("    + LT Receivables",                      "lt_rec",              "sub"),
+    ("  + Other LT Assets",                       "other_lt_assets",     "line"),
+    ("    + Total Intangible Assets",             "total_intangibles",   "sub"),
+    ("    + Goodwill",                            "goodwill",            "sub"),
+    ("    + Other Intangible Assets",             "other_intang",        "sub"),
+    ("    + Deferred Tax Assets",                 "def_tax_assets",      "sub"),
+    ("    + Derivative & Hedging Assets",         "deriv_hedge_assets",  "sub"),
+    ("    + Prepaid Pension Costs",               "prepaid_pension",     "sub"),
+    ("    + Investments in Affiliates",           "inv_affiliates",      "sub"),
+    ("    + Misc LT Assets",                      "misc_lt_assets",      "sub"),
+    ("Total Noncurrent Assets",                   "total_noncurrent_assets","subtotal"),
+    ("Total Assets",                              "total_assets",        "header"),
+    ("",                                          None,                  "spacer"),
+    ("Liabilities & Shareholders' Equity",        None,                  "section"),
+    ("  + Payables & Accruals",                   "payables_accr",       "line"),
+    ("    + Accounts Payable",                    "accts_payable",       "sub"),
+    ("    + Other Payables & Accruals",           "other_payables",      "sub"),
+    ("  + ST Debt",                               "st_debt_total",       "line"),
+    ("    + ST Borrowings",                       "st_borrow",           "sub"),
+    ("    + ST Lease Liabilities",                "st_lease_liab",       "sub"),
+    ("  + Other ST Liabilities",                  "other_st_liab",       "line"),
+    ("    + Deferred Revenue",                    "def_rev_st",          "sub"),
+    ("    + Derivatives & Hedging",               "deriv_hedge_st",      "sub"),
+    ("    + Misc ST Liabilities",                 "misc_st_liab",        "sub"),
+    ("Total Current Liabilities",                 "total_current_liab",  "subtotal"),
+    ("  + LT Debt",                               "lt_debt_total",       "line"),
+    ("    + LT Borrowings",                       "lt_borrow",           "sub"),
+    ("    + LT Lease Liabilities",                "lt_lease_liab",       "sub"),
+    ("  + Other LT Liabilities",                  "other_lt_liab",       "line"),
+    ("    + Accrued Liabilities",                 "accrued_lt",          "sub"),
+    ("    + Pension Liabilities",                 "pension_liab",        "sub"),
+    ("    + Pensions",                            "pensions",            "sub"),
+    ("    + Other Post-Ret Benefits",             "post_ret",            "sub"),
+    ("    + Deferred Revenue",                    "def_rev_lt",          "sub"),
+    ("    + Deferred Tax Liabilities",            "def_tax_liab",        "sub"),
+    ("    + Derivatives & Hedging",               "deriv_hedge_lt",      "sub"),
+    ("    + Misc LT Liabilities",                 "misc_lt_liab",        "sub"),
+    ("Total Noncurrent Liabilities",              "total_noncurrent_liab","subtotal"),
+    ("Total Liabilities",                         "total_liabilities",   "header"),
+    ("  + Preferred Equity and Hybrid Capital",   "preferred_equity",    "line"),
+    ("  + Share Capital & APIC",                  "share_cap_apic",      "line"),
+    ("    + Common Stock",                        "common_stock",        "sub"),
+    ("    + Additional Paid in Capital",          "apic",                "sub"),
+    ("  - Treasury Stock",                        "treasury",            "line"),
+    ("  + Retained Earnings",                     "retained_earn",       "line"),
+    ("  + Other Equity",                          "other_equity",        "line"),
+    ("Equity Before Minority Interest",           "equity_before_mi",    "subtotal"),
+    ("  + Minority/Non Controlling Interest",     "minority",            "line"),
+    ("Total Equity",                              "total_equity",        "header"),
+    ("Total Liabilities & Equity",                "total_liab_eq",       "header"),
+    ("",                                          None,                  "spacer"),
+    ("Reference Items",                           None,                  "section"),
+    ("Accounting Standard",                       "accounting_std",      "string"),
+    ("Shares Outstanding",                        "shares_out",          "raw"),
+    ("Number of Treasury Shares",                 "treasury_shares",     "raw"),
+    ("Pension Obligations",                       "pension_obl",         "line"),
+    ("Net Debt",                                  "net_debt",            "subtotal"),
+    ("Net Debt to Equity",                        "nd_to_equity",        "ratio"),
+    ("Tangible Common Equity Ratio",              "tce_ratio",           "ratio"),
+    ("Current Ratio",                             "current_ratio",       "ratio_x"),
+    ("Cash Conversion Cycle",                    "ccc",                 "raw_days"),
+    ("Number of Employees",                       "num_employees",       "raw"),
+]
+
+
+def _compute_bs_metrics(snap, fx_mult: float, ticker=None,
+                          revenue_for_ratios: float = 0.0,
+                          cogs_for_ratios: float = 0.0) -> dict:
+    """Calcula TODAS las metricas Bloomberg-style del Balance Sheet."""
+    res = snap.parsed
+    b = res.balance
+    inf = res.informative
+    M = 1_000_000
+
+    def to_mdp(v):
+        try:
+            return (float(v or 0) * fx_mult) / M
+        except (TypeError, ValueError):
+            return 0.0
+
+    # Cash & STI
+    cash_eq = to_mdp(b.cash)
+    st_invest = 0.0  # CUERVO no tiene; podria parsearse de 800100 si requiere
+    cash_sti = cash_eq + st_invest
+
+    # Receivables
+    accts_rec_trade = to_mdp(b.accounts_receivable_trade) or to_mdp(b.accounts_receivable)
+    notes_rec = 0.0
+    accts_notes_rec = accts_rec_trade + notes_rec
+
+    # Inventory
+    inv_raw = to_mdp(b.inventory_raw_materials)
+    inv_wip = to_mdp(b.inventory_wip)
+    inv_finished = to_mdp(b.inventory_finished)
+    # "Other Inventory" Bloomberg = Suministros + Repuestos + Bio circulante (CUERVO)
+    inv_other = (to_mdp(b.inventory_supplies) + to_mdp(b.inventory_spare_parts)
+                  + to_mdp(b.biological_assets_current))
+    inventories_total = inv_raw + inv_wip + inv_finished + inv_other
+
+    # Other ST Assets (BB folds Tax Receivable into Prepaid Expenses)
+    # BB Prepaid = CNBV "Gastos anticipados" + "Cuentas por cobrar de impuestos"
+    prepaid_exp_full = to_mdp(b.prepaid_expenses_st) + to_mdp(b.taxes_recoverable_st)
+    assets_hfs = 0.0  # CUERVO no tiene
+    taxes_rec = 0.0   # ya foldeado en prepaid
+    # Misc ST Assets = Otras cuentas por cobrar + Otros activos financieros + Cuentas por cobrar partes relacionadas
+    misc_st_assets = (to_mdp(b.other_receivables_st)
+                       + to_mdp(b.other_financial_assets_st)
+                       + to_mdp(b.accounts_receivable_related_st))
+    other_st_assets = prepaid_exp_full + assets_hfs + taxes_rec + misc_st_assets
+
+    total_current_assets = to_mdp(b.total_current_assets)
+
+    # PPE
+    ppe_net_basic = to_mdp(b.ppe)
+    rou = to_mdp(b.right_of_use_assets)
+    # BB PPE Net incluye ROU (IFRS-16)
+    ppe_net = ppe_net_basic + rou
+    ppe_gross = ppe_net  # Sin desglose por ahora (CNBV no separa gross fácilmente)
+    accum_depr = 0.0
+
+    # LT Investments & Receivables (BB)
+    lt_invest = 0.0
+    lt_rec = to_mdp(b.accounts_receivable_lt)
+    lt_inv_rec = lt_invest + lt_rec
+
+    # Other LT Assets (BB)
+    goodwill = to_mdp(b.goodwill)
+    other_intang = to_mdp(b.intangibles)
+    total_intangibles = goodwill + other_intang
+    def_tax_assets = to_mdp(b.deferred_tax_assets)
+    deriv_hedge_assets = 0.0
+    prepaid_pension = 0.0
+    inv_affiliates = to_mdp(b.investments_in_associates)
+    # Misc LT Assets = Bio LP + Inventarios LP + Otros activos LP
+    misc_lt_assets = (to_mdp(b.biological_assets_noncurrent)
+                       + to_mdp(b.inventories_noncurrent)
+                       + to_mdp(b.other_non_current_assets))
+    other_lt_assets = (total_intangibles + def_tax_assets + deriv_hedge_assets
+                        + prepaid_pension + inv_affiliates + misc_lt_assets)
+
+    total_noncurrent_assets = to_mdp(b.total_non_current_assets)
+    total_assets = to_mdp(b.total_assets)
+
+    # ===== LIABILITIES =====
+    # BB folda "related parties" dentro de "Accounts Payable" (no separa)
+    accts_payable = to_mdp(b.accounts_payable_trade) + to_mdp(b.accounts_payable_related_st)
+    if not accts_payable:
+        accts_payable = to_mdp(b.accounts_payable)
+    other_payables = 0.0
+    payables_accr = accts_payable + other_payables
+
+    # ST Debt
+    st_borrow = to_mdp(b.short_term_debt)   # Otros pasivos financieros CP
+    st_lease_liab = to_mdp(b.short_term_lease)
+    st_debt_total = st_borrow + st_lease_liab
+
+    # Other ST Liab
+    def_rev_st = 0.0
+    deriv_hedge_st = 0.0
+    misc_st_liab = to_mdp(b.provisions_st)
+    other_st_liab = def_rev_st + deriv_hedge_st + misc_st_liab
+
+    total_current_liab = to_mdp(b.total_current_liabilities)
+
+    # LT Debt
+    lt_borrow = to_mdp(b.long_term_debt)
+    lt_lease_liab = to_mdp(b.long_term_lease)
+    lt_debt_total = lt_borrow + lt_lease_liab
+
+    # Other LT Liab
+    accrued_lt = 0.0
+    pension_liab = 0.0
+    pensions = 0.0
+    post_ret = 0.0
+    def_rev_lt = 0.0
+    def_tax_liab = to_mdp(b.deferred_tax_liabilities)
+    deriv_hedge_lt = 0.0
+    misc_lt_liab = to_mdp(b.provisions_lt)
+    other_lt_liab = (accrued_lt + pension_liab + pensions + post_ret + def_rev_lt
+                      + def_tax_liab + deriv_hedge_lt + misc_lt_liab)
+
+    total_noncurrent_liab = to_mdp(b.total_non_current_liabilities)
+    total_liabilities = to_mdp(b.total_liabilities)
+
+    # ===== EQUITY =====
+    preferred_equity = 0.0
+    common_stock = to_mdp(b.common_stock)
+    apic = to_mdp(b.additional_paid_in_capital)
+    share_cap_apic = common_stock + apic
+    treasury = to_mdp(b.treasury_stock)
+    retained_earn = to_mdp(b.retained_earnings)
+    other_equity = to_mdp(b.other_equity_reserves)
+    equity_before_mi = to_mdp(b.equity_controlling)
+    minority = to_mdp(b.minority_interest)
+    total_equity = to_mdp(b.total_equity)
+    total_liab_eq = total_liabilities + total_equity
+
+    # ===== REFERENCE ITEMS =====
+    net_debt_val = (st_debt_total + lt_debt_total) - cash_eq
+    nd_to_eq = (net_debt_val / equity_before_mi * 100) if equity_before_mi else 0
+    # TCE = (Equity - Goodwill - Other Intangibles) / (Total Assets - Goodwill - Intangibles)
+    tce_num = equity_before_mi - goodwill - other_intang
+    tce_den = total_assets - goodwill - other_intang
+    tce_ratio = (tce_num / tce_den * 100) if tce_den else 0
+    current_ratio = (total_current_assets / total_current_liab) if total_current_liab else 0
+    # Cash Conversion Cycle = DSO + DIO - DPO (LTM)
+    rev_for_ccc = revenue_for_ratios   # LTM revenue
+    cogs_for_ccc = cogs_for_ratios if cogs_for_ratios > 0 else (rev_for_ccc * 0.45)
+    if rev_for_ccc > 0 and cogs_for_ccc > 0:
+        dso = accts_rec_trade / rev_for_ccc * 365
+        dio = inventories_total / cogs_for_ccc * 365
+        dpo = accts_payable / cogs_for_ccc * 365
+        ccc = dso + dio - dpo
+    else:
+        ccc = 0
+
+    output = {
+        "cash_sti": cash_sti, "cash_eq": cash_eq, "st_invest": st_invest,
+        "accts_notes_rec": accts_notes_rec, "accts_rec_net": accts_rec_trade,
+        "notes_rec_net": notes_rec,
+        "inventories_total": inventories_total, "inv_raw": inv_raw, "inv_wip": inv_wip,
+        "inv_finished": inv_finished, "inv_other": inv_other,
+        "other_st_assets": other_st_assets, "prepaid_exp_full": prepaid_exp_full,
+        "assets_hfs": assets_hfs, "taxes_rec": taxes_rec, "misc_st_assets": misc_st_assets,
+        "total_current_assets": total_current_assets,
+        "ppe_net": ppe_net, "ppe_gross": ppe_gross, "accum_depr": accum_depr,
+        "lt_inv_rec": lt_inv_rec, "lt_invest": lt_invest, "lt_rec": lt_rec,
+        "other_lt_assets": other_lt_assets, "total_intangibles": total_intangibles,
+        "goodwill": goodwill, "other_intang": other_intang,
+        "def_tax_assets": def_tax_assets, "deriv_hedge_assets": deriv_hedge_assets,
+        "prepaid_pension": prepaid_pension, "inv_affiliates": inv_affiliates,
+        "misc_lt_assets": misc_lt_assets,
+        "total_noncurrent_assets": total_noncurrent_assets,
+        "total_assets": total_assets,
+        "payables_accr": payables_accr, "accts_payable": accts_payable,
+        "other_payables": other_payables,
+        "st_debt_total": st_debt_total, "st_borrow": st_borrow, "st_lease_liab": st_lease_liab,
+        "other_st_liab": other_st_liab, "def_rev_st": def_rev_st,
+        "deriv_hedge_st": deriv_hedge_st, "misc_st_liab": misc_st_liab,
+        "total_current_liab": total_current_liab,
+        "lt_debt_total": lt_debt_total, "lt_borrow": lt_borrow, "lt_lease_liab": lt_lease_liab,
+        "other_lt_liab": other_lt_liab, "accrued_lt": accrued_lt,
+        "pension_liab": pension_liab, "pensions": pensions, "post_ret": post_ret,
+        "def_rev_lt": def_rev_lt, "def_tax_liab": def_tax_liab,
+        "deriv_hedge_lt": deriv_hedge_lt, "misc_lt_liab": misc_lt_liab,
+        "total_noncurrent_liab": total_noncurrent_liab,
+        "total_liabilities": total_liabilities,
+        "preferred_equity": preferred_equity, "share_cap_apic": share_cap_apic,
+        "common_stock": common_stock, "apic": apic, "treasury": treasury,
+        "retained_earn": retained_earn, "other_equity": other_equity,
+        "equity_before_mi": equity_before_mi, "minority": minority,
+        "total_equity": total_equity, "total_liab_eq": total_liab_eq,
+        "accounting_std": "IAS/IFRS",
+        "shares_out": inf.shares_outstanding / M,
+        "treasury_shares": 0,
+        "pension_obl": 0,
+        "net_debt": net_debt_val,
+        "nd_to_equity": nd_to_eq / 100 if nd_to_eq else 0,  # como decimal
+        "tce_ratio": tce_ratio / 100 if tce_ratio else 0,
+        "current_ratio": current_ratio,
+        "ccc": ccc,
+        "num_employees": inf.num_employees,
+    }
+
+    return output
+
+
+# Layout viejo (compat con builders existentes que aun lo usan)
 BS_STANDARDIZED_LINES = [
     ("Total Assets",                        None,                                                      "section"),
     ("+ Cash, Cash Equivalents & STI",      lambda r: r.balance.cash,                                  "line"),
@@ -774,10 +1067,50 @@ def build_income_adjusted_panel(series, annual_only=False,
 
 
 def build_bs_standardized_panel(series, annual_only=False,
-                                  fx_rate_usdmxn=19.5, max_periods=None):
-    """Balance Sheet estilo Bloomberg Standardized."""
-    return _build_panel_with_view(series, BS_STANDARDIZED_LINES, annual_only,
-                                    fx_rate_usdmxn, max_periods)
+                                  fx_rate_usdmxn=19.5, max_periods=None,
+                                  ticker=None):
+    """Balance Sheet EXACTO estilo Bloomberg Standardized."""
+    snaps = series.annual if annual_only else series.snapshots
+    if max_periods:
+        snaps = snaps[-max_periods:]
+
+    if ticker is None:
+        ticker = series.ticker
+
+    labels = [l for l, _, _ in BLOOMBERG_BS_LAYOUT]
+    kinds  = [k for _, _, k in BLOOMBERG_BS_LAYOUT]
+
+    if not snaps:
+        return pd.DataFrame(index=labels), kinds
+
+    cols_data = {}
+    for s in snaps:
+        fx = _detect_fx_mult(s, fx_rate_usdmxn)
+        # LTM revenue + COGS para CCC (income.cost_of_sales = acumulado del periodo)
+        ltm_rev = (s.parsed.informative.revenue_12m or 0) * fx / 1_000_000
+        # Para COGS LTM: si es Q4 / 4D usa income.cost_of_sales (full year acum)
+        # Para Q1-Q3 idealmente derivar LTM, por ahora aproximamos con acum * 4/N
+        cogs_acum = (s.parsed.income.cost_of_sales or 0) * fx / 1_000_000
+        if s.quarter in ("4", "4D"):
+            ltm_cogs = cogs_acum
+        else:
+            # Q1=acum_Q1*4, Q2=acum*2, Q3=acum*4/3 — aproximacion simple
+            mult_map = {"1": 4.0, "2": 2.0, "3": 4/3}
+            ltm_cogs = cogs_acum * mult_map.get(s.quarter, 1.0)
+        metrics = _compute_bs_metrics(s, fx, ticker=ticker,
+                                        revenue_for_ratios=ltm_rev,
+                                        cogs_for_ratios=ltm_cogs)
+
+        col_vals = []
+        for label, key, kind in BLOOMBERG_BS_LAYOUT:
+            if key is None or kind in ("spacer", "section"):
+                col_vals.append(None)
+            else:
+                col_vals.append(metrics.get(key))
+        cols_data[s.label] = col_vals
+
+    df = pd.DataFrame(cols_data, index=labels)
+    return df, kinds
 
 
 def build_cf_standardized_panel(series, annual_only=False,

@@ -21,8 +21,12 @@ class CompanyInfo:
 
 @dataclass
 class BalanceSheet:
-    """Valores en unidades originales del XBRL (ver CompanyInfo.rounding)."""
-    # ACTIVOS
+    """Valores en unidades originales del XBRL (ver CompanyInfo.rounding).
+
+    Campos basicos vienen de hoja 210000.
+    Campos detallados (breakdown) vienen de hoja 800100 (Notas - Subclasificaciones).
+    """
+    # ACTIVOS - basicos (210000)
     cash: float = 0.0                               # Efectivo y equivalentes
     accounts_receivable: float = 0.0
     inventories: float = 0.0
@@ -37,7 +41,24 @@ class BalanceSheet:
     other_non_current_assets: float = 0.0
     total_non_current_assets: float = 0.0
     total_assets: float = 0.0
-    # PASIVOS
+    # ACTIVOS - extra del 210000
+    biological_assets_current: float = 0.0          # Activos biologicos circulantes
+    biological_assets_noncurrent: float = 0.0       # Activos biologicos no circulantes
+    inventories_noncurrent: float = 0.0             # Inventarios no circulantes
+    other_financial_assets_st: float = 0.0          # Otros activos financieros corto plazo
+    taxes_recoverable_st: float = 0.0               # Impuestos por recuperar circulante
+    accounts_receivable_lt: float = 0.0             # Clientes y otras cuentas LP
+    # ACTIVOS - breakdown 800100
+    accounts_receivable_trade: float = 0.0          # 800100 Clientes (puro)
+    accounts_receivable_related_st: float = 0.0     # 800100 Cuentas por cobrar a partes relacionadas
+    other_receivables_st: float = 0.0               # 800100 Otras cuentas por cobrar circulantes
+    prepaid_expenses_st: float = 0.0                # 800100 Gastos anticipados circulantes
+    inventory_raw_materials: float = 0.0            # 800100 Materias primas
+    inventory_wip: float = 0.0                      # 800100 Trabajo en curso
+    inventory_finished: float = 0.0                 # 800100 Productos terminados
+    inventory_supplies: float = 0.0                 # 800100 Suministros de produccion
+    inventory_spare_parts: float = 0.0              # 800100 Piezas de repuesto
+    # PASIVOS - basicos (210000)
     short_term_debt: float = 0.0                    # Otros pasivos financieros CP
     short_term_lease: float = 0.0                   # Arrendamiento CP
     accounts_payable: float = 0.0
@@ -49,10 +70,27 @@ class BalanceSheet:
     other_non_current_liabilities: float = 0.0
     total_non_current_liabilities: float = 0.0
     total_liabilities: float = 0.0
-    # CAPITAL
+    # PASIVOS - extra del 210000
+    provisions_st: float = 0.0                      # Otras provisiones a corto plazo
+    provisions_lt: float = 0.0                      # Otras provisiones a largo plazo
+    employee_benefits_lt: float = 0.0               # Provisiones por beneficios LP
+    # PASIVOS - breakdown 800100
+    bank_loans_st: float = 0.0                      # 800100 Creditos Bancarios CP
+    notes_payable_st: float = 0.0                   # 800100 Creditos Bursatiles CP
+    bank_loans_lt: float = 0.0                      # 800100 Creditos Bancarios LP
+    bonds_payable_lt: float = 0.0                   # 800100 Creditos Bursatiles LP
+    accounts_payable_trade: float = 0.0             # 800100 Proveedores circulantes
+    accounts_payable_related_st: float = 0.0        # 800100 Cuentas por pagar a partes relacionadas
+    # CAPITAL - basicos (210000)
     equity_controlling: float = 0.0                 # Participacion controladora
     minority_interest: float = 0.0
     total_equity: float = 0.0
+    # CAPITAL - breakdown 210000
+    common_stock: float = 0.0                       # Capital social
+    additional_paid_in_capital: float = 0.0         # Prima en emision de acciones
+    treasury_stock: float = 0.0                     # Acciones en tesoreria
+    retained_earnings: float = 0.0                  # Utilidades acumuladas
+    other_equity_reserves: float = 0.0              # Otros resultados integrales acumulados
 
     @property
     def total_financial_debt(self) -> float:

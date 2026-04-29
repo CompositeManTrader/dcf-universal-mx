@@ -216,6 +216,7 @@ SHEET_INFO_DA = "700002"
 SHEET_INFO_12M = "700003"
 SHEET_NOTES_INC_EXP = "800200"   # Notas: ingresos/gastos breakdown (interes, FX, taxes)
 SHEET_NOTES_REVENUE = "800005"   # Distribucion de ingresos por geografia
+SHEET_NOTES_BS = "800100"        # Notas: Subclasificaciones de activos, pasivos, capital
 
 # Tipos de emisora financiera (banco, casa de bolsa, sofol, aseguradora, fideicomiso)
 FINANCIAL_ISSUER_TYPES = {"BM", "CB", "SF", "SA", "FI", "FFC"}
@@ -414,6 +415,83 @@ class XBRLReader:
             "Total del capital contable",
             "Capital contable",
         )
+
+        # ----- EQUITY BREAKDOWN (210000) -----
+        bs.common_stock = g("Capital social")
+        bs.additional_paid_in_capital = g("Prima en emisión de acciones",
+                                            "Prima en emision de acciones")
+        bs.treasury_stock = g("Acciones en tesorería", "Acciones en tesoreria")
+        bs.retained_earnings = g("Utilidades acumuladas")
+        bs.other_equity_reserves = g(
+            "Otros resultados integrales acumulados",
+        )
+
+        # ----- ACTIVOS extra del 210000 -----
+        bs.biological_assets_current = g("Activos biológicos", "Activos biologicos")
+        bs.biological_assets_noncurrent = g(
+            "Activos biológicos no circulantes",
+            "Activos biologicos no circulantes",
+        )
+        bs.inventories_noncurrent = g("Inventarios no circulantes")
+        bs.other_financial_assets_st = g(
+            "Otros activos financieros",
+        )
+        bs.taxes_recoverable_st = g(
+            "Impuestos por recuperar",
+        )
+        bs.accounts_receivable_lt = g(
+            "Clientes y otras cuentas por cobrar no circulantes",
+        )
+
+        # ----- PASIVOS extra del 210000 -----
+        bs.provisions_st = g(
+            "Otras provisiones a corto plazo",
+        )
+        bs.provisions_lt = g(
+            "Otras provisiones a largo plazo",
+            "Otras provisiones a Largo plazo",
+        )
+        bs.employee_benefits_lt = g(
+            "Provisiones por beneficios a los empleados a Largo plazo",
+            "Provisiones por beneficios a los empleados a largo plazo",
+        )
+
+        # ----- BREAKDOWN DETALLADO del 800100 (Notas - Subclasificaciones) -----
+        idxbs = self._idx(SHEET_NOTES_BS)
+        if idxbs is not None:
+            gn = lambda *labels: idxbs.get_first(*labels, col=1, default=0.0) * factor
+
+            # Receivables breakdown
+            bs.accounts_receivable_trade        = gn("Clientes")
+            bs.accounts_receivable_related_st   = gn("Cuentas por cobrar circulantes a partes relacionadas")
+            bs.other_receivables_st             = gn("Otras cuentas por cobrar circulantes")
+            bs.prepaid_expenses_st              = gn("Gastos anticipados circulantes")
+            # taxes_recoverable: si 210000 lo tiene en 0, usar 800100 (mas detallado)
+            tax_rec_notes = gn("Cuentas por cobrar circulantes procedentes de impuestos distintos a los impuestos a las ganancias")
+            if tax_rec_notes and not bs.taxes_recoverable_st:
+                bs.taxes_recoverable_st = tax_rec_notes
+
+            # Inventory breakdown (Q4 acum, snapshot a fin de periodo)
+            bs.inventory_raw_materials = gn("Materias primas")
+            bs.inventory_wip           = gn("Trabajo en curso circulante")
+            bs.inventory_finished      = gn("Productos terminados circulantes")
+            bs.inventory_supplies      = gn("Suministros de producción circulantes",
+                                            "Suministros de produccion circulantes")
+            bs.inventory_spare_parts   = gn("Piezas de repuesto circulantes")
+
+            # Debt breakdown (CP + LP)
+            bs.bank_loans_st   = gn("Créditos Bancarios a corto plazo",
+                                     "Creditos Bancarios a corto plazo")
+            bs.notes_payable_st= gn("Créditos Bursátiles a corto plazo",
+                                     "Creditos Bursatiles a corto plazo")
+            bs.bank_loans_lt   = gn("Créditos Bancarios a largo plazo",
+                                     "Creditos Bancarios a largo plazo")
+            bs.bonds_payable_lt= gn("Créditos Bursátiles a largo plazo",
+                                     "Creditos Bursatiles a largo plazo")
+
+            # Payables breakdown
+            bs.accounts_payable_trade        = gn("Proveedores circulantes")
+            bs.accounts_payable_related_st   = gn("Cuentas por pagar circulantes a partes relacionadas")
 
         return bs
 

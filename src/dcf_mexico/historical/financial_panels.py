@@ -234,6 +234,12 @@ def format_panel(df: pd.DataFrame, kinds: list[str]) -> pd.DataFrame:
                 col_fmt.append(f"{val:.2%}")
             elif kind == "ratio_eps":
                 col_fmt.append(f"{val:.4f}")
+            elif kind == "ratio_x":
+                col_fmt.append(f"{val:.2f}x")
+            elif kind == "raw_days":
+                col_fmt.append(f"{val:,.1f} days")
+            elif kind == "raw":
+                col_fmt.append(f"{val:,.1f}")
             elif kind == "string":
                 col_fmt.append(str(val))
             else:
