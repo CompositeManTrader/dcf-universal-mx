@@ -650,10 +650,14 @@ if mode == "Single DCF":
                         if "Shares" in row_label:
                             return f"{v:,.2f}"
                         return f"{v:,.1f}"
-                    fmt_df = bb_hist.copy()
-                    for idx in fmt_df.index:
-                        for col in fmt_df.columns:
-                            fmt_df.loc[idx, col] = _fmt_cell(bb_hist.loc[idx, col], idx)
+                    # Build formatted DF as object dtype directly (pandas 3.x strict)
+                    fmt_df = pd.DataFrame(
+                        {col: [_fmt_cell(bb_hist.loc[idx, col], idx)
+                               for idx in bb_hist.index]
+                         for col in bb_hist.columns},
+                        index=bb_hist.index,
+                        dtype=object,
+                    )
 
                     def _hist_row_style(row):
                         label = row.name
