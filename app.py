@@ -55,6 +55,10 @@ try:
         build_historical_bloomberg,
         build_metric_timeseries,
         compute_growth_stats,
+        build_income_panel,
+        build_bs_panel,
+        build_cf_panel,
+        format_panel,
     )
     HAS_HISTORICAL = True
 except ImportError as _e:
@@ -427,27 +431,8 @@ if mode == "Single DCF":
     with st.expander("Snapshot financiero", expanded=False):
         st.dataframe(res.summary(), hide_index=True, use_container_width=True)
 
-    # ========================================================================
-    # ESTADOS FINANCIEROS ESTILO BLOOMBERG (5 hojas)
-    # ========================================================================
     period_label = f"FY {res.info.fiscal_year}" if res.info.fiscal_year else "Period"
-    st.subheader("Estados Financieros (estilo Bloomberg)")
-    st.caption(f"{BLOOMBERG_HEADER}  •  Periodo: {res.info.period_end} (Q{res.info.quarter})")
-    bb_sheets = build_all_sheets(res, market_price=issuer.market_price)
-    bb_tabs = st.tabs(list(bb_sheets.keys()))
-    for tab, (sheet_name, sheet_df) in zip(bb_tabs, bb_sheets.items()):
-        with tab:
-            st.markdown(f"**{sheet_name}** — In Millions of MXN")
-            try:
-                st.dataframe(
-                    _style_bloomberg(sheet_df, period_label),
-                    use_container_width=True,
-                    height=min(800, 35 + 35 * len(sheet_df)),
-                )
-            except Exception as e:
-                # Fallback sin styling si falla
-                st.warning(f"Styler error: {e}")
-                st.dataframe(sheet_df, hide_index=True, use_container_width=True)
+    # Bloomberg single-period sheets: ahora viven dentro del tab "Estados Financieros".
 
     # ----- FINANCIAL ISSUER (DDM/Excess Returns) -----
     if sector.is_financial:
@@ -594,8 +579,9 @@ if mode == "Single DCF":
 
     # Define tabs (each section becomes a tab via __enter__/__exit__ to avoid
     # massive re-indentation. This is equivalent to `with tab:` blocks).
-    (tab_hist, tab_valid, tab_val, tab_stories, tab_pic,
+    (tab_estados, tab_hist, tab_valid, tab_val, tab_stories, tab_pic,
      tab_sens, tab_dupont, tab_diag, tab_dl) = st.tabs([
+        "📊 Estados Financieros",
         "📅 Historical",
         "🔍 Bloomberg Validation",
         "📈 Valuation Output",
@@ -608,8 +594,146 @@ if mode == "Single DCF":
     ])
 
     # ============================================================
-    # TAB 0: HISTORICAL (multi-period XBRL evolution)
+    # TAB 0: ESTADOS FINANCIEROS (Income + BS + CF historicos, estilo Bloomberg)
     # ============================================================
+    tab_estados.__enter__()
+
+    st.subheader(f"Estados Financieros — {issuer.ticker}")
+    st.caption(
+        "Vista historica multi-periodo estilo Bloomberg. "
+        "Selecciona Anual o Trimestral, navega entre Income / Balance / Cash Flow. "
+        "Valores en MDP (USD->MXN auto-convertido)."
+    )
+
+    if not HAS_HISTORICAL:
+        st.error(f"Historical module no disponible: {_HIST_ERR}")
+    else:
+        try:
+            hs_ef = load_historical(issuer.ticker,
+                                      parse_func=lambda fp: _parse_cached(str(fp)))
+        except Exception as e:
+            st.error(f"Error cargando: {e}")
+            hs_ef = None
+
+        if hs_ef is None or hs_ef.n_periods == 0:
+            st.warning(f"No hay XBRLs disponibles para {issuer.ticker}.")
+        else:
+            # Toggle Anual vs Trimestral
+            view_col1, view_col2, view_col3 = st.columns([2, 1, 1])
+            with view_col1:
+                view_mode = st.radio(
+                    "Vista",
+                    ["Anual (Q4 / 4D)", "Trimestral (LTM por trimestre)"],
+                    horizontal=True,
+                    key=f"ef_view_{issuer.ticker}",
+                )
+            with view_col2:
+                max_periods_pick = st.selectbox(
+                    "Mostrar últimos N",
+                    [4, 8, 12, 16, 20, "Todos"],
+                    index=3,
+                    key=f"ef_npick_{issuer.ticker}",
+                )
+            with view_col3:
+                st.metric("Periodos disponibles", hs_ef.n_periods,
+                          f"Anuales: {hs_ef.n_annual}")
+
+            annual_only_ef = view_mode.startswith("Anual")
+            max_n = None if max_periods_pick == "Todos" else int(max_periods_pick)
+
+            # Si se pide Anual pero no hay 4D, fallback automatico a "solo Q4 preliminares"
+            if annual_only_ef and hs_ef.n_annual == 0:
+                # Filtrar a Q4 preliminares como aproximacion anual
+                hs_ef_view = type(hs_ef)(
+                    ticker=hs_ef.ticker,
+                    snapshots=[s for s in hs_ef.snapshots if s.quarter == "4"],
+                )
+                if hs_ef_view.n_periods == 0:
+                    st.warning(
+                        "No hay XBRLs anuales (4D) ni Q4 preliminares. "
+                        "Usa vista trimestral o descarga los 4D."
+                    )
+                    hs_ef_view = hs_ef
+                else:
+                    st.info(
+                        f"No hay 4D (anuales auditados) — usando {hs_ef_view.n_periods} "
+                        f"Q4 preliminares como proxy anual."
+                    )
+                use_annual_flag = False  # ya filtramos manualmente
+            else:
+                hs_ef_view = hs_ef
+                use_annual_flag = annual_only_ef
+
+            fx_rate = market.fx_rate_usdmxn
+
+            # Sub-tabs Income / Balance / CashFlow
+            sub_is, sub_bs, sub_cf = st.tabs([
+                "Income Statement",
+                "Balance Sheet",
+                "Cash Flow",
+            ])
+
+            def _render_panel(panel_df, kinds_list, title):
+                if panel_df.empty or panel_df.shape[1] == 0:
+                    st.warning(f"Sin datos para {title}.")
+                    return
+                fmt_df = format_panel(panel_df, kinds_list)
+
+                # Apply Bloomberg-style row coloring
+                def _row_style(row):
+                    i = list(fmt_df.index).index(row.name)
+                    kind = kinds_list[i] if i < len(kinds_list) else "line"
+                    if kind == "header":
+                        return ["background-color: #1F4E79; color: white; font-weight: 700;"] * len(row)
+                    if kind == "subtotal":
+                        return ["background-color: #DCEDC8; font-weight: 600; color: #1F2937;"] * len(row)
+                    if kind == "ratio":
+                        return ["background-color: #F1F8E9; font-style: italic; color: #374151;"] * len(row)
+                    if kind == "spacer":
+                        return ["background-color: white;"] * len(row)
+                    return ["background-color: #F9FBF7;"] * len(row)
+
+                try:
+                    styler = fmt_df.style.apply(_row_style, axis=1)
+                    styler = styler.set_properties(**{
+                        "text-align": "right",
+                        "padding": "4px 10px",
+                        "font-size": "12px",
+                    })
+                    st.dataframe(
+                        styler,
+                        use_container_width=True,
+                        height=min(900, 35 + 32 * len(fmt_df)),
+                    )
+                except Exception:
+                    st.dataframe(fmt_df, use_container_width=True)
+
+            with sub_is:
+                df_is, kinds_is = build_income_panel(
+                    hs_ef_view, annual_only=use_annual_flag,
+                    fx_rate_usdmxn=fx_rate, max_periods=max_n,
+                )
+                st.markdown(f"#### Income Statement — {df_is.shape[1]} periodos  •  In Millions of MXN")
+                _render_panel(df_is, kinds_is, "Income")
+
+            with sub_bs:
+                df_bs, kinds_bs = build_bs_panel(
+                    hs_ef_view, annual_only=use_annual_flag,
+                    fx_rate_usdmxn=fx_rate, max_periods=max_n,
+                )
+                st.markdown(f"#### Balance Sheet — {df_bs.shape[1]} periodos  •  In Millions of MXN")
+                _render_panel(df_bs, kinds_bs, "Balance")
+
+            with sub_cf:
+                df_cf, kinds_cf = build_cf_panel(
+                    hs_ef_view, annual_only=use_annual_flag,
+                    fx_rate_usdmxn=fx_rate, max_periods=max_n,
+                )
+                st.markdown(f"#### Cash Flow — {df_cf.shape[1]} periodos  •  In Millions of MXN")
+                _render_panel(df_cf, kinds_cf, "Cash Flow")
+
+    # ----- TAB Estados close, TAB Historical open -----
+    tab_estados.__exit__(None, None, None)
     tab_hist.__enter__()
 
     st.subheader(f"Historical Evolution — {issuer.ticker}")
