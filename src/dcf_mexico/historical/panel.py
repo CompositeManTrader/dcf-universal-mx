@@ -105,9 +105,12 @@ def build_metric_timeseries(
     fx_rate_usdmxn: float = 19.5,
     annual_only: bool = True,
 ) -> pd.DataFrame:
-    """Devuelve un DataFrame con cols ['period_end', 'label', 'value'] para
-    plotear time series de una metrica especifica.
+    """Devuelve un DataFrame con cols ['period_end', 'year', 'label', 'value']
+    para plotear time series de una metrica especifica.
+
+    Siempre devuelve DataFrame con las columnas esperadas, aunque este vacio.
     """
+    expected_cols = ["period_end", "year", "label", "value"]
     snaps = series.annual if annual_only else series.snapshots
     rows = []
     for s in snaps:
@@ -119,6 +122,8 @@ def build_metric_timeseries(
             "label":      s.label,
             "value":      m.get(metric, 0.0),
         })
+    if not rows:
+        return pd.DataFrame(columns=expected_cols)
     return pd.DataFrame(rows)
 
 

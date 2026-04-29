@@ -648,9 +648,19 @@ if mode == "Single DCF":
                     "convencion de nombre indicada arriba."
                 )
             else:
-                # Toggle: anual vs todos
-                annual_only = st.toggle("Solo periodos anuales (4D)", value=True,
-                                          help="Si lo apagas, incluye trimestres preliminares")
+                # Toggle: anual vs todos. Default OFF si no hay anuales.
+                _has_annual = hs.n_annual > 0
+                annual_only = st.toggle(
+                    "Solo periodos anuales (4D)",
+                    value=_has_annual,
+                    help=f"Tienes {hs.n_annual} anuales y {hs.n_quarterly} trimestrales. "
+                         f"Si lo apagas, incluye trimestres preliminares.",
+                )
+                if annual_only and not _has_annual:
+                    st.warning(
+                        "No tienes XBRLs anuales (4D) descargados para este ticker. "
+                        "Apaga el toggle para usar los trimestrales, o descarga los `4D`."
+                    )
 
                 # Multi-period Bloomberg table
                 st.markdown("### Multi-period financial panel")
@@ -766,14 +776,16 @@ if mode == "Single DCF":
                 for m in stat_metrics:
                     ts = build_metric_timeseries(hs, m, fx_rate_usdmxn=fx_rate,
                                                    annual_only=annual_only)
-                    s = compute_growth_stats(ts["value"].tolist())
+                    # Guard contra DataFrame vacio o sin columna 'value'
+                    vals = ts["value"].tolist() if (not ts.empty and "value" in ts.columns) else []
+                    s = compute_growth_stats(vals)
                     stat_rows.append({
                         "Metric": m,
                         "N periods": s["n"],
                         "CAGR":   f"{s['cagr']*100:+.2f}%" if s["n"] > 1 else "—",
-                        "Peak":   f"{s['peak']:,.1f}",
-                        "Trough": f"{s['trough']:,.1f}",
-                        "Mean":   f"{s['mean']:,.1f}",
+                        "Peak":   f"{s['peak']:,.1f}" if s["n"] else "—",
+                        "Trough": f"{s['trough']:,.1f}" if s["n"] else "—",
+                        "Mean":   f"{s['mean']:,.1f}" if s["n"] else "—",
                         "Vol (CV)": f"{s['vol']:.2%}" if s['vol'] else "—",
                     })
                 st.dataframe(pd.DataFrame(stat_rows), hide_index=True,
