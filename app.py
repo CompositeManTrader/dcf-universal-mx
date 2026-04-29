@@ -702,6 +702,8 @@ if mode == "Single DCF":
                         return ["background-color: #F3F4F6; color: #374151; font-style: italic;"] * len(row)
                     if kind == "sub":
                         return ["background-color: #FAFCFA; color: #4B5563; font-size: 11px;"] * len(row)
+                    if kind == "bold_line":
+                        return ["background-color: #F9FBF7; color: #1F2937; font-weight: 700;"] * len(row)
                     if kind == "spacer":
                         return ["background-color: white;"] * len(row)
                     return ["background-color: #F9FBF7;"] * len(row)
@@ -713,6 +715,13 @@ if mode == "Single DCF":
                         "padding": "3px 10px",
                         "font-size": "12px",
                     })
+                    # Preservar leading spaces en la columna del concepto (index)
+                    # para que indentacion 2/4 espacios se vea visualmente
+                    styler = styler.set_table_styles([
+                        {"selector": "th.row_heading", "props": [("white-space", "pre"),
+                                                                    ("text-align", "left")]},
+                        {"selector": "th.col_heading", "props": [("text-align", "right")]},
+                    ])
                     st.dataframe(
                         styler,
                         use_container_width=True,
