@@ -55,7 +55,24 @@ class HistoricalSeries:
 
     @property
     def annual(self) -> list[PeriodSnapshot]:
-        """Solo periodos anuales (4D)."""
+        """Periodos anuales: prefiere 4D (auditado); si no existe para un año,
+        usa Q4 (acum YTD = FY). Esto permite que emisoras sin reporte
+        dictaminado todavia tengan vista anual."""
+        # Por año, prefiere 4D; fallback a Q4
+        by_year_4d = {s.year: s for s in self.snapshots if s.quarter == "4D"}
+        by_year_q4 = {s.year: s for s in self.snapshots if s.quarter == "4"}
+        years = sorted(set(list(by_year_4d.keys()) + list(by_year_q4.keys())))
+        result = []
+        for y in years:
+            if y in by_year_4d:
+                result.append(by_year_4d[y])
+            elif y in by_year_q4:
+                result.append(by_year_q4[y])
+        return result
+
+    @property
+    def annual_strict(self) -> list[PeriodSnapshot]:
+        """Solo periodos 4D (auditados estrictos), sin fallback a Q4."""
         return [s for s in self.snapshots if s.is_annual]
 
     @property

@@ -1157,6 +1157,13 @@ def _safe(getter, parsed):
         return None
 
 
+def _period_label(s, annual_only: bool) -> str:
+    """Label de columna: 'FY YYYY' en modo anual (incluso para Q4), o s.label."""
+    if annual_only:
+        return f"FY {s.year}"
+    return s.label
+
+
 def _build_panel_with_view(
     series,
     rows_def: list,
@@ -1192,7 +1199,7 @@ def _build_panel_with_view(
                 col_vals.append(raw)  # ya es valor final (no MDP)
             else:
                 col_vals.append((raw * fx) / 1_000_000)
-        cols_data[s.label] = col_vals
+        cols_data[_period_label(s, annual_only)] = col_vals
 
     return pd.DataFrame(cols_data, index=labels), kinds
 
@@ -1340,7 +1347,7 @@ def build_income_adjusted_panel(series, annual_only=False,
                 col_vals.append(None)
             else:
                 col_vals.append(metrics.get(key))
-        cols_data[s.label] = col_vals
+        cols_data[_period_label(s, annual_only)] = col_vals
 
     df = pd.DataFrame(cols_data, index=labels)
     return df, kinds
@@ -1387,7 +1394,7 @@ def build_bs_standardized_panel(series, annual_only=False,
                 col_vals.append(None)
             else:
                 col_vals.append(metrics.get(key))
-        cols_data[s.label] = col_vals
+        cols_data[_period_label(s, annual_only)] = col_vals
 
     df = pd.DataFrame(cols_data, index=labels)
     return df, kinds
@@ -1560,7 +1567,7 @@ def build_cf_standardized_panel(series, annual_only=False,
                 col_vals.append(None)
             else:
                 col_vals.append(metrics.get(key))
-        cols_data[s.label] = col_vals
+        cols_data[_period_label(s, annual_only)] = col_vals
 
     df = pd.DataFrame(cols_data, index=labels)
     return df, kinds
