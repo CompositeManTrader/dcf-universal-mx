@@ -22,3 +22,9 @@ from .financial import (  # noqa: F401
     value_financial_from_parser,
     justified_pb,
 )
+from .dupont import (  # noqa: F401
+    DuPontResult,
+    compute_dupont,
+    dupont_from_parser,
+)
+from .excel_export import export_dcf_to_excel  # noqa: F401

@@ -32,6 +32,8 @@ from dcf_mexico.valuation import (
     FinancialAssumptions,
     FinancialBase,
     value_financial,
+    dupont_from_parser,
+    export_dcf_to_excel,
 )
 from dcf_mexico.view import build_all_sheets, BLOOMBERG_HEADER
 
@@ -41,6 +43,107 @@ st.set_page_config(
     page_icon=":bar_chart:",
     layout="wide",
 )
+
+
+# ---------------------------------------------------------------------------
+# Bloomberg-style CSS (custom theme on top of Streamlit)
+# ---------------------------------------------------------------------------
+st.markdown("""
+<style>
+    /* Header / titles */
+    h1, h2, h3, h4 {
+        color: #0E2B45 !important;
+        font-family: 'Segoe UI', 'Roboto', sans-serif;
+        font-weight: 600 !important;
+    }
+    h1 { border-bottom: 3px solid #1F4E79; padding-bottom: 8px; }
+
+    /* Bloomberg accent color */
+    .stApp { background-color: #FAFBFC; }
+
+    /* Metric cards */
+    [data-testid="stMetricValue"] {
+        font-size: 1.6rem !important;
+        font-weight: 700 !important;
+        color: #0E2B45 !important;
+    }
+    [data-testid="stMetricLabel"] {
+        font-size: 0.85rem !important;
+        color: #4A5568 !important;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    /* Tabs - Bloomberg style */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px;
+        background-color: #0E2B45;
+        padding: 8px;
+        border-radius: 6px 6px 0 0;
+    }
+    .stTabs [data-baseweb="tab"] {
+        background-color: #1F4E79;
+        color: #E8EDF2;
+        border-radius: 4px;
+        padding: 8px 18px;
+        font-weight: 500;
+        border: 0;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #FF8C00 !important;
+        color: white !important;
+        font-weight: 700 !important;
+    }
+    .stTabs [data-baseweb="tab-panel"] {
+        background-color: white;
+        padding: 20px;
+        border: 1px solid #E0E5EB;
+        border-top: none;
+        border-radius: 0 0 6px 6px;
+    }
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #0E2B45;
+    }
+    [data-testid="stSidebar"] * {
+        color: #E8EDF2 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stMarkdownContainer"] strong {
+        color: #FF8C00 !important;
+    }
+
+    /* Dataframes */
+    [data-testid="stDataFrame"] {
+        border: 1px solid #D0D7DE;
+        border-radius: 4px;
+    }
+
+    /* Input fields */
+    .stNumberInput input, .stTextInput input, .stSelectbox > div > div {
+        border-color: #1F4E79 !important;
+    }
+
+    /* Buttons */
+    .stButton > button {
+        background-color: #1F4E79;
+        color: white;
+        border: none;
+        font-weight: 600;
+    }
+    .stButton > button:hover {
+        background-color: #FF8C00;
+        color: white;
+    }
+
+    /* Download button */
+    .stDownloadButton > button {
+        background-color: #2EA043;
+        color: white;
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
 # ---------------------------------------------------------------------------
@@ -424,10 +527,9 @@ if mode == "Single DCF":
         st.dataframe(torn, hide_index=True, use_container_width=True)
 
     # ========================================================================
-    # SECCIONES ESTILO DAMODARAN GINZU
+    # TABS (Damodaran-style + Bloomberg + DuPont + Download)
     # ========================================================================
     st.divider()
-    st.header("Damodaran-style outputs")
 
     # Helper: invested capital y ROIC implicitos (usando S2C constante)
     def _compute_ic_roic(out, base, a):
@@ -442,6 +544,21 @@ if mode == "Single DCF":
         return ic_series, roic_series
 
     ic_series, roic_series = _compute_ic_roic(out, base, a)
+
+    # Define tabs (each section becomes a tab via __enter__/__exit__ to avoid
+    # massive re-indentation. This is equivalent to `with tab:` blocks).
+    tab_val, tab_stories, tab_pic, tab_sens, tab_dupont, tab_diag, tab_dl = st.tabs([
+        "📈 Valuation Output",
+        "📖 Stories to Numbers",
+        "🎨 Valuation as Picture",
+        "🎯 Sensitivity",
+        "🔗 DuPont",
+        "✅ Diagnostics",
+        "💾 Download Excel",
+    ])
+
+    # ----- TAB 1: Valuation Output (open) -----
+    tab_val.__enter__()
 
     # ---- 1) Valuation Output (Damodaran-style wide projection) ----
     st.subheader("1. Valuation Output")
@@ -641,6 +758,10 @@ if mode == "Single DCF":
     k4.metric("Equity Value", f"{out.equity_value:,.0f} MDP",
               f"{out.value_per_share:.2f} MXN/sh")
 
+    # ----- TAB 1 close, TAB 2 open -----
+    tab_val.__exit__(None, None, None)
+    tab_stories.__enter__()
+
     # ---- 2) Stories to Numbers ----
     st.subheader("2. Stories to Numbers")
     st.caption("Narrativa que conecta cada driver con la realidad del negocio.")
@@ -809,6 +930,10 @@ if mode == "Single DCF":
         st.dataframe(styler, use_container_width=True, height=35 + 35 * len(value_df))
     except Exception:
         st.dataframe(value_df, hide_index=True, use_container_width=True)
+
+    # ----- TAB 2 close, TAB 3 open -----
+    tab_stories.__exit__(None, None, None)
+    tab_pic.__enter__()
 
     # ---- 3) Valuation as Picture (waterfall) ----
     st.subheader("3. Valuation as Picture")
@@ -1006,6 +1131,81 @@ if mode == "Single DCF":
                         f"{'Strong' if spread > 0.03 else 'Modest' if spread > 0 else 'Negative'} "
                         f"competitive moat.")
 
+    # ----- TAB 3 close, TAB 4 (Sensitivity) open -----
+    tab_pic.__exit__(None, None, None)
+    tab_sens.__enter__()
+
+    st.subheader("Sensitivity Analysis")
+    st.caption("El tornado y el heatmap originales viven en este tab. La proyeccion FCFF y el tornado de arriba son redundantes.")
+    st.markdown("**Tornado por driver:** ver impacto en value/share de mover cada driver low/high.")
+    sens_torn = tornado(base, a)
+    st.altair_chart(_tornado_chart(sens_torn), use_container_width=True)
+    with st.expander("Tabla tornado"):
+        st.dataframe(sens_torn, hide_index=True, use_container_width=True)
+    st.divider()
+
+    # ----- TAB 4 close, TAB 5 (DuPont) open -----
+    tab_sens.__exit__(None, None, None)
+    tab_dupont.__enter__()
+
+    st.subheader("DuPont Analysis")
+    st.caption("Descomposicion del ROE en sus componentes (3-step + 5-step extended).")
+
+    try:
+        # Calcular FX multiplier para emisoras USD
+        currency = (res.info.currency or "MXN").upper().strip()
+        fx_mult = market.fx_rate_usdmxn if currency == "USD" else 1.0
+        # DuPont siempre con balance del periodo actual
+        dp = dupont_from_parser(res, currency_multiplier=fx_mult / 1e6)  # convertir a MDP
+        dp_table = dp.to_table()
+
+        col_dp1, col_dp2 = st.columns([1, 1])
+        with col_dp1:
+            st.markdown("**Decomposition**")
+            try:
+                styler = dp_table.style.apply(
+                    lambda r: (["background-color: #DCEDC8; font-weight: 700;"] * len(r)
+                                if r["Component"].startswith("=") or r["Component"].startswith("---")
+                                else ["background-color: #F9FBF7;"] * len(r)),
+                    axis=1,
+                ).hide(axis="index")
+                styler = styler.set_properties(**{"padding": "4px 8px"})
+                st.dataframe(styler, use_container_width=True, height=35 + 32 * len(dp_table))
+            except Exception:
+                st.dataframe(dp_table, hide_index=True, use_container_width=True)
+
+        with col_dp2:
+            st.markdown("**Components chart**")
+            comp_df = dp.to_components()
+            comp_df["Display"] = comp_df.apply(
+                lambda r: f"{r['Value']:.2%}" if r["Type"] == "Pct" else f"{r['Value']:.3f}x",
+                axis=1,
+            )
+            st.dataframe(comp_df[["Component", "Display"]], hide_index=True,
+                          use_container_width=True)
+            st.metric("ROE (5-step DuPont)", f"{dp.roe_5step:.2%}",
+                      f"vs ROA {dp.roa:.2%}  |  ROIC {dp.roic:.2%}")
+            if abs(dp.consistency_pp) > 0.001:
+                st.warning(f"Consistency check off by {dp.consistency_pp*100:+.4f}pp")
+            else:
+                st.success("Consistency check OK (5-step product = ROE actual)")
+
+        st.markdown("---")
+        st.markdown("**Como leer DuPont:**")
+        st.markdown(f"""
+- **Tax Burden** ({dp.tax_burden:.2%}): que fraccion de la utilidad pre-tax queda despues de impuestos. <100% siempre.
+- **Interest Burden** ({dp.interest_burden:.2%}): que fraccion del EBIT queda despues del costo financiero. >100% si hay otros ingresos no operativos netos positivos.
+- **EBIT Margin** ({dp.ebit_margin:.2%}): margen operativo. Driver de profitabilidad pura.
+- **Asset Turnover** ({dp.asset_turnover:.3f}x): cuantos pesos de venta genera cada peso de activos. Driver de eficiencia.
+- **Equity Multiplier** ({dp.equity_multiplier:.3f}x): apalancamiento (assets/equity). >1 = uso de deuda.
+""")
+    except Exception as e:
+        st.error(f"DuPont no disponible para esta emisora: {e}")
+
+    # ----- TAB 5 close, TAB 6 (Diagnostics) open -----
+    tab_dupont.__exit__(None, None, None)
+    tab_diag.__enter__()
+
     # ---- 4) Diagnostics ----
     st.subheader("4. Diagnostics")
     st.caption("Sanity checks sobre los supuestos y el output.")
@@ -1090,9 +1290,11 @@ if mode == "Single DCF":
         styler = styler.applymap(_color_status, subset=["Status"])
     st.dataframe(styler, hide_index=True, use_container_width=True)
 
-    # ========================================================================
-    # MATRIZ HEATMAP (mantener al final)
-    # ========================================================================
+    # ----- TAB 6 close, jump back to Sensitivity tab to add heatmap -----
+    tab_diag.__exit__(None, None, None)
+
+    # Re-enter Sensitivity to add the heatmap (it logically belongs here)
+    tab_sens.__enter__()
     st.divider()
     st.subheader("Matriz growth × margin (heatmap)")
     grid_x = [0.02, 0.04, 0.05, 0.06, 0.08, 0.10]
@@ -1121,6 +1323,117 @@ if mode == "Single DCF":
                 text=alt.Text("value:Q", format=".1f"))
     )
     st.altair_chart(heat + text, use_container_width=True)
+
+    # ----- TAB Sensitivity close, TAB Download Excel open -----
+    tab_sens.__exit__(None, None, None)
+    tab_dl.__enter__()
+
+    st.subheader("Download DCF as Excel (con formulas reales)")
+    st.caption(
+        "Genera un .xlsx con 4 hojas: **Inputs** (drivers editables verde), "
+        "**Projection** (proyeccion 10y con formulas live), **Bridge** "
+        "(EV → Equity → Value/share) y **Audit** (compara Excel vs Python). "
+        "Edita las celdas verdes y todo el modelo recalcula."
+    )
+
+    try:
+        excel_bytes = export_dcf_to_excel(base, a, out)
+        st.download_button(
+            label=f"📥 Descargar DCF Excel — {issuer.ticker}",
+            data=excel_bytes,
+            file_name=f"DCF_{issuer.ticker}_{res.info.period_end}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            type="primary",
+        )
+        st.success(
+            "Estructura del Excel:\n"
+            "1. **Inputs** — celdas verde claro = editables (Revenue growth, target margin, S2C, WACC, Rf, ERP, etc.).\n"
+            "2. **Projection** — proyeccion 10y con FORMULAS reales (no valores estaticos). Cambia un input y todo recalcula.\n"
+            "3. **Bridge** — Sum PV → Terminal Value → EV → Equity → Value/share.\n"
+            "4. **Audit** — diffs entre Excel formulas y Python output. Idealmente cerca de 0."
+        )
+    except Exception as e:
+        st.error(f"Error generando Excel: {e}")
+
+    # ---- Per-year override (advanced) ----
+    st.divider()
+    st.subheader("Advanced: Per-year override")
+    st.caption(
+        "Por defecto, el modelo usa una **curva smooth** (revenue growth constante Y1-5, "
+        "fade lineal Y6-10). Si quieres editar cada año por separado, activa per-year mode "
+        "y edita los valores en la tabla. Los cambios solo aplican en la proxima ejecucion del modelo."
+    )
+
+    with st.expander("Editar drivers año por año (sobrescriben curva smooth)", expanded=False):
+        st.markdown("Pega o edita los valores. Si dejas vacio, usa la curva smooth.")
+        n = a.forecast_years
+        years = list(range(1, n + 1))
+
+        # Default values from current smooth curve
+        default_growth = []
+        for t in years:
+            if t <= a.high_growth_years:
+                default_growth.append(a.revenue_growth_high)
+            else:
+                step = t - a.high_growth_years
+                steps_remaining = n - a.high_growth_years
+                default_growth.append(
+                    a.revenue_growth_high + (a.terminal_growth - a.revenue_growth_high) * step / steps_remaining
+                )
+
+        base_margin_v = base.ebit / base.revenue if base.revenue else 0
+        default_margin = [base_margin_v + (a.target_op_margin - base_margin_v) * t / n for t in years]
+        default_tax = [base.effective_tax_rate + (a.marginal_tax_terminal - base.effective_tax_rate) * t / n for t in years]
+        default_wacc = list(out.wacc_yearly)
+
+        py_df = pd.DataFrame({
+            "Year": years,
+            "Revenue growth": default_growth,
+            "Op margin":     default_margin,
+            "Tax rate":      default_tax,
+            "WACC":          default_wacc,
+        })
+        edited = st.data_editor(
+            py_df,
+            num_rows="fixed",
+            column_config={
+                "Year": st.column_config.NumberColumn("Year", disabled=True),
+                "Revenue growth": st.column_config.NumberColumn("Revenue growth", format="%.4f", min_value=-0.50, max_value=0.50),
+                "Op margin":      st.column_config.NumberColumn("Op margin", format="%.4f", min_value=-0.20, max_value=0.80),
+                "Tax rate":       st.column_config.NumberColumn("Tax rate", format="%.4f", min_value=0.0, max_value=0.50),
+                "WACC":           st.column_config.NumberColumn("WACC", format="%.4f", min_value=0.04, max_value=0.30),
+            },
+            use_container_width=True,
+            key="per_year_editor",
+        )
+
+        if st.button("Aplicar per-year override y re-valuar"):
+            a_override = DCFAssumptions(
+                revenue_growth_high=a.revenue_growth_high,
+                terminal_growth=a.terminal_growth,
+                target_op_margin=a.target_op_margin,
+                sales_to_capital=a.sales_to_capital,
+                effective_tax_base=a.effective_tax_base,
+                marginal_tax_terminal=a.marginal_tax_terminal,
+                risk_free=a.risk_free,
+                erp=a.erp,
+                unlevered_beta=a.unlevered_beta,
+                terminal_wacc_override=a.terminal_wacc_override,
+                market_price=a.market_price,
+                revenue_growth_per_year=edited["Revenue growth"].tolist(),
+                op_margin_per_year=edited["Op margin"].tolist(),
+                tax_rate_per_year=edited["Tax rate"].tolist(),
+                wacc_per_year=edited["WACC"].tolist(),
+            )
+            out_override = project_company(base, a_override)
+            st.metric(
+                "Value/share (override per-year)",
+                f"{out_override.value_per_share:,.2f} MXN",
+                f"{(out_override.value_per_share / out.value_per_share - 1)*100:+.2f}% vs smooth",
+            )
+            st.dataframe(out_override.projection_table(), hide_index=True, use_container_width=True)
+
+    tab_dl.__exit__(None, None, None)
 
 
 # ===========================================================================

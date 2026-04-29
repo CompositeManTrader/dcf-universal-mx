@@ -33,7 +33,23 @@ from .wacc import (
 # ---------------------------------------------------------------------------
 @dataclass
 class DCFAssumptions:
-    """Drivers que el analista debe definir."""
+    """Drivers que el analista debe definir.
+
+    MODO SMOOTH (default): el modelo proyecta growth/margin/tax/WACC con curva
+    automatica:
+      - Y1-Y5: revenue_growth_high constante
+      - Y6-Y10: fade lineal a terminal_growth
+      - Margin: lineal de current a target_op_margin en Y10
+      - Tax: lineal de effective_tax_base a marginal_tax_terminal en Y10
+      - WACC: lineal de WACC inicial a terminal_wacc_override en Y10
+
+    MODO PER-YEAR (override total): si pasas las listas de longitud
+    forecast_years, ESAS son las que se usan, ignorando la curva automatica.
+      - revenue_growth_per_year: list[float] de longitud N
+      - op_margin_per_year: list[float] de longitud N
+      - tax_rate_per_year: list[float] de longitud N
+      - wacc_per_year: list[float] de longitud N
+    """
     # Crecimiento
     revenue_growth_high: float = 0.07         # Y1-Y5
     terminal_growth: float = 0.035             # Y11+ (cap a inflacion MX o riskfree real)
@@ -56,8 +72,22 @@ class DCFAssumptions:
     forecast_years: int = 10
     high_growth_years: int = 5
 
+    # ---- PER-YEAR OVERRIDES (si se llenan, anulan la curva smooth) ----
+    revenue_growth_per_year: Optional[list] = None
+    op_margin_per_year: Optional[list] = None
+    tax_rate_per_year: Optional[list] = None
+    wacc_per_year: Optional[list] = None
+    sales_to_capital_per_year: Optional[list] = None
+
     def to_series(self) -> pd.Series:
-        return pd.Series(asdict(self))
+        d = asdict(self)
+        # Reduce listas a strings para que pandas las muestre limpio
+        for k in ("revenue_growth_per_year", "op_margin_per_year",
+                  "tax_rate_per_year", "wacc_per_year",
+                  "sales_to_capital_per_year"):
+            if d.get(k) is not None:
+                d[k] = ", ".join(f"{v:.4f}" for v in d[k])
+        return pd.Series(d)
 
 
 # ---------------------------------------------------------------------------
@@ -233,34 +263,53 @@ def project_company(
         terminal_wacc=terminal_wacc,
     )
 
+    # Helpers para per-year overrides
+    def _g(t):  # revenue growth en año t (1-indexed)
+        if a.revenue_growth_per_year and len(a.revenue_growth_per_year) >= t:
+            return float(a.revenue_growth_per_year[t-1])
+        if t <= high_n:
+            return a.revenue_growth_high
+        step = t - high_n
+        steps_remaining = n - high_n
+        return _interpolate(a.revenue_growth_high, a.terminal_growth, steps_remaining, step)
+
+    def _m(t):  # op margin en año t
+        if a.op_margin_per_year and len(a.op_margin_per_year) >= t:
+            return float(a.op_margin_per_year[t-1])
+        return _interpolate(base_margin, a.target_op_margin, n, t)
+
+    def _tx(t):  # tax rate en año t
+        if a.tax_rate_per_year and len(a.tax_rate_per_year) >= t:
+            return float(a.tax_rate_per_year[t-1])
+        return _interpolate(base_tax, a.marginal_tax_terminal, n, t)
+
+    def _w(t):  # WACC en año t
+        if a.wacc_per_year and len(a.wacc_per_year) >= t:
+            return float(a.wacc_per_year[t-1])
+        return _interpolate(wacc_res.wacc, terminal_wacc, n, t)
+
+    def _s2c(t):  # sales-to-capital en año t (default constante)
+        if a.sales_to_capital_per_year and len(a.sales_to_capital_per_year) >= t:
+            return float(a.sales_to_capital_per_year[t-1])
+        return a.sales_to_capital
+
     prev_rev = base.revenue
     for t in range(1, n + 1):
-        # Growth fade
-        if t <= high_n:
-            g = a.revenue_growth_high
-        else:
-            # Y6..Y10: fade lineal de growth_high a terminal_growth
-            step = t - high_n
-            steps_remaining = n - high_n
-            g = _interpolate(a.revenue_growth_high, a.terminal_growth, steps_remaining, step)
-
+        g = _g(t)
         rev_t = prev_rev * (1 + g)
         delta_rev = rev_t - prev_rev
 
-        # Margen converge linealmente de base_margin a target_op_margin en Y_n
-        margin_t = _interpolate(base_margin, a.target_op_margin, n, t)
+        margin_t = _m(t)
         ebit_t = rev_t * margin_t
 
-        # Tax converge de base a marginal en Y_n
-        tax_t = _interpolate(base_tax, a.marginal_tax_terminal, n, t)
+        tax_t = _tx(t)
         nopat_t = ebit_t * (1 - tax_t)
 
-        # Reinversion = ΔRev / S2C
-        reinvest_t = delta_rev / a.sales_to_capital if a.sales_to_capital > 0 else 0.0
+        s2c_t = _s2c(t)
+        reinvest_t = delta_rev / s2c_t if s2c_t > 0 else 0.0
         fcff_t = nopat_t - reinvest_t
 
-        # WACC fade lineal de WACC inicial a terminal_wacc en Y_n
-        wacc_t = _interpolate(wacc_res.wacc, terminal_wacc, n, t)
+        wacc_t = _w(t)
 
         # Discount factor acumulado (anios discretos, mid-year omitido por simplicidad)
         if t == 1:
