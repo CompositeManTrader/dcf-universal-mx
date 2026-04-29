@@ -198,7 +198,18 @@ class Informative:
     ebit_12m_prior: float = 0.0
     num_employees: float = 0.0                      # 700000 "Numero de empleados"
     num_workers: float = 0.0                        # 700000 "Numero de obreros"
-    deferred_tax_acum: float = 0.0                  # 800200 "Impuesto diferido" acumulado periodo
+    # Hoja 800200 Notas - Analisis de ingresos y gastos
+    deferred_tax_acum: float = 0.0                  # row 29 "Impuesto diferido" acumulado
+    deferred_tax_quarter: float = 0.0               # row 29 col 1 trimestre
+    current_tax_acum: float = 0.0                   # row 28 "Impuesto causado" acumulado
+    current_tax_quarter: float = 0.0                # row 28 col 1 trimestre
+    interest_earned_acum: float = 0.0               # row 14 "Intereses ganados" acumulado
+    interest_earned_quarter: float = 0.0            # row 14 col 1 trimestre
+    fx_gain_acum: float = 0.0                       # row 15 "Utilidad por fluctuacion cambiaria" acum
+    fx_gain_quarter: float = 0.0                    # row 15 col 1 trimestre
+    # Hoja 800005 Distribucion de ingresos por productos
+    sales_local_acum: float = 0.0                   # Mexico (acumulado)
+    sales_export_acum: float = 0.0                  # USA + RoW (acumulado)
 
 
 @dataclass

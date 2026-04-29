@@ -214,7 +214,8 @@ SHEET_CF = "520000"
 SHEET_INFO_BS = "700000"
 SHEET_INFO_DA = "700002"
 SHEET_INFO_12M = "700003"
-SHEET_NOTES_TAX = "800200"   # Impuestos: current vs deferred breakdown
+SHEET_NOTES_INC_EXP = "800200"   # Notas: ingresos/gastos breakdown (interes, FX, taxes)
+SHEET_NOTES_REVENUE = "800005"   # Distribucion de ingresos por geografia
 
 # Tipos de emisora financiera (banco, casa de bolsa, sofol, aseguradora, fideicomiso)
 FINANCIAL_ISSUER_TYPES = {"BM", "CB", "SF", "SA", "FI", "FFC"}
@@ -641,13 +642,56 @@ class XBRLReader:
                 col=1, default=0.0,
             ) * factor
 
-        # 800200 - Notas: Impuesto diferido (acumulado)
-        idxtax = self._idx(SHEET_NOTES_TAX)
-        if idxtax is not None:
-            inf.deferred_tax_acum = idxtax.get_first(
-                "Impuesto diferido",
+        # 800200 - Notas: Analisis de ingresos y gastos
+        # cols: 1=Trim Actual, 2=Trim Anterior, 3=Acum Actual, 4=Acum Anterior
+        idxnotes = self._idx(SHEET_NOTES_INC_EXP)
+        if idxnotes is not None:
+            col_acum_n = self._detect_acum_col(idxnotes, default=3)
+            # Tax breakdown
+            inf.current_tax_quarter = idxnotes.get_or("Impuesto causado", col=1, default=0.0) * factor
+            inf.current_tax_acum    = idxnotes.get_or("Impuesto causado", col=col_acum_n, default=0.0) * factor
+            inf.deferred_tax_quarter= idxnotes.get_or("Impuesto diferido", col=1, default=0.0) * factor
+            inf.deferred_tax_acum   = idxnotes.get_or("Impuesto diferido", col=col_acum_n, default=0.0) * factor
+            # Interest income breakdown
+            inf.interest_earned_quarter = idxnotes.get_or("Intereses ganados", col=1, default=0.0) * factor
+            inf.interest_earned_acum    = idxnotes.get_or("Intereses ganados", col=col_acum_n, default=0.0) * factor
+            # FX gain breakdown (CNBV positivo = utilidad/gain; BB sign opuesto)
+            inf.fx_gain_quarter = idxnotes.get_first(
+                "Utilidad por fluctuación cambiaria",
+                "Utilidad por fluctuacion cambiaria",
                 col=1, default=0.0,
             ) * factor
+            inf.fx_gain_acum = idxnotes.get_first(
+                "Utilidad por fluctuación cambiaria",
+                "Utilidad por fluctuacion cambiaria",
+                col=col_acum_n, default=0.0,
+            ) * factor
+
+        # 800005 - Distribucion de ingresos por geografia (acumulado)
+        # Layout: filas con paises, col 2 = Ingresos nacionales, col 3 = Exportacion, col 4 = Subsidiarias
+        idxgeo = self._idx(SHEET_NOTES_REVENUE)
+        if idxgeo is not None:
+            df = idxgeo.df
+            sales_local = 0.0
+            sales_export = 0.0
+            for r in range(df.shape[0]):
+                lbl = _safe_str(df.iloc[r, 0]).lower()
+                if "méxico" in lbl or "mexico" in lbl:
+                    # Mexico = local sales (col 2 o el que tenga valor)
+                    for c in range(1, df.shape[1]):
+                        v = _safe_num(df.iloc[r, c])
+                        if v and v > 0:
+                            sales_local += v
+                            break
+                elif "estados unidos" in lbl or "resto del mundo" in lbl:
+                    # Export: tomar el primer valor positivo
+                    for c in range(1, df.shape[1]):
+                        v = _safe_num(df.iloc[r, c])
+                        if v and v > 0:
+                            sales_export += v
+                            break
+            inf.sales_local_acum = sales_local * factor
+            inf.sales_export_acum = sales_export * factor
 
         return inf
 

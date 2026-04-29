@@ -110,7 +110,11 @@ def _safe_get(obj, attr, default=0.0):
 # ===========================================================================
 
 def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0,
-                            deferred_tax_period: float = 0.0) -> dict:
+                            deferred_tax_period: float = 0.0,
+                            current_tax_period: float = 0.0,
+                            interest_earned_period: float = 0.0,
+                            fx_gain_period: float = 0.0,
+                            export_sales_period: float = 0.0) -> dict:
     """Reclasifica metricas CNBV -> formato Bloomberg para CUERVO (BECLE).
 
     Reglas CUERVO-especificas (verificadas vs Bloomberg Q4 2025):
@@ -146,19 +150,31 @@ def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0,
     # --- 4: Operating Income BB = EBIT CNBV + Disposal_gain ---
     ebit_bb = ebit_cnbv + disposal_period                  # 2,349.43 + 63.27 = 2,412.70
 
-    # --- 3: Interest Expense absorbe Ingresos_financieros negativos ---
+    # --- 3a: Interest Expense BB = CNBV gastos_fin + |CNBV ingresos_fin total si negativo| ---
+    # Bloomberg sumea TODA la "Otros ingresos financieros" negativa al Interest Expense.
+    # Despues separa Interest Income e FX como componentes positivos NUEVOS desde notas.
+    # El residual queda en Other Non-Op.
     if int_inc_cnbv < 0:
-        int_exp_bb = int_exp_cnbv + abs(int_inc_cnbv)
-        int_inc_bb = 0.0
+        int_exp_bb = int_exp_cnbv + abs(int_inc_cnbv)   # 253 + 2,534 = 2,787 ✓
     else:
         int_exp_bb = int_exp_cnbv
-        int_inc_bb = int_inc_cnbv
+
+    # --- 3b: Interest Income BB = Intereses ganados (notas) ---
+    int_inc_bb = interest_earned_period
     net_interest_bb = int_exp_bb - int_inc_bb
 
-    fx_loss     = m.get("fx_loss", 0) or 0
+    # --- 3c: FX BB = -fx_gain (CNBV positive = utilidad; BB shows negative as gain) ---
+    fx_loss_bb = -fx_gain_period
+
     affiliates  = m.get("affiliates_loss", 0) or 0
-    other_nop   = m.get("other_non_op", 0) or 0
-    non_op_loss_bb = net_interest_bb + fx_loss + affiliates + other_nop
+
+    # --- 3d: Other Non-Op = residual para balancear total non_op_loss ---
+    # total_non_op_loss = EBIT_CNBV - Pretax_GAAP (constante regardless de disposal reclass)
+    ebit_cnbv_orig = m.get("ebit", 0) or 0   # mi parser ya tiene CNBV EBIT
+    total_non_op_loss = ebit_cnbv_orig - pretax_gaap
+    other_nop_bb = total_non_op_loss - net_interest_bb - fx_loss_bb - affiliates
+
+    non_op_loss_bb = net_interest_bb + fx_loss_bb + affiliates + other_nop_bb
 
     # --- 5: Pretax Adjusted = Pretax_GAAP + Disposal (porque BB lo saca de Adj) ---
     pretax_adjusted_bb = pretax_gaap + disposal_period    # 1,999.81 + 63.27 = 2,063.08
@@ -183,11 +199,9 @@ def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0,
     ni_common_gaap_val = m.get("ni_common_gaap", 0) or 0
     ni_common_adj = ni_common_gaap_val + net_abnormal
 
-    # Tax breakdown
-    current_tax = tax_expense - deferred_tax_period
-
-    # Other Operating Income BB = 0 (folded into Other Op Expense for CUERVO)
-    # (CNBV "Otros ingresos" se neteo en other_op_expense_bb arriba)
+    # Tax breakdown: usar valores parseados directos (no derivar)
+    current_tax = current_tax_period
+    deferred_tax = deferred_tax_period
 
     # Update dict
     m["selling_expenses"]    = selling_bb
@@ -200,6 +214,8 @@ def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0,
     m["interest_expense"]    = int_exp_bb
     m["interest_income"]     = int_inc_bb
     m["net_interest"]        = net_interest_bb
+    m["fx_loss"]             = fx_loss_bb
+    m["other_non_op"]        = other_nop_bb
     m["non_op_loss"]         = non_op_loss_bb
     m["pretax_adjusted"]     = pretax_adjusted_bb
     m["abnormal_losses"]     = abnormal_losses_bb
@@ -207,9 +223,10 @@ def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0,
     m["ebitda"]              = ebitda_bb
     m["operating_margin"]    = operating_margin_bb
     m["current_tax"]         = current_tax
-    m["deferred_tax"]        = deferred_tax_period
+    m["deferred_tax"]        = deferred_tax
     m["net_abnormal"]        = net_abnormal
     m["ni_common_adj"]       = ni_common_adj
+    m["export_sales"]        = export_sales_period if export_sales_period else None
     return m
 
 
@@ -373,11 +390,28 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
         "dep_expense": da_value,
     }
     if ticker and ticker in TICKER_RECLASS_RULES:
-        # disposal_period y deferred_tax_period ya vienen calculados en MDP
+        # Resolver valores de notas para el periodo (trim o acum) usando valores ya parseados
+        # del Informative del snapshot. annual_only=True usa _acum, sino _quarter.
+        if annual_only:
+            interest_earned_p = (res.informative.interest_earned_acum * fx_mult) / 1_000_000
+            fx_gain_p = (res.informative.fx_gain_acum * fx_mult) / 1_000_000
+            current_tax_p = (res.informative.current_tax_acum * fx_mult) / 1_000_000
+            export_sales_p = (res.informative.sales_export_acum * fx_mult) / 1_000_000
+        else:
+            interest_earned_p = (res.informative.interest_earned_quarter * fx_mult) / 1_000_000
+            fx_gain_p = (res.informative.fx_gain_quarter * fx_mult) / 1_000_000
+            current_tax_p = (res.informative.current_tax_quarter * fx_mult) / 1_000_000
+            # Export sales no tiene quarter en CNBV, usar acum como aproximacion
+            export_sales_p = (res.informative.sales_export_acum * fx_mult) / 1_000_000
+
         output = TICKER_RECLASS_RULES[ticker](
             output,
             disposal_period=disposal_period,
             deferred_tax_period=deferred_tax_period,
+            current_tax_period=current_tax_p,
+            interest_earned_period=interest_earned_p,
+            fx_gain_period=fx_gain_p,
+            export_sales_period=export_sales_p,
         )
     return output
 

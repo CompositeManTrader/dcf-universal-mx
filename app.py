@@ -203,7 +203,7 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 # Cache  (versionado para invalidar tras cambios de schema)
 # ---------------------------------------------------------------------------
-_PARSE_CACHE_VERSION = "v7-tax-employees"   # bump cuando cambies ParseResult schema
+_PARSE_CACHE_VERSION = "v8-100pct-cuervo"   # bump cuando cambies ParseResult schema
 
 @st.cache_data(show_spinner=False)
 def _parse_cached(filepath: str, _v: str = _PARSE_CACHE_VERSION):
