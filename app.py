@@ -49,6 +49,18 @@ except ImportError as _e:
     HAS_EXCEL_EXPORT = False
     _EXCEL_ERR = str(_e)
 
+try:
+    from dcf_mexico.historical import (
+        load_historical,
+        build_historical_bloomberg,
+        build_metric_timeseries,
+        compute_growth_stats,
+    )
+    HAS_HISTORICAL = True
+except ImportError as _e:
+    HAS_HISTORICAL = False
+    _HIST_ERR = str(_e)
+
 from dcf_mexico.view import build_all_sheets, BLOOMBERG_HEADER
 
 
@@ -561,7 +573,9 @@ if mode == "Single DCF":
 
     # Define tabs (each section becomes a tab via __enter__/__exit__ to avoid
     # massive re-indentation. This is equivalent to `with tab:` blocks).
-    tab_val, tab_stories, tab_pic, tab_sens, tab_dupont, tab_diag, tab_dl = st.tabs([
+    (tab_hist, tab_val, tab_stories, tab_pic,
+     tab_sens, tab_dupont, tab_diag, tab_dl) = st.tabs([
+        "📅 Historical",
         "📈 Valuation Output",
         "📖 Stories to Numbers",
         "🎨 Valuation as Picture",
@@ -571,7 +585,176 @@ if mode == "Single DCF":
         "💾 Download Excel",
     ])
 
-    # ----- TAB 1: Valuation Output (open) -----
+    # ============================================================
+    # TAB 0: HISTORICAL (multi-period XBRL evolution)
+    # ============================================================
+    tab_hist.__enter__()
+
+    st.subheader(f"Historical Evolution — {issuer.ticker}")
+    st.caption(
+        "Carga TODOS los XBRL del ticker en `data/raw_xbrl/` y muestra la evolucion "
+        "multi-periodo. Naming convention: `ifrsxbrl_<TICKER>_<YYYY>-<Q>.xls` "
+        "(Q = `4D` para anual auditado, `1`/`2`/`3`/`4` para trimestrales)."
+    )
+
+    if not HAS_HISTORICAL:
+        st.error(f"Historical module no disponible: {_HIST_ERR}")
+    else:
+        try:
+            hs = load_historical(issuer.ticker, parse_func=lambda fp: _parse_cached(str(fp)))
+        except Exception as e:
+            st.error(f"Error cargando historico: {e}")
+            hs = None
+
+        if hs is not None:
+            cov = hs.coverage_summary()
+            colA, colB, colC, colD = st.columns(4)
+            colA.metric("Periodos totales", hs.n_periods)
+            colB.metric("Anuales (4D)", hs.n_annual)
+            colC.metric("Trimestrales", hs.n_quarterly)
+            if hs.latest:
+                colD.metric("Latest", hs.latest.label)
+
+            with st.expander("Cobertura de archivos"):
+                st.dataframe(cov, hide_index=True, use_container_width=True)
+
+            if hs.n_periods <= 1:
+                st.warning(
+                    "Solo hay 1 periodo de XBRL para este ticker. Para ver evolucion historica, "
+                    "descarga mas XBRL desde la BMV (preferentemente trimestres dictaminados `4D` "
+                    "para 5-10 años de historia anual) y guardalos en `data/raw_xbrl/` con la "
+                    "convencion de nombre indicada arriba."
+                )
+            else:
+                # Toggle: anual vs todos
+                annual_only = st.toggle("Solo periodos anuales (4D)", value=True,
+                                          help="Si lo apagas, incluye trimestres preliminares")
+
+                # Multi-period Bloomberg table
+                st.markdown("### Multi-period financial panel")
+                st.caption("Filas = metricas, columnas = periodos. Valores en MDP donde aplica (USD->MXN auto-detectado).")
+                fx_rate = market.fx_rate_usdmxn
+                bb_hist = build_historical_bloomberg(hs, fx_rate_usdmxn=fx_rate,
+                                                       annual_only=annual_only)
+                if not bb_hist.empty:
+                    # Format
+                    def _fmt_cell(v, row_label):
+                        if pd.isna(v):
+                            return "-"
+                        is_pct = any(k in row_label for k in ["Margin", "Rate", "ROE", "ROA"])
+                        is_mult = any(k in row_label for k in ["/ EBITDA", "/ Equity"])
+                        if is_pct:
+                            return f"{v:.2%}"
+                        if is_mult:
+                            return f"{v:.2f}x"
+                        if "Shares" in row_label:
+                            return f"{v:,.2f}"
+                        return f"{v:,.1f}"
+                    fmt_df = bb_hist.copy()
+                    for idx in fmt_df.index:
+                        for col in fmt_df.columns:
+                            fmt_df.loc[idx, col] = _fmt_cell(bb_hist.loc[idx, col], idx)
+
+                    def _hist_row_style(row):
+                        label = row.name
+                        if label in ("Revenue", "EBIT", "EBITDA", "Net Income",
+                                      "Total Assets", "Equity (controll.)", "FCFF (simple)"):
+                            return ["background-color: #DCEDC8; font-weight: 600;"] * len(row)
+                        if label in ("Op Margin", "EBITDA Margin", "Net Margin",
+                                      "ROE", "ROA", "Tax Rate"):
+                            return ["background-color: #F1F8E9;"] * len(row)
+                        return ["background-color: #F9FBF7;"] * len(row)
+                    try:
+                        styler = fmt_df.style.apply(_hist_row_style, axis=1)
+                        styler = styler.set_properties(**{"text-align": "right", "padding": "4px 8px"})
+                        st.dataframe(styler, use_container_width=True,
+                                      height=min(750, 35 + 32 * len(fmt_df)))
+                    except Exception:
+                        st.dataframe(fmt_df, use_container_width=True)
+
+                # Time series charts
+                st.markdown("### Evolucion temporal")
+                metrics_to_chart = st.multiselect(
+                    "Metricas para graficar",
+                    ["Revenue", "EBIT", "EBITDA", "Net Income", "FCFF (simple)",
+                     "CFO", "Capex (gross)", "Total Debt", "Cash", "Net Debt",
+                     "Op Margin", "EBITDA Margin", "Net Margin", "ROE", "ROA",
+                     "Net Debt / EBITDA"],
+                    default=["Revenue", "EBIT", "EBITDA"],
+                )
+                if metrics_to_chart:
+                    chart_data = []
+                    for m in metrics_to_chart:
+                        ts = build_metric_timeseries(hs, m, fx_rate_usdmxn=fx_rate,
+                                                       annual_only=annual_only)
+                        for _, r in ts.iterrows():
+                            chart_data.append({"label": r["label"], "year": r["year"],
+                                                "metric": m, "value": r["value"]})
+                    chart_df = pd.DataFrame(chart_data)
+                    if not chart_df.empty:
+                        # Separate absolute vs ratio metrics for dual chart
+                        abs_metrics = [m for m in metrics_to_chart
+                                        if not any(k in m for k in ["Margin", "Rate", "ROE", "ROA", "/ EBITDA"])]
+                        ratio_metrics = [m for m in metrics_to_chart if m not in abs_metrics]
+
+                        if abs_metrics:
+                            abs_df = chart_df[chart_df["metric"].isin(abs_metrics)]
+                            chart_abs = (
+                                alt.Chart(abs_df)
+                                .mark_line(point=True, strokeWidth=2.5)
+                                .encode(
+                                    x=alt.X("label:N", sort=None, title=None),
+                                    y=alt.Y("value:Q", title="MDP"),
+                                    color=alt.Color("metric:N",
+                                                     scale=alt.Scale(scheme="category10"),
+                                                     legend=alt.Legend(orient="top")),
+                                    tooltip=["label", "metric",
+                                              alt.Tooltip("value:Q", format=",.1f")],
+                                )
+                                .properties(height=320, title="Metricas absolutas (MDP)")
+                            )
+                            st.altair_chart(chart_abs, use_container_width=True)
+
+                        if ratio_metrics:
+                            ratio_df = chart_df[chart_df["metric"].isin(ratio_metrics)].copy()
+                            chart_ratio = (
+                                alt.Chart(ratio_df)
+                                .mark_line(point=True, strokeWidth=2.5)
+                                .encode(
+                                    x=alt.X("label:N", sort=None, title=None),
+                                    y=alt.Y("value:Q", title="Ratio", axis=alt.Axis(format=".1%")),
+                                    color=alt.Color("metric:N",
+                                                     scale=alt.Scale(scheme="set2"),
+                                                     legend=alt.Legend(orient="top")),
+                                    tooltip=["label", "metric",
+                                              alt.Tooltip("value:Q", format=".2%")],
+                                )
+                                .properties(height=320, title="Ratios / margenes")
+                            )
+                            st.altair_chart(chart_ratio, use_container_width=True)
+
+                # Growth stats summary
+                st.markdown("### Quick stats (sobre periodos seleccionados)")
+                stat_metrics = ["Revenue", "EBIT", "EBITDA", "Net Income"]
+                stat_rows = []
+                for m in stat_metrics:
+                    ts = build_metric_timeseries(hs, m, fx_rate_usdmxn=fx_rate,
+                                                   annual_only=annual_only)
+                    s = compute_growth_stats(ts["value"].tolist())
+                    stat_rows.append({
+                        "Metric": m,
+                        "N periods": s["n"],
+                        "CAGR":   f"{s['cagr']*100:+.2f}%" if s["n"] > 1 else "—",
+                        "Peak":   f"{s['peak']:,.1f}",
+                        "Trough": f"{s['trough']:,.1f}",
+                        "Mean":   f"{s['mean']:,.1f}",
+                        "Vol (CV)": f"{s['vol']:.2%}" if s['vol'] else "—",
+                    })
+                st.dataframe(pd.DataFrame(stat_rows), hide_index=True,
+                              use_container_width=True)
+
+    # ----- TAB Historical close, TAB Valuation Output open -----
+    tab_hist.__exit__(None, None, None)
     tab_val.__enter__()
 
     # ---- 1) Valuation Output (Damodaran-style wide projection) ----

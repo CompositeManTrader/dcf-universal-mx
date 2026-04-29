@@ -104,3 +104,40 @@ def find_xbrl(ticker: str, raw_dir: Optional[Path] = None) -> Optional[Path]:
     # Ej: ifrsxbrl_CUERVO_2025-4.xls / ifrsxbrl_CUERVO_2024-4.xls
     candidates = sorted(raw_dir.glob(f"ifrsxbrl_{ticker}_*.xls*"), reverse=True)
     return candidates[0] if candidates else None
+
+
+def find_all_xbrl(ticker: str, raw_dir: Optional[Path] = None) -> list[Path]:
+    """Devuelve TODOS los XBRL locales de un ticker, ordenados por periodo asc.
+
+    Convencion de nombre: ifrsxbrl_<TICKER>_<YYYY>-<Q>.xls
+    Donde Q puede ser '1', '2', '3', '4', o '4D' (4to dictaminado/anual).
+    """
+    raw_dir = raw_dir or _project_root() / "data" / "raw_xbrl"
+    if not raw_dir.exists():
+        return []
+    return sorted(raw_dir.glob(f"ifrsxbrl_{ticker}_*.xls*"))
+
+
+def parse_period_tag(filepath: Path) -> tuple[int, str]:
+    """Extrae (year, quarter) del nombre del archivo.
+
+    'ifrsxbrl_CUERVO_2025-4D.xls' -> (2025, '4D')
+    'ifrsxbrl_CUERVO_2024-1.xls'  -> (2024, '1')
+    """
+    stem = filepath.stem  # 'ifrsxbrl_CUERVO_2025-4D'
+    parts = stem.split("_")
+    if len(parts) < 3:
+        return (0, "")
+    period_part = parts[-1]   # '2025-4D'
+    if "-" not in period_part:
+        return (0, "")
+    year_str, q_str = period_part.split("-", 1)
+    try:
+        return (int(year_str), q_str.upper())
+    except ValueError:
+        return (0, q_str)
+
+
+def is_annual_period(quarter: str) -> bool:
+    """Q '4D' = anual dictaminado. Q '4' = trimestre Q4 preliminar."""
+    return quarter.upper() == "4D"
