@@ -1,0 +1,67 @@
+[  0] You can use this spreadsheet to compute your cost of capital |  |  |  |  |  |  | 
+[  2] Estimation of Current Cost of Capital |  |  |  |  |  | Operating Countries ERP calculator | 
+[  3] There are four ways in whch you can estimate your cost of ca |  |  |  |  |  | Country | Revenues
+[  4]  |  |  |  |  |  | United States | 193636
+[  5]  |  |  |  |  |  | China | 500
+[ 10] Which approach will you be using? | Detailed |  |  |  |  |  | 
+[ 11] If direct input, enter cost of capital to use |        0.09 |  |  |  |  |  | 
+[ 12] Cost of capital based upon approach = |     0.07318 |  |  |  |  |  | 
+[ 14] Approach 1: Detailed Cost of Capital |  |  |  |  |  |  | 
+[ 15] Inputs |  |  |  |  |  | Rest of the World | 31335
+[ 16] Equity |  |  |  |  |  |  | 
+[ 17] Number of Shares outstanding = | 4315 |  |  |  |  | Total | 225471
+[ 18] Current Market Price per share = |       72.28 |  |  |  |  | Operating Regions ERP calculator | 
+[ 19]  |  |  |  |  |  | Region | Revenues
+[ 20] Approach for estimating beta | Single Business(US) |  |  |  |  | Africa | 
+[ 21] If direct input, enter levered beta (or regression beta) |         1.2 |  |  |  |  | Asia | 5455
+[ 22] Unlevered beta = |      0.5129 |  |  |  |  | Australia & New Zealand | 
+[ 23] Riskfree Rate = |      0.0458 |  |  |  |  | Caribbean | 
+[ 24] What approach do you want to use to input ERP? | Operating regions |  |  |  |  | Central and South America | 5830
+[ 25] Direct input for ERP (if you choose "will input" |        0.06 |  |  |  |  | Eastern Europe | 
+[ 26] Equity Risk Premium used in cost of equity = |     0.05642 |  |  |  |  | Middle East | 
+[ 27]  |  |  |  |  |  | North America | 16774
+[ 28] Debt |  |  |  |  |  | Western Europe | 
+[ 29] Book Value of Straight Debt = | 45063 |  |  |  |  | EMEA | 8078
+[ 30] Interest Expense on Debt = | 1581 |  |  |  |  | Rest of the World | 10924
+[ 31] Average Maturity = | 3 |  |  |  |  | Total | 47061
+[ 32] Approach for estimating pre-tax cost of debt | Actual rating |  |  |  |  |  | 
+[ 33] If direct input, input the pre-tax cost of debt |        0.04 |  |  |  |  | Multi Business (US Industry Averages) | 
+[ 34] If actual rating, input the rating | A1/A+ |  |  |  |  | Business | Revenues
+[ 35] If synethetic rating, input the type of company | 2 |  |  |  |  | Computers/Peripherals | 195010
+[ 36] Pre-tax Cost of Debt = |      0.0535 |  |  |  |  | Electronics (General) | 43000
+[ 37] Tax Rate = |        0.25 |  |  |  |  | Entertainment | 15000
+[ 39] Book Value of Convertible Debt = | 0 |  |  |  |  |  | 
+[ 40] Interest Expense on Convertible = | 0 |  |  |  |  |  | 
+[ 41] Maturity of Convertible Bond = | 0 |  |  |  |  |  | 
+[ 42] Market Value of Convertible = | 0 |  |  |  |  |  | 
+[ 44] Debt value of operating leases = | 0 |  |  |  |  |  | 
+[ 46] Preferred Stock |  |  |  |  |  |  | 
+[ 47] Number of Preferred Shares = | 0 |  |  |  |  | Company | 253010
+[ 48] Current Market Price per Share= | 70 |  |  |  |  |  | 
+[ 49] Annual Dividend per Share = | 5 |  |  |  |  | Multi Business (Global Industry Averages) | 
+[ 50]  |  |  |  |  |  | Business | Revenues
+[ 51] Output |  |  |  |  |  | Electronics (General) | 81363
+[ 52] Estimating Market Value of Straight Debt = |  |   4.282e+04 |  |  |  |  | 
+[ 53] Estimated Value of Straight Debt in Convertible = |  | 0 |  |  |  |  | 
+[ 54] Value of Debt in Operating leases = |  | 0 |  |  |  |  | 
+[ 55] Estimated Value of Equity in Convertible = |  | 0 |  |  |  |  | 
+[ 56] Levered Beta for equity = |  |      0.5657 |  |  |  |  | 
+[ 58]  | Equity | Debt  | Preferred Stock | Capital |  |  | 
+[ 59] Market Value |   3.119e+05 |   4.282e+04 | 0 |   3.547e+05 |  |  | 
+[ 60] Weight in Cost of Capital |      0.8793 |      0.1207 | 0 | 1 |  |  | 
+[ 61] Cost of Component |     0.07771 |     0.04013 |     0.07143 |     0.07318 |  |  | 
+[ 63]  |  |  |  |  |  | Company | 81363
+[ 64] Approach 2: industry average cost of capital, adjusted for r |  |  |  |  |  |  | 
+[ 65] Industry  | Multibusiness(US) |  |  |  |  |  | 
+[ 66] Cost of capital, adjusted for riskfree rate difference |     0.09194 |  |  |  |  |  | 
+[ 68] Approach 3: Uae histogram of costs of capital of all publicl |  |  |  |  |  |  | 
+[ 69] Which grouping (US, Emerging Markets, Global) | US |  |  |  |  |  | 
+[ 70] Which risk grouping does your company fall in? | Median |  |  |  |  |  | 
+[ 71] Cost of capital based upon decile/group chosen |      0.0835 |  |  |  |  |  | 
+[ 73] Region | First Decile | First Quartile | Median | Third Quartile | Ninth Decile |  | 
+[ 74] Emerging |      0.0741 |      0.0844 |      0.0961 |      0.1099 |      0.1281 |  | 
+[ 75] Europe |      0.0678 |      0.0765 |      0.0897 |      0.1011 |      0.1152 |  | 
+[ 76] Global |      0.0689 |      0.0803 |      0.0906 |      0.1031 |      0.1175 |  | 
+[ 77] Japan |      0.0686 |      0.0783 |      0.0891 |      0.0977 |      0.1091 |  | 
+[ 78] US |      0.0578 |      0.0687 |      0.0835 |      0.0931 |      0.1005 |  | 
+[ 79] These costs of capital are all in US dollars and reflect the |  |  |  |  |  |  | 

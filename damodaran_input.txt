@@ -1,0 +1,70 @@
+[  0]  |  | Input cell |  | Calculated cell | 
+[  2] Date of valuation | 2024-09-01 00:00:00 | Important: Before you run this spreadsheet, go into preferences in Excel and che |  |  | 
+[  3] Company name | Coca Cola | There should be a check against the iteration box. If there is not, you will get |  |  | 
+[  4] Numbers from your base year below ( in consistent units, i.e., if you enter numb |  |  |  |  | 
+[  5] If you don't understand an input, turn on comemnts and you should see my suggest |  |  |  |  | 
+[  6] Country of incorporation | United States |  |  |  | If you want a guide through this spreadsheet, try this YouTube video that takes 
+[  7] Industry (US) | Beverage (Soft) |  |  |  | 
+[  8] Industry (Global) | Beverage (Soft) |  |  |  | 
+[  9]  | Most Recent 12 months | Last 10K before LTM | Years since last 10K |  | 
+[ 10] Revenues | 46465 | 45754 |          0.5 |  | 
+[ 11] Operating income or EBIT | 13815 | 1313 |  |  | 
+[ 12] Interest expense | 1581 | 1527 |  |  | 
+[ 13] Book value of equity | 25853 | 25941 |  |  | 
+[ 14] Book value of debt | 45063 | 44544 |  |  | 
+[ 15] Do you have R&D expenses to capitalize? | No | If you want to capitalize R&D, you have to input the numbers into the R&D worksh |  |  | 
+[ 16] Do you have operating lease commitments? | No | If you lease or other contractual commitments that have not been converteed to d |  |  | 
+[ 17] Cash and Marketable Securities | 19000 | 13663 |  |  | 
+[ 18] Cross holdings and other non-operating assets | 21119 | 21644 |  |  | 
+[ 19] Minority interests | 1558 | 1539 |  |  | 
+[ 20] Number of shares outstanding = | 4315 |  |  | Computed numbers: Here is what your company's numbers look like, relative to ind | 
+[ 21] Current stock price = |        72.28 |  |  | If you are not working in US dollars, you should add the inflation differential  | 
+[ 22] Effective tax rate = |        0.175 |  |  |  | 
+[ 23] Marginal tax rate = |         0.25 |  |  |  | 
+[ 24] The value drivers below: |  |  |  | Revenue growth in the most recent year = | 
+[ 25] Revenue growth rate for next year  |         0.05 | Growth Lever - Next year |  | Pre-tax operating margin in the most recent year = | 
+[ 26] Operating Margin for next year |       0.2973 | Profitability Lever - Next year |  | Sales to capital ratio in most recent year = | 
+[ 27] Compounded annual revenue growth rate - years 2-5 = |         0.05 | Growth Lever - Long term |  | Marginal sales to capital ratio  = | 
+[ 28] Target pre-tax operating margin = |       0.2973 | Profitability Lever - Long term |  | Return on invested capital in most recent year= | 
+[ 29] Year of convergence for margin | 5 | Speed of convergence level |  | Standard deviation in stock prices = | 
+[ 30] Sales to capital ratio  (for years 1-5) |        1.773 | Efficency of Growth Lever (first 5 years) |  | Cost of capital = | 
+[ 31] Sales to capital ratio (for years 6-10) |        1.773 | Efficency of Growth Lever (years 6-10) |  |  | 
+[ 32] Market numbers  |  |  |  | Valuation Output Feedback (for you to use to fine tune your inputs, if you want) | 
+[ 33] Riskfree rate |       0.0458 |  |  | Revenues in year 10, based on your revenue growth = | 
+[ 34] Initial cost of capital = |      0.07318 | Do not input. Go to cost of capital sheet. |  | Pre-tax Operating Income in year 10, based on your operating margin = | 
+[ 35] Other inputs |  |  |  | Return on invested capital in year 10, based on your sales/capital ratio = | 
+[ 36] Do you have employee options outstanding? | No |  |  | Check the Diagnostics worksheet for more details. | 
+[ 37] Number of options outstanding = |         7.72 |  |  |  | 
+[ 38] Average strike price = |         1.29 |  |  |  | 
+[ 39] Average maturity = | 7 |  |  |  | 
+[ 40] Standard deviation on stock price = |         0.45 |  |  |  | 
+[ 42] Default assumptions.  |  |  |  |  | 
+[ 43] In stable growth, I will assume that your firm will have a cost of capital simil |  |  |  |  | 
+[ 44] Do you want to override this assumption = | No | Mature companies generally see their risk levels approach the average |  |  | 
+[ 45] If yes, enter the cost of capital after year 10 = |      0.07318 | Though some sectors, even in stable growth, may have higher risk. If you change  |  |  | 
+[ 46] I will assume that your firm will earn a return on capital equal to its cost of  |  |  |  |  | 
+[ 47] Do you want to override this assumption = | No | Mature companies find it difficult to generate returns that exceed the cost of c |  |  | 
+[ 48] If yes, enter the return on capital you expect after year 10 |         0.15 | But there are significant exceptions among companies with long-lasting competiti |  |  | 
+[ 49] I will assume that your firm has no chance of failure over the foreseeable futur |  |  |  |  | 
+[ 50] Do you want to override this assumption = | No | Many young, growth companies fail, especially if they have trouble raising cash. |  |  | 
+[ 51] If yes, enter the probability of failure = |         0.12 | Tough to estimate but a key input. Use the failure rate worksheet, if necessary. |  |  | 
+[ 52] What do you want to tie your proceeds in failure to? | V | B: Book value of capital, V= Estimated fair value for the company |  |  | 
+[ 53] Enter the distress proceeds as percentage of book or fair value |          0.5 | This can be zero, if the assets will be worth nothing if the firm fails. |  |  | 
+[ 54] I assume that reinvestment in a year translates into growth in the next year, i. |  |  |  |  | 
+[ 55] Do you want override this assumption = | No |  |  |  | 
+[ 56] If yes, enter a different lag (0 = no lag to 3 = lag of 3 years) | 1 |  |  |  | 
+[ 57] I will assume that your effective tax rate will adjust to your marginal tax rate |  |  |  |  | 
+[ 58] Do you want to override this assumption = | No |  |  |  | 
+[ 59] I will assume that you have no losses carried forward from prior years ( NOL) co |  |  |  |  | 
+[ 60] Do you want to override this assumption = | No | Check the financial statements. |  |  | 
+[ 61] If yes, enter the NOL that you are carrying over into year 1 |        731.4 | An NOL will shield your income from taxes, even after you start making money. |  |  | 
+[ 62] I will asssume that today's risk free rate will prevail in perpetuity. If you ov |  |  |  |  | 
+[ 63] Do you want to override this assumption = | No | If yes, you will be asked to enter a normal risk free rate and your growth in pe |  |  | 
+[ 64] If yes, enter the riskfree rate after year 10 |         0.02 | Enter your estimate of what the riskfree rate (in your currency of choice) will  |  |  | 
+[ 65] I will assume that the growth rate in perpetuity will be equal to the risk free  |  |  |  |  | 
+[ 66] Do you want to override this assumption = | No | This is an option to let you use a negative growth rate in perpetuity or to even |  |  | 
+[ 67] If yes, enter the growth rate in perpetuity |        -0.05 | This can be negative, if you feel the company will decline (and disappear) after |  |  | 
+[ 68] I have assumed that none of the cash is trapped (in foreign countries) and that  |  |  |  |  | 
+[ 69] Do you want to override this assumption | No |  |  |  | 
+[ 70] If yes, enter trapped cash (if taxes) or entire balance (if mistrust) | 140000 | Cash that is trapped in foreign markets (and subject to additoinal tax) or cash  |  |  | 
+[ 71] & Average tax rate of the foreign markets where the cash is trapped |         0.15 | Additional tax rate due on trapped cash or discount being applied to cash balanc |  |  | 

@@ -33,44 +33,75 @@ from .wacc import (
 # ---------------------------------------------------------------------------
 @dataclass
 class DCFAssumptions:
-    """Drivers que el analista debe definir.
+    """Drivers que el analista debe definir. Estilo Damodaran fcffsimpleginzu.
 
-    MODO SMOOTH (default): el modelo proyecta growth/margin/tax/WACC con curva
-    automatica:
-      - Y1-Y5: revenue_growth_high constante
-      - Y6-Y10: fade lineal a terminal_growth
-      - Margin: lineal de current a target_op_margin en Y10
-      - Tax: lineal de effective_tax_base a marginal_tax_terminal en Y10
-      - WACC: lineal de WACC inicial a terminal_wacc_override en Y10
+    MODO SMOOTH (default):
+      - Y1: revenue_growth_y1 (si None, usa revenue_growth_high)
+      - Y2..Y_high_n: revenue_growth_high constante
+      - Y(high_n+1)..Y10: fade lineal a terminal_growth
+      - Margin: lineal de op_margin_y1 (o current) a target_op_margin
+                en `year_of_margin_convergence` (default Damodaran = Y5)
+      - Tax: lineal de effective_tax_base a marginal_tax_terminal Y6-Y10
+      - WACC: lineal Y6-Y10 a terminal_wacc_override
 
-    MODO PER-YEAR (override total): si pasas las listas de longitud
-    forecast_years, ESAS son las que se usan, ignorando la curva automatica.
-      - revenue_growth_per_year: list[float] de longitud N
-      - op_margin_per_year: list[float] de longitud N
-      - tax_rate_per_year: list[float] de longitud N
-      - wacc_per_year: list[float] de longitud N
+    MODO PER-YEAR (override total): listas de longitud forecast_years.
     """
-    # Crecimiento
-    revenue_growth_high: float = 0.07         # Y1-Y5
-    terminal_growth: float = 0.035             # Y11+ (cap a inflacion MX o riskfree real)
-    # Margen
-    target_op_margin: float = 0.20             # margen Y10 (estable)
-    # Eficiencia capital
-    sales_to_capital: float = 1.50             # Reinversion = ΔRev / S2C
+    # ===== BLOQUE A — Identification =====
+    country: str = "Mexico"
+    industry_us: str = ""                     # Para lookup beta (Hoja 13)
+    industry_global: str = ""
+
+    # ===== BLOQUE D — Value Drivers =====
+    # Crecimiento (Damodaran separa Y1 de Y2-Y5)
+    revenue_growth_y1: Optional[float] = None  # NEW Damodaran-style: si None, usa _high
+    revenue_growth_high: float = 0.07          # Y2..Y_high_n compounded (default Y2-Y5)
+    terminal_growth: float = 0.035             # Y11+ (cap a inflacion MX o riskfree)
+
+    # Margen (Damodaran separa Y1 margin de target con year_of_convergence)
+    op_margin_y1: Optional[float] = None       # NEW: si None, usa current margin del base
+    target_op_margin: float = 0.20             # margen estable post-convergencia
+    year_of_margin_convergence: int = 5        # NEW Damodaran default = 5
+
+    # Eficiencia capital (Damodaran permite distinto Y1-5 vs Y6-10)
+    sales_to_capital: float = 1.50             # default usado para Y1-5 si _y1_5 no set
+    sales_to_capital_y1_5: Optional[float] = None  # NEW Damodaran-style
+    sales_to_capital_y6_10: Optional[float] = None # NEW Damodaran-style
+
     # Tax
     effective_tax_base: float = 0.27
     marginal_tax_terminal: float = MARGINAL_TAX_MX
-    # WACC inputs (si no se pasa wacc_override)
+
+    # ===== BLOQUE E — WACC =====
     risk_free: float = RF_MX_DEFAULT
     erp: float = ERP_MX_DEFAULT
     unlevered_beta: float = 0.85               # Damodaran industry default
-    # Terminal WACC: WACC converge a este nivel hacia Y10
     terminal_wacc_override: Optional[float] = None
+
     # Mercado
     market_price: Optional[float] = None       # MXN por accion
+
     # Horizonte
     forecast_years: int = 10
     high_growth_years: int = 5
+
+    # ===== Damodaran ASUNCIONES (defaults overrideables) =====
+    # 1. Terminal ROIC = WACC (no value creation steady state) — Damodaran default
+    override_terminal_roic: bool = False
+    terminal_roic_override: float = 0.15       # solo se usa si override=True
+    # 2. Probability of failure
+    probability_of_failure: float = 0.0        # 0% por default (firm sana)
+    failure_proceeds_pct: float = 0.50         # % del valor recuperable en quiebra
+    failure_proceeds_basis: str = "V"          # "V" fair value o "B" book value capital
+    # 3. NOL carryforward
+    nol_carryforward: float = 0.0              # MDP de NOL al inicio Y1
+    # 4. Reinvestment lag (ΔRev_t = f(Reinvest_{t-lag}))
+    reinvestment_lag: int = 0                  # default 0 (no lag)
+    # 5. Terminal riskfree override (si analista cree que tasas cambiaran)
+    override_terminal_riskfree: bool = False
+    terminal_riskfree_override: float = 0.04
+    # 6. Trapped cash (cash en jurisdicciones con tax adicional)
+    trapped_cash: float = 0.0                  # MDP
+    trapped_cash_tax_rate: float = 0.0         # tax rate adicional o discount
 
     # ---- PER-YEAR OVERRIDES (si se llenan, anulan la curva smooth) ----
     revenue_growth_per_year: Optional[list] = None
@@ -88,6 +119,16 @@ class DCFAssumptions:
             if d.get(k) is not None:
                 d[k] = ", ".join(f"{v:.4f}" for v in d[k])
         return pd.Series(d)
+
+    @property
+    def effective_revenue_growth_y1(self) -> float:
+        """Devuelve el growth Y1 efectivo (Damodaran o fallback a high)."""
+        return self.revenue_growth_y1 if self.revenue_growth_y1 is not None else self.revenue_growth_high
+
+    @property
+    def effective_op_margin_y1(self) -> Optional[float]:
+        """Devuelve el margin Y1 efectivo si esta definido."""
+        return self.op_margin_y1
 
 
 # ---------------------------------------------------------------------------
@@ -183,19 +224,35 @@ class DCFOutput:
         return df
 
     def summary_table(self) -> pd.DataFrame:
+        a = self.assumptions
+        # Terminal ROIC effective (lo que se uso)
+        terminal_roic_used = a.terminal_roic_override if a.override_terminal_roic else self.terminal_wacc
+        # Failure proceeds preview
+        if a.probability_of_failure > 0:
+            if a.failure_proceeds_basis == "B":
+                book_cap = self.base.equity_book + self.base.financial_debt
+                distress = book_cap * a.failure_proceeds_pct
+            else:
+                distress = (self.sum_pv_fcff + self.pv_terminal) * a.failure_proceeds_pct
+        else:
+            distress = 0.0
+
         rows = [
             ("Sum PV FCFF (10y)",       f"{self.sum_pv_fcff:>12,.1f} MDP"),
             ("Terminal FCFF (Y11)",     f"{self.terminal_fcff:>12,.1f} MDP"),
             ("Terminal Value (TV)",     f"{self.terminal_value:>12,.1f} MDP"),
             ("PV Terminal Value",       f"{self.pv_terminal:>12,.1f} MDP"),
-            ("Enterprise Value (EV)",   f"{self.enterprise_value:>12,.1f} MDP"),
+            ("DCF Operating Value",     f"{(self.sum_pv_fcff + self.pv_terminal):>12,.1f} MDP"),
+            ("(-) Probability Failure",
+                f"  p={a.probability_of_failure:.2%}, basis={a.failure_proceeds_basis}, recover={a.failure_proceeds_pct:.0%} -> distress={distress:>10,.1f} MDP"),
+            ("Enterprise Value (final)",f"{self.enterprise_value:>12,.1f} MDP"),
             ("(-) Net Debt",            f"{self.base.financial_debt - self.base.cash:>12,.1f} MDP"),
             ("(-) Minority Interest",   f"{self.base.minority_interest:>12,.1f} MDP"),
             ("(+) Non-op Assets",       f"{self.base.non_operating_assets:>12,.1f} MDP"),
             ("Equity Value",            f"{self.equity_value:>12,.1f} MDP"),
             ("Shares (mn)",             f"{self.base.shares_outstanding/1e6:>12,.2f}"),
             ("Value per share (MXN)",   f"{self.value_per_share:>12,.2f}"),
-            ("Market price (MXN)",      f"{self.assumptions.market_price or 0:>12,.2f}"),
+            ("Market price (MXN)",      f"{a.market_price or 0:>12,.2f}"),
             ("Upside / (Downside)",     f"{self.upside_pct:>12,.2%}"),
             ("--- WACC ---",            ""),
             ("Levered Beta",            f"{self.wacc_result.levered_beta:>12.3f}"),
@@ -204,6 +261,11 @@ class DCFOutput:
             ("Synthetic Rating",        f"{self.wacc_result.rating:>12}"),
             ("Initial WACC",            f"{self.wacc_result.wacc:>12.2%}"),
             ("Terminal WACC",           f"{self.terminal_wacc:>12.2%}"),
+            ("--- Terminal ROIC (Damodaran) ---", ""),
+            ("Terminal ROIC used",
+                f"{terminal_roic_used:>12.2%}  ({'OVERRIDE' if a.override_terminal_roic else 'Damodaran default = WACC_terminal'})"),
+            ("Terminal Reinvest Rate",
+                f"{(a.terminal_growth/terminal_roic_used if terminal_roic_used > 0 else 0):>12.2%}  (= g_terminal / ROIC_terminal)"),
         ]
         return pd.DataFrame(rows, columns=["Concepto", "Valor"])
 
@@ -263,35 +325,60 @@ def project_company(
         terminal_wacc=terminal_wacc,
     )
 
-    # Helpers para per-year overrides
-    def _g(t):  # revenue growth en año t (1-indexed)
+    # ===== Helpers Damodaran-style =====
+    # Y1 separado de Y2..Y_high; fade Y(high+1)..Y_n a terminal.
+    def _g(t):
+        """Revenue growth en año t (1-indexed). Damodaran-style:
+           Y1 puede tener growth distinto; Y2..high_n compounded; fade despues."""
         if a.revenue_growth_per_year and len(a.revenue_growth_per_year) >= t:
             return float(a.revenue_growth_per_year[t-1])
+        if t == 1 and a.revenue_growth_y1 is not None:
+            return a.revenue_growth_y1
         if t <= high_n:
             return a.revenue_growth_high
         step = t - high_n
         steps_remaining = n - high_n
         return _interpolate(a.revenue_growth_high, a.terminal_growth, steps_remaining, step)
 
-    def _m(t):  # op margin en año t
+    def _m(t):
+        """Op margin en año t. Damodaran-style: parte de op_margin_y1 (o base)
+           y converge a target_op_margin en year_of_margin_convergence."""
         if a.op_margin_per_year and len(a.op_margin_per_year) >= t:
             return float(a.op_margin_per_year[t-1])
-        return _interpolate(base_margin, a.target_op_margin, n, t)
+        start_margin = a.op_margin_y1 if a.op_margin_y1 is not None else base_margin
+        conv_year = a.year_of_margin_convergence
+        if t >= conv_year:
+            return a.target_op_margin
+        # Lineal de Y1 (start_margin) a Y_conv (target)
+        return _interpolate(start_margin, a.target_op_margin, conv_year, t)
 
-    def _tx(t):  # tax rate en año t
+    def _tx(t):
+        """Tax rate Damodaran-style: effective_base hasta Y5, fade Y6-Y10 a marginal."""
         if a.tax_rate_per_year and len(a.tax_rate_per_year) >= t:
             return float(a.tax_rate_per_year[t-1])
-        return _interpolate(base_tax, a.marginal_tax_terminal, n, t)
+        if t <= high_n:
+            return base_tax
+        step = t - high_n
+        steps_remaining = n - high_n
+        return _interpolate(base_tax, a.marginal_tax_terminal, steps_remaining, step)
 
-    def _w(t):  # WACC en año t
+    def _w(t):
+        """WACC Damodaran-style: initial hasta Y5, fade Y6-Y10 a terminal."""
         if a.wacc_per_year and len(a.wacc_per_year) >= t:
             return float(a.wacc_per_year[t-1])
-        return _interpolate(wacc_res.wacc, terminal_wacc, n, t)
+        if t <= high_n:
+            return wacc_res.wacc
+        step = t - high_n
+        steps_remaining = n - high_n
+        return _interpolate(wacc_res.wacc, terminal_wacc, steps_remaining, step)
 
-    def _s2c(t):  # sales-to-capital en año t (default constante)
+    def _s2c(t):
+        """Sales-to-Capital Damodaran-style: distinto Y1-5 vs Y6-10."""
         if a.sales_to_capital_per_year and len(a.sales_to_capital_per_year) >= t:
             return float(a.sales_to_capital_per_year[t-1])
-        return a.sales_to_capital
+        if t <= high_n:
+            return a.sales_to_capital_y1_5 if a.sales_to_capital_y1_5 is not None else a.sales_to_capital
+        return a.sales_to_capital_y6_10 if a.sales_to_capital_y6_10 is not None else a.sales_to_capital
 
     prev_rev = base.revenue
     for t in range(1, n + 1):
@@ -334,12 +421,26 @@ def project_company(
 
         prev_rev = rev_t
 
-    # 3) Terminal Value (Gordon)
+    # 3) Terminal Value (Gordon) — Damodaran-style
     rev_t11 = out.revenue[-1] * (1 + a.terminal_growth)
     delta_rev_t11 = rev_t11 - out.revenue[-1]
     ebit_t11 = rev_t11 * a.target_op_margin
     nopat_t11 = ebit_t11 * (1 - a.marginal_tax_terminal)
-    reinvest_t11 = delta_rev_t11 / a.sales_to_capital if a.sales_to_capital > 0 else 0.0
+
+    # Damodaran default: Terminal ROIC = Terminal WACC (no value creation steady state)
+    # Reinvestment = (g_terminal / ROIC_terminal) × NOPAT_t11
+    if a.override_terminal_roic:
+        # Analista define ROIC_terminal explicito (puede ser > WACC si moat duradero)
+        terminal_roic = a.terminal_roic_override
+    else:
+        # Damodaran default: ROIC_terminal = WACC_terminal
+        terminal_roic = terminal_wacc
+
+    if terminal_roic > 0:
+        reinvest_t11 = (a.terminal_growth / terminal_roic) * nopat_t11
+    else:
+        reinvest_t11 = delta_rev_t11 / a.sales_to_capital if a.sales_to_capital > 0 else 0.0
+
     fcff_t11 = nopat_t11 - reinvest_t11
 
     tv = fcff_t11 / (terminal_wacc - a.terminal_growth)
@@ -349,10 +450,34 @@ def project_company(
     out.terminal_value = tv
     out.pv_terminal = pv_tv
 
-    # 4) Agregados
+    # 4) Sum PV (operating value pre-failure adjustment)
     out.sum_pv_fcff = sum(out.pv_fcff)
-    out.enterprise_value = out.sum_pv_fcff + pv_tv
+    operating_value_dcf = out.sum_pv_fcff + pv_tv
+
+    # 5) Probability of failure adjustment (Damodaran)
+    # Final = (1-p) × DCF_value + p × failure_proceeds
+    if a.probability_of_failure > 0:
+        if a.failure_proceeds_basis == "B":
+            # Book value of capital = Book Equity + Book Debt
+            book_capital = (base.equity_book + base.financial_debt)
+            distress_proceeds = book_capital * a.failure_proceeds_pct
+        else:
+            # Fair value (V): % del DCF operating value
+            distress_proceeds = operating_value_dcf * a.failure_proceeds_pct
+        operating_value_adj = (1 - a.probability_of_failure) * operating_value_dcf \
+                            + a.probability_of_failure * distress_proceeds
+    else:
+        operating_value_adj = operating_value_dcf
+
+    out.enterprise_value = operating_value_adj
     net_debt = base.financial_debt - base.cash
+    # Trapped cash: si lo hay, se descuenta el tax adicional sobre el cash repatriado
+    cash_value = base.cash
+    if a.trapped_cash > 0 and a.trapped_cash_tax_rate > 0:
+        # Restar tax adicional sobre cash trapped al hacer bridge
+        cash_haircut = a.trapped_cash * a.trapped_cash_tax_rate
+        net_debt += cash_haircut    # equivalente a reducir cash en bridge
+
     out.equity_value = (
         out.enterprise_value
         - net_debt

@@ -1,0 +1,181 @@
+[  1]  |  |  |  | 0 | 1 | 2 | 3 | 4 | 5 | Perpetuidad
+[  2]  | Comprobación: CORRECTO |  | Múltiplo EV/EBITDA |        5.901 |        5.461 |        5.092 |        4.642 |        4.131 |        3.598 |        3.598
+[  3]  |  |  | Comprobación |        5.901 |        5.461 |        5.092 |        4.642 |        4.131 |        3.598 |        3.598
+[  6]  |  |  | Año | 0 | 1 | 2 | 3 | 4 | 5 | 
+[  7]  |  |  | Múltiplo Objetivo (finales del año) |        5.901 |        5.461 |        5.092 |        4.642 |        4.131 |        3.598 | 
+[  8]  |  |  | EBITDA ESTIMADO (año completo) |        4,859 |        5,689 |        6,694 |        7,932 |        9,439 |    1.121e+04 | 
+[  9]  |  |  | Valor de las Operaciones est. (finales de año) |    2.867e+04 |    3.107e+04 |    3.408e+04 |    3.682e+04 |    3.899e+04 |    4.035e+04 | 
+[ 10]  |  |  | Razón Deuda  / EBITDA |         2.47 |          2.5 |          2.5 |          2.6 |          2.7 |          2.8 | 
+[ 11]  |  |  | Deuda Financiera est. + Pasivos por Arrendamiento (est. |      1.2e+04 |    1.422e+04 |    1.673e+04 |    2.062e+04 |    2.549e+04 |     3.14e+04 | 
+[ 12]  |  |  | Razón Efectivo  / EBITDA |         0.28 |         0.29 |          0.3 |          0.4 |          0.5 |          0.6 | 
+[ 13]  |  |  | Efectivo y Equivalentes (est.) |        1,360 |        1,650 |        2,008 |        3,173 |        4,719 |        6,728 | 
+[ 14]  |  |  | Razón Interés Minoritario  / EBITDA | 0 | 0 | 0 | 0 | 0 | 0 | 
+[ 15]  |  |  | Interés Minoritario (est.) | 0 | 0 | 0 | 0 | 0 | 0 | 
+[ 16]  |  |  | Valor de Capitalización Objetivo |    1.803e+04 |    1.849e+04 |    1.936e+04 |    1.937e+04 |    1.823e+04 |    1.568e+04 | 
+[ 17]  |  |  | Número de títulos | 564 | 564 | 564 | 564 | 564 | 564 | 
+[ 18]  |  |  | Precio Objetivo |        31.97 |        32.79 |        34.32 |        34.34 |        32.32 |         27.8 | 
+[ 19]  |  |  | Δ% a/a | - |      0.02565 |      0.04671 |    0.0004673 |     -0.05881 |        -0.14 | 
+[ 20]  | IMPORTANTE:
+Es necesario ser cautelosos con este aparta |  | Tipo de Cambio (P$ por US$)* | 1 | 1 | 1 | 1 | 1 | 1 | 
+[ 21]  |  |  | Precio Objetivo en P$* |        31.97 |        32.79 |        34.32 |        34.34 |        32.32 |         27.8 | 
+[ 22]  |  |  | Δ% a/a | - |      0.02565 |      0.04671 |    0.0004673 |     -0.05881 |        -0.14 | 
+[ 27]  |  |  | Tabla de proyecciones |  |  |  |  |  |  | 
+[ 29]  |  |  |  | 0 | 1 | 2 | 3 | 4 | 5 | Perpetuidad
+[ 30]  |  |  | Ingresos | 28232 |    3.317e+04 |    3.914e+04 |    4.639e+04 |     5.52e+04 |    6.596e+04 |    6.794e+04
+[ 31]  |  |  | Tasa de crecimiento de los Ingresos | - |        0.175 |         0.18 |        0.185 |         0.19 |        0.195 |         0.03
+[ 32]  |  |  | Margen EBITDA |       0.1721 |       0.1715 |        0.171 |        0.171 |        0.171 |         0.17 |         0.17
+[ 33]  |  |  | EBITDA = EBIT + D&A |        4,859 |        5,689 |        6,694 |        7,932 |        9,439 |    1.121e+04 |    1.155e+04
+[ 34]  |  |  | Tasa de crecimiento del EBITDA | - |       0.1709 |       0.1766 |        0.185 |         0.19 |        0.188 |         0.03
+[ 35]  |  |  | Margen EBIT |       0.0851 |       0.0855 |        0.086 |        0.087 |        0.088 |        0.088 |        0.088
+[ 36]  |  |  | EBIT |        2,403 |        2,836 |        3,366 |        4,036 |        4,857 |        5,805 |        5,979
+[ 37]  |  |  | Tasa de crecimiento del EBIT | - |       0.1805 |       0.1869 |       0.1988 |       0.2037 |        0.195 |         0.03
+[ 38]  |  |  | Margen NOPAT |   |      0.05985 |       0.0602 |       0.0609 |       0.0616 |       0.0616 |       0.0616
+[ 39]  |  |  | NOPAT = EBIT*(1-Tasa impositiva) |        1,682 |        1,985 |        2,356 |        2,825 |        3,400 |        4,063 |        4,185
+[ 40]  |  |  | Tasa de crecimiento del NOPAT | - |       0.1805 |       0.1869 |       0.1988 |       0.2037 |        0.195 |         0.03
+[ 41]  |  |  | Razón D&A / Ingresos |        0.087 |        0.086 |        0.085 |        0.084 |        0.083 |        0.082 |        0.082
+[ 42]  |  |  | D&A |        2,456 |        2,853 |        3,327 |        3,896 |        4,581 |        5,409 |        5,571
+[ 43]  |  |  | Tasa de crecimiento de la D&A | - |       0.1615 |       0.1663 |       0.1711 |       0.1758 |       0.1806 |         0.03
+[ 44]  |  |  | Razón CAPEX / Ingresos |        0.134 |         0.13 |         0.12 |         0.11 |          0.1 |         0.09 |         0.09
+[ 45]  |  |  | CAPEX |        3,783 |        4,312 |        4,697 |        5,102 |        5,520 |        5,937 |        6,115
+[ 46]  |  |  | Tasa de crecimiento del CAPEX | - |       0.1399 |      0.08923 |      0.08625 |      0.08182 |       0.0755 |         0.03
+[ 47]  |  |  | Razón Inversión en WC / Ingresos |      -0.0284 |        -0.02 |        0.011 |        0.013 |        0.014 |        0.015 |        0.015
+[ 48]  |  |  | Inversión en WC |       -801.8 |       -663.5 |        430.6 |          603 |        772.8 |        989.4 |        1,019
+[ 49]  |  |  | Tasa de crecimiento de la Inversión en WC | - |      -0.1725 |       -1.649 |       0.4005 |       0.2815 |       0.2804 |         0.03
+[ 50]  |  |  | Razón FCFF / Ingresos | - |      0.03585 |       0.0142 |       0.0219 |       0.0306 |       0.0386 |       0.0386
+[ 51]  |  |  | Free Cash Flow to the Firm |        1,157 |        1,189 |        555.8 |        1,016 |        1,689 |        2,546 |        2,623
+[ 52]  |  |  | Tasa de crecimiento del FCFF | - |      0.02816 |      -0.5326 |       0.8276 |       0.6627 |       0.5074 |         0.03
+[ 57]  |  |  | Tabla de tasas de crecimiento y descomposición de la ra |  |  |  |  |  |  | 
+[ 59]  | Indicaciones |  |  | 0 | 1 | 2 | 3 | 4 | 5 | Perpetuidad
+[ 60]  | Diferente para cada emisora (si se prescinde de la tabl |  | Razón D&A/EBITDA (Año 0) |       0.5055 |       0.5015 |       0.4971 |       0.4912 |       0.4854 |       0.4824 |       0.4824
+[ 61]  |  |  | Razón CAPEX/EBITDA (Año 0) |       0.7786 |        0.758 |       0.7018 |       0.6433 |       0.5848 |       0.5294 |       0.5294
+[ 62]  |  |  | Razón Inv. WC/EBITDA (Año 0) |       -0.165 |      -0.1166 |      0.06433 |      0.07602 |      0.08187 |      0.08824 |      0.08824
+[ 63]  | Si se busca hacer una valuación rápida por DCF sin util |  | Tasa de crecimiento del EBITDA | - |       0.1709 |       0.1766 |        0.185 |         0.19 |        0.188 |         0.03
+[ 64]  |  |  | Tasa de crecimiento de la D&A | - |       0.1615 |       0.1663 |       0.1711 |       0.1758 |       0.1806 |         0.03
+[ 65]  |  |  | Tasa de crecimiento del CAPEX | - |       0.1399 |      0.08923 |      0.08625 |      0.08182 |       0.0755 |         0.03
+[ 66]  |  |  | Tasa de crecimiento de la Inversión en WC | - |      -0.1725 |       -1.649 |       0.4005 |       0.2815 |       0.2804 |         0.03
+[ 67]  | En principio, no debe variar |  | Tasa impositiva |          0.3 |          0.3 |          0.3 |          0.3 |          0.3 |          0.3 |          0.3
+[ 68]  | Debe calcularse manualmente para cada emisora |  | WACC |        0.125 |        0.125 |        0.115 |         0.11 |        0.105 |          0.1 |        0.095
+[ 69]  | Puede estimarse a partir del Capital Invertido o bien u |  | Rotación de Capital Invertido |          0.5 |          0.5 |          0.5 |          0.5 |          0.5 |          0.5 |          0.5
+[ 70]  | Puede estimarse manualmente o bien dividir el Ingreso p |  | Capital Invertido | 56464 |    6.635e+04 |    7.829e+04 |    9.277e+04 |    1.104e+05 |    1.319e+05 |    1.359e+05
+[ 71]  | Se calcula a partir de la división entre el NOPAT (Fila |  | ROIC = NOPAT/Capital Invertido |      0.02979 |      0.02993 |       0.0301 |      0.03045 |       0.0308 |       0.0308 |       0.0308
+[ 72]  | Si ROIC > WACC, el retorno del capital invertido es may |  | ROIC > WACC | NO RENTABLE | NO RENTABLE | NO RENTABLE | NO RENTABLE | NO RENTABLE | NO RENTABLE | NO RENTABLE
+[ 79]  |  |  | Tablas auxiliares (cálculos) Año 0 |  |  |  |  |  |  | 
+[ 81]  |  |  | Producto tasas EBITDA |  |        1.171 |        1.378 |        1.633 |        1.943 |        2.308 |        2.377
+[ 82]  |  |  | Producto tasas D&A |  |        1.161 |        1.355 |        1.586 |        1.865 |        2.202 |        2.268
+[ 83]  |  |  | Producto tasas CAPEX |  |         1.14 |        1.242 |        1.349 |        1.459 |        1.569 |        1.616
+[ 84]  |  |  | Producto tasas Inv. WC |  |       0.8275 |       -0.537 |      -0.7521 |      -0.9638 |       -1.234 |       -1.271
+[ 86]  |  |  | Producto tasas EBITDA * Impuestos |  |       0.8196 |       0.9643 |        1.143 |         1.36 |        1.616 |        1.664
+[ 87]  |  |  | Producto tasas D&A * Impuestos |  |       0.3484 |       0.4064 |       0.4759 |       0.5596 |       0.6606 |       0.6805
+[ 89]  |  |  | Producto tasas D&A * Impuestos * Razón |  |       0.1761 |       0.2054 |       0.2406 |       0.2829 |        0.334 |        0.344
+[ 90]  |  |  | Producto tasas CAPEX * Razón |  |       0.8876 |       0.9668 |         1.05 |        1.136 |        1.222 |        1.258
+[ 91]  |  |  | Producto tasas Inv. WC * Razón |  |      -0.1365 |      0.08862 |       0.1241 |        0.159 |       0.2036 |       0.2097
+[ 93]  |  |  | Producto WACC |  |        1.125 |        1.254 |        1.392 |        1.539 |        1.692 | 
+[ 95]  |  |  | Razón EBITDA / WACC |  |       0.7286 |       0.7688 |       0.8207 |       0.8839 |       0.9546 | 
+[ 96]  |  |  | Razón D&A / WACC |  |       0.1566 |       0.1638 |       0.1728 |       0.1839 |       0.1973 | 
+[ 97]  |  |  | Razón CAPEX / WACC |  |       0.7889 |       0.7707 |       0.7542 |       0.7384 |        0.722 | 
+[ 98]  |  |  | Razón Inv. WC / WACC |  |      -0.1214 |      0.07065 |      0.08914 |       0.1034 |       0.1203 | 
+[100]  |  |  | Razón EBITDA Perpetuidad |  |  |  |  |  |  |        15.13
+[101]  |  |  | Razón D&A Perpetuidad |  |  |  |  |  |  |        3.127
+[102]  |  |  | Razón CAPEX Perpetuidad |  |  |  |  |  |  |        11.44
+[103]  |  |  | Razón Inv. WC Perpetuidad |  |  |  |  |  |  |        1.907
+[105]  |  |  |  |  |  |  |  |  | VP del Múltiplo en p |        4.907
+[112]  |  |  | Tablas auxiliares (cálculos) Año 1 |  |  |  |  |  |  | 
+[114]  |  |  | Producto tasas EBITDA |  |  |        1.177 |        1.394 |        1.659 |        1.971 |         2.03
+[115]  |  |  | Producto tasas D&A |  |  |        1.166 |        1.366 |        1.606 |        1.896 |        1.953
+[116]  |  |  | Producto tasas CAPEX |  |  |        1.089 |        1.183 |         1.28 |        1.377 |        1.418
+[117]  |  |  | Producto tasas Inv. WC |  |  |       -0.649 |      -0.9089 |       -1.165 |       -1.491 |       -1.536
+[119]  |  |  | Producto tasas EBITDA * Impuestos |  |  |       0.8236 |        0.976 |        1.161 |         1.38 |        1.421
+[120]  |  |  | Producto tasas D&A * Impuestos |  |  |       0.3499 |       0.4097 |       0.4818 |       0.5688 |       0.5859
+[122]  |  |  | Producto tasas D&A * Impuestos * Razón |  |  |       0.1755 |       0.2055 |       0.2416 |       0.2852 |       0.2938
+[123]  |  |  | Producto tasas CAPEX * Razón |  |  |       0.8257 |       0.8969 |       0.9702 |        1.044 |        1.075
+[124]  |  |  | Producto tasas Inv. WC * Razón |  |  |      0.07569 |        0.106 |       0.1358 |       0.1739 |       0.1791
+[126]  |  |  | Producto WACC |  |  |        1.115 |        1.238 |        1.368 |        1.504 | 
+[128]  |  |  | Razón EBITDA / WACC |  |  |       0.7386 |       0.7886 |       0.8492 |       0.9172 | 
+[129]  |  |  | Razón D&A / WACC |  |  |       0.1574 |        0.166 |       0.1767 |       0.1896 | 
+[130]  |  |  | Razón CAPEX / WACC |  |  |       0.7405 |       0.7247 |       0.7095 |       0.6937 | 
+[131]  |  |  | Razón Inv. WC / WACC |  |  |      0.06788 |      0.08564 |      0.09932 |       0.1156 | 
+[133]  |  |  | Razón EBITDA Perpetuidad |  |  |  |  |  |  |        14.53
+[134]  |  |  | Razón D&A Perpetuidad |  |  |  |  |  |  |        3.004
+[135]  |  |  | Razón CAPEX Perpetuidad |  |  |  |  |  |  |        10.99
+[136]  |  |  | Razón Inv. WC Perpetuidad |  |  |  |  |  |  |        1.832
+[138]  |  |  |  |  |  |  |  |  | VP del Múltiplo en p |        4.714
+[145]  |  |  | Tablas auxiliares (cálculos) Año 2 |  |  |  |  |  |  | 
+[147]  |  |  | Producto tasas EBITDA |  |  |  |        1.185 |         1.41 |        1.675 |        1.726
+[148]  |  |  | Producto tasas D&A |  |  |  |        1.171 |        1.377 |        1.626 |        1.674
+[149]  |  |  | Producto tasas CAPEX |  |  |  |        1.086 |        1.175 |        1.264 |        1.302
+[150]  |  |  | Producto tasas Inv. WC |  |  |  |          1.4 |        1.795 |        2.298 |        2.367
+[152]  |  |  | Producto tasas EBITDA * Impuestos |  |  |  |       0.8295 |       0.9871 |        1.173 |        1.208
+[153]  |  |  | Producto tasas D&A * Impuestos |  |  |  |       0.3513 |       0.4131 |       0.4877 |       0.5023
+[155]  |  |  | Producto tasas D&A * Impuestos * Razón |  |  |  |       0.1746 |       0.2053 |       0.2424 |       0.2497
+[156]  |  |  | Producto tasas CAPEX * Razón |  |  |  |       0.7623 |       0.8246 |       0.8869 |       0.9135
+[157]  |  |  | Producto tasas Inv. WC * Razón |  |  |  |      0.09009 |       0.1155 |       0.1478 |       0.1523
+[159]  |  |  | Producto WACC |  |  |  |         1.11 |        1.227 |        1.349 | 
+[161]  |  |  | Razón EBITDA / WACC |  |  |  |       0.7473 |       0.8048 |       0.8692 | 
+[162]  |  |  | Razón D&A / WACC |  |  |  |       0.1573 |       0.1674 |       0.1797 | 
+[163]  |  |  | Razón CAPEX / WACC |  |  |  |       0.6867 |       0.6723 |       0.6574 | 
+[164]  |  |  | Razón Inv. WC / WACC |  |  |  |      0.08116 |      0.09413 |       0.1096 | 
+[166]  |  |  | Razón EBITDA Perpetuidad |  |  |  |  |  |  |        13.77
+[167]  |  |  | Razón D&A Perpetuidad |  |  |  |  |  |  |        2.847
+[168]  |  |  | Razón CAPEX Perpetuidad |  |  |  |  |  |  |        10.42
+[169]  |  |  | Razón Inv. WC Perpetuidad |  |  |  |  |  |  |        1.736
+[171]  |  |  |  |  |  |  |  |  | VP del Múltiplo en p |        4.468
+[178]  |  |  | Tablas auxiliares (cálculos) Año 3 |  |  |  |  |  |  | 
+[180]  |  |  | Producto tasas EBITDA |  |  |  |  |         1.19 |        1.414 |        1.456
+[181]  |  |  | Producto tasas D&A |  |  |  |  |        1.176 |        1.388 |         1.43
+[182]  |  |  | Producto tasas CAPEX |  |  |  |  |        1.082 |        1.163 |        1.198
+[183]  |  |  | Producto tasas Inv. WC |  |  |  |  |        1.282 |        1.641 |         1.69
+[185]  |  |  | Producto tasas EBITDA * Impuestos |  |  |  |  |        0.833 |       0.9896 |        1.019
+[186]  |  |  | Producto tasas D&A * Impuestos |  |  |  |  |       0.3527 |       0.4165 |        0.429
+[188]  |  |  | Producto tasas D&A * Impuestos * Razón |  |  |  |  |       0.1733 |       0.2046 |       0.2107
+[189]  |  |  | Producto tasas CAPEX * Razón |  |  |  |  |       0.6959 |       0.7484 |       0.7709
+[190]  |  |  | Producto tasas Inv. WC * Razón |  |  |  |  |      0.09743 |       0.1247 |       0.1285
+[192]  |  |  | Producto WACC |  |  |  |  |        1.105 |        1.216 | 
+[194]  |  |  | Razón EBITDA / WACC |  |  |  |  |       0.7538 |       0.8142 | 
+[195]  |  |  | Razón D&A / WACC |  |  |  |  |       0.1568 |       0.1683 | 
+[196]  |  |  | Razón CAPEX / WACC |  |  |  |  |       0.6298 |       0.6158 | 
+[197]  |  |  | Razón Inv. WC / WACC |  |  |  |  |      0.08817 |       0.1026 | 
+[199]  |  |  | Razón EBITDA Perpetuidad |  |  |  |  |  |  |         12.9
+[200]  |  |  | Razón D&A Perpetuidad |  |  |  |  |  |  |        2.667
+[201]  |  |  | Razón CAPEX Perpetuidad |  |  |  |  |  |  |        9.757
+[202]  |  |  | Razón Inv. WC Perpetuidad |  |  |  |  |  |  |        1.626
+[204]  |  |  |  |  |  |  |  |  | VP del Múltiplo en p |        4.185
+[211]  |  |  | Tablas auxiliares (cálculos) Año 4 |  |  |  |  |  |  | 
+[213]  |  |  | Producto tasas EBITDA |  |  |  |  |  |        1.188 |        1.224
+[214]  |  |  | Producto tasas D&A |  |  |  |  |  |        1.181 |        1.216
+[215]  |  |  | Producto tasas CAPEX |  |  |  |  |  |        1.076 |        1.108
+[216]  |  |  | Producto tasas Inv. WC |  |  |  |  |  |         1.28 |        1.319
+[218]  |  |  | Producto tasas EBITDA * Impuestos |  |  |  |  |  |       0.8316 |       0.8566
+[219]  |  |  | Producto tasas D&A * Impuestos |  |  |  |  |  |       0.3542 |       0.3648
+[221]  |  |  | Producto tasas D&A * Impuestos * Razón |  |  |  |  |  |       0.1719 |       0.1771
+[222]  |  |  | Producto tasas CAPEX * Razón |  |  |  |  |  |       0.6289 |       0.6478
+[223]  |  |  | Producto tasas Inv. WC * Razón |  |  |  |  |  |       0.1048 |        0.108
+[225]  |  |  | Producto WACC |  |  |  |  |  |          1.1 | 
+[227]  |  |  | Razón EBITDA / WACC |  |  |  |  |  |        0.756 | 
+[228]  |  |  | Razón D&A / WACC |  |  |  |  |  |       0.1563 | 
+[229]  |  |  | Razón CAPEX / WACC |  |  |  |  |  |       0.5718 | 
+[230]  |  |  | Razón Inv. WC / WACC |  |  |  |  |  |       0.0953 | 
+[232]  |  |  | Razón EBITDA Perpetuidad |  |  |  |  |  |  |        11.98
+[233]  |  |  | Razón D&A Perpetuidad |  |  |  |  |  |  |        2.476
+[234]  |  |  | Razón CAPEX Perpetuidad |  |  |  |  |  |  |         9.06
+[235]  |  |  | Razón Inv. WC Perpetuidad |  |  |  |  |  |  |         1.51
+[237]  |  |  |  |  |  |  |  |  | VP del Múltiplo en p |        3.886
+[244]  |  |  | Tablas auxiliares (cálculos) Año 5 |  |  |  |  |  |  | 
+[246]  |  |  | Producto tasas EBITDA |  |  |  |  |  |  |         1.03
+[247]  |  |  | Producto tasas D&A |  |  |  |  |  |  |         1.03
+[248]  |  |  | Producto tasas CAPEX |  |  |  |  |  |  |         1.03
+[249]  |  |  | Producto tasas Inv. WC |  |  |  |  |  |  |         1.03
+[251]  |  |  | Producto tasas EBITDA * Impuestos |  |  |  |  |  |  |        0.721
+[252]  |  |  | Producto tasas D&A * Impuestos |  |  |  |  |  |  |        0.309
+[254]  |  |  | Producto tasas D&A * Impuestos * Razón |  |  |  |  |  |  |        0.149
+[255]  |  |  | Producto tasas CAPEX * Razón |  |  |  |  |  |  |       0.5453
+[256]  |  |  | Producto tasas Inv. WC * Razón |  |  |  |  |  |  |      0.09088
+[258]  |  |  | Producto WACC |  |  |  |  |  |  | 
+[260]  |  |  | Razón EBITDA / WACC |  |  |  |  |  |  | 
+[261]  |  |  | Razón D&A / WACC |  |  |  |  |  |  | 
+[262]  |  |  | Razón CAPEX / WACC |  |  |  |  |  |  | 
+[263]  |  |  | Razón Inv. WC / WACC |  |  |  |  |  |  | 
+[265]  |  |  | Razón EBITDA Perpetuidad |  |  |  |  |  |  |        11.09
+[266]  |  |  | Razón D&A Perpetuidad |  |  |  |  |  |  |        2.293
+[267]  |  |  | Razón CAPEX Perpetuidad |  |  |  |  |  |  |        8.389
+[268]  |  |  | Razón Inv. WC Perpetuidad |  |  |  |  |  |  |        1.398
+[270]  |  |  |  |  |  |  |  |  | VP del Múltiplo en p |        3.598
