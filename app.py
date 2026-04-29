@@ -505,10 +505,21 @@ if mode == "Single DCF":
         try:
             from src.dcf_mexico.analysis import compute_all_input_suggestions
 
+            # Cargar serie historica AQUI (hs se define mas abajo en otro tab)
+            hs_for_suggest = load_historical(
+                issuer.ticker,
+                parse_func=lambda fp: _parse_cached(str(fp)),
+            )
+            if not hs_for_suggest.snapshots:
+                st.info(
+                    "No hay XBRL históricos en `data/raw_xbrl/` para esta emisora. "
+                    "Sugerencias usarán defaults Damodaran."
+                )
+
             # Calcular sugerencias del histórico anual
             curr = (res.info.currency or "MXN").upper().strip()
             fx_for_suggest = market.fx_rate_usdmxn if curr == "USD" else 1.0
-            suggestions = compute_all_input_suggestions(hs, fx_mult=fx_for_suggest)
+            suggestions = compute_all_input_suggestions(hs_for_suggest, fx_mult=fx_for_suggest)
 
             # Inicializar session_state con sugerencias si NO existen ya
             for key, sug in suggestions.items():
