@@ -629,7 +629,7 @@ if mode == "Single DCF":
             with view_col1:
                 view_mode = st.radio(
                     "Vista",
-                    ["Anual (Q4 / 4D)", "Trimestral (LTM por trimestre)"],
+                    ["Anual", "Trimestral"],
                     horizontal=True,
                     key=f"ef_view_{issuer.ticker}",
                 )
