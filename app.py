@@ -525,7 +525,133 @@ if mode == "Single DCF":
             step=0.0025, format="%.4f",
         )
 
+    # ============================================================
+    # 🎯 DAMODARAN ADVANCED (Hoja 1 fcffsimpleginzu)
+    # Inputs avanzados estilo Damodaran. Defaults = comportamiento basico.
+    # ============================================================
+    with st.expander("🎯 Damodaran Advanced (Hoja 1) — controles finos", expanded=False):
+        st.caption(
+            "Inputs estilo Damodaran fcffsimpleginzu. Si dejas defaults, el modelo "
+            "se comporta como antes. Activa cada toggle para personalizar."
+        )
+
+        # --- Bloque Y1 separado ---
+        st.markdown("**1️⃣ Year 1 separado de Y2-Y5** (Damodaran permite Y1 distinto)")
+        d1, d2, d3 = st.columns(3)
+        with d1:
+            use_y1_growth = st.checkbox(
+                "Override Y1 growth", value=False,
+                key=f"dam_use_y1_g_{issuer.ticker}",
+                help="Si activas: Y1 usa este growth, Y2-Y5 sigue usando el del slider arriba",
+            )
+            rev_growth_y1 = st.number_input(
+                "Revenue growth Y1", value=float(rev_growth),
+                step=0.005, format="%.4f", disabled=not use_y1_growth,
+                key=f"dam_y1_g_{issuer.ticker}",
+            )
+        with d2:
+            use_y1_margin = st.checkbox(
+                "Override Y1 margin", value=False,
+                key=f"dam_use_y1_m_{issuer.ticker}",
+            )
+            op_margin_y1 = st.number_input(
+                "Op margin Y1", value=float(base.ebit / base.revenue if base.revenue else 0.20),
+                step=0.005, format="%.4f", disabled=not use_y1_margin,
+                key=f"dam_y1_m_{issuer.ticker}",
+            )
+        with d3:
+            year_conv = st.slider(
+                "Margin convergence year", 1, 10, 5,
+                key=f"dam_yconv_{issuer.ticker}",
+                help="Año en que el margen llega al target. Damodaran default = 5",
+            )
+
+        # --- Bloque S2C diferenciado ---
+        st.markdown("**2️⃣ Sales-to-Capital diferenciado Y1-5 vs Y6-10**")
+        s2c_col1, s2c_col2, s2c_col3 = st.columns(3)
+        with s2c_col1:
+            use_s2c_split = st.checkbox(
+                "Diferenciar Y1-5 / Y6-10", value=False,
+                key=f"dam_s2c_split_{issuer.ticker}",
+            )
+        with s2c_col2:
+            s2c_y1_5 = st.number_input(
+                "S2C Y1-5", value=float(s2c), step=0.05, format="%.2f",
+                disabled=not use_s2c_split, key=f"dam_s2c_y1_5_{issuer.ticker}",
+            )
+        with s2c_col3:
+            s2c_y6_10 = st.number_input(
+                "S2C Y6-10", value=float(s2c), step=0.05, format="%.2f",
+                disabled=not use_s2c_split, key=f"dam_s2c_y6_10_{issuer.ticker}",
+            )
+
+        # --- Bloque Terminal ROIC ---
+        st.markdown("**3️⃣ Terminal ROIC** (Damodaran default: ROIC = WACC, no value creation)")
+        roic_col1, roic_col2 = st.columns(2)
+        with roic_col1:
+            override_term_roic = st.checkbox(
+                "Override Terminal ROIC", value=False,
+                key=f"dam_roic_ovr_{issuer.ticker}",
+                help="Por default ROIC_terminal = WACC_terminal (no value creation). "
+                     "Activa para empresas con moat duradero.",
+            )
+        with roic_col2:
+            terminal_roic_val = st.number_input(
+                "ROIC terminal", value=0.15, step=0.005, format="%.4f",
+                disabled=not override_term_roic, key=f"dam_roic_val_{issuer.ticker}",
+            )
+
+        # --- Bloque Probability of Failure ---
+        st.markdown("**4️⃣ Probability of Failure** (Damodaran #3 default = 0%)")
+        pf_col1, pf_col2, pf_col3 = st.columns(3)
+        with pf_col1:
+            prob_failure = st.slider(
+                "Prob. failure", 0.0, 0.50, 0.0, 0.01, format="%.2f",
+                key=f"dam_pf_{issuer.ticker}",
+            )
+        with pf_col2:
+            failure_proceeds_basis = st.selectbox(
+                "Proceeds basis", ["V", "B"],
+                key=f"dam_pf_basis_{issuer.ticker}",
+                help="V = % del DCF fair value, B = % del Book Capital",
+            )
+        with pf_col3:
+            failure_proceeds_pct = st.slider(
+                "Recovery %", 0.0, 1.0, 0.5, 0.05, format="%.2f",
+                key=f"dam_pf_pct_{issuer.ticker}",
+            )
+
+        # --- Bloque Other Damodaran defaults ---
+        st.markdown("**5️⃣ Otros defaults Damodaran (overrideables)**")
+        oth_col1, oth_col2, oth_col3 = st.columns(3)
+        with oth_col1:
+            nol_cf = st.number_input(
+                "NOL Carryforward (MDP)", value=0.0, step=10.0, format="%.1f",
+                key=f"dam_nol_{issuer.ticker}",
+                help="Tax loss carryforward al inicio Y1 (escudo fiscal)",
+            )
+        with oth_col2:
+            reinvest_lag = st.slider(
+                "Reinvestment lag (años)", 0, 3, 0,
+                key=f"dam_lag_{issuer.ticker}",
+                help="ΔRev_t = f(Reinvest_t-lag). Damodaran default = 1.",
+            )
+        with oth_col3:
+            trapped = st.number_input(
+                "Trapped Cash (MDP)", value=0.0, step=100.0, format="%.1f",
+                key=f"dam_trapped_{issuer.ticker}",
+                help="Cash en jurisdicciones con tax adicional al repatriar",
+            )
+        if trapped > 0:
+            trapped_tax = st.slider(
+                "Tax adicional sobre trapped cash", 0.0, 0.5, 0.10, 0.01, format="%.2f",
+                key=f"dam_trapped_tax_{issuer.ticker}",
+            )
+        else:
+            trapped_tax = 0.0
+
     a = DCFAssumptions(
+        # ===== Inputs basicos (sliders arriba) =====
         revenue_growth_high=rev_growth,
         terminal_growth=terminal_g,
         target_op_margin=op_margin,
@@ -537,6 +663,21 @@ if mode == "Single DCF":
         unlevered_beta=beta_unlev,
         terminal_wacc_override=terminal_wacc,
         market_price=market_price,
+        # ===== Damodaran Hoja 1 (advanced) =====
+        revenue_growth_y1=rev_growth_y1 if use_y1_growth else None,
+        op_margin_y1=op_margin_y1 if use_y1_margin else None,
+        year_of_margin_convergence=year_conv,
+        sales_to_capital_y1_5=s2c_y1_5 if use_s2c_split else None,
+        sales_to_capital_y6_10=s2c_y6_10 if use_s2c_split else None,
+        override_terminal_roic=override_term_roic,
+        terminal_roic_override=terminal_roic_val,
+        probability_of_failure=prob_failure,
+        failure_proceeds_pct=failure_proceeds_pct,
+        failure_proceeds_basis=failure_proceeds_basis,
+        nol_carryforward=nol_cf,
+        reinvestment_lag=reinvest_lag,
+        trapped_cash=trapped,
+        trapped_cash_tax_rate=trapped_tax,
     )
     out = project_company(base, a)
 
@@ -549,6 +690,86 @@ if mode == "Single DCF":
               f"β L = {out.wacc_result.levered_beta:.2f}")
     k4.metric("Equity Value", f"{out.equity_value:,.0f} MDP",
               f"EV {out.enterprise_value:,.0f}")
+
+    # ============================================================
+    # 🎯 Damodaran outputs (Hoja 1) — visible siempre que activan controles
+    # ============================================================
+    show_damodaran_panel = (
+        a.revenue_growth_y1 is not None or a.op_margin_y1 is not None or
+        a.year_of_margin_convergence != 5 or a.override_terminal_roic or
+        a.probability_of_failure > 0 or a.nol_carryforward > 0 or
+        a.reinvestment_lag > 0 or a.trapped_cash > 0 or
+        a.sales_to_capital_y1_5 is not None or a.sales_to_capital_y6_10 is not None
+    )
+
+    with st.expander(
+        f"🎯 Damodaran outputs (Hoja 1) {'• ⚡ ACTIVO' if show_damodaran_panel else '• defaults'}",
+        expanded=show_damodaran_panel,
+    ):
+        st.markdown("**Inputs Damodaran efectivos:**")
+        d_col1, d_col2 = st.columns(2)
+        with d_col1:
+            eff_y1_g = a.revenue_growth_y1 if a.revenue_growth_y1 is not None else a.revenue_growth_high
+            eff_y1_m = a.op_margin_y1 if a.op_margin_y1 is not None else (base.ebit / base.revenue if base.revenue else 0)
+            st.markdown(
+                f"- **Revenue growth Y1:** {eff_y1_g:.2%}  "
+                f"{' *(override)*' if a.revenue_growth_y1 is not None else ' *(default = Y2-Y5)*'}"
+            )
+            st.markdown(
+                f"- **Op margin Y1:** {eff_y1_m:.2%}  "
+                f"{' *(override)*' if a.op_margin_y1 is not None else ' *(default = current)*'}"
+            )
+            st.markdown(
+                f"- **Year of margin convergence:** Y{a.year_of_margin_convergence}  "
+                f"{' *(Damodaran default = 5)*' if a.year_of_margin_convergence == 5 else ' *(override)*'}"
+            )
+            s2c_y1_5_eff = a.sales_to_capital_y1_5 if a.sales_to_capital_y1_5 is not None else a.sales_to_capital
+            s2c_y6_10_eff = a.sales_to_capital_y6_10 if a.sales_to_capital_y6_10 is not None else a.sales_to_capital
+            st.markdown(
+                f"- **Sales-to-Capital:** Y1-5 = {s2c_y1_5_eff:.2f}x  /  Y6-10 = {s2c_y6_10_eff:.2f}x"
+            )
+        with d_col2:
+            terminal_roic_used = a.terminal_roic_override if a.override_terminal_roic else out.terminal_wacc
+            terminal_reinv_rate = a.terminal_growth / terminal_roic_used if terminal_roic_used > 0 else 0
+            st.markdown(
+                f"- **Terminal ROIC usado:** {terminal_roic_used:.2%}  "
+                f"{' *(OVERRIDE)*' if a.override_terminal_roic else ' *(Damodaran = WACC_terminal)*'}"
+            )
+            st.markdown(
+                f"- **Terminal Reinvestment Rate:** {terminal_reinv_rate:.2%}  "
+                f"*(= g_terminal / ROIC_terminal)*"
+            )
+            st.markdown(
+                f"- **Probability of failure:** {a.probability_of_failure:.2%}  "
+                f"basis={a.failure_proceeds_basis}  recover={a.failure_proceeds_pct:.0%}"
+            )
+            if a.nol_carryforward > 0:
+                st.markdown(f"- **NOL carryforward:** {a.nol_carryforward:,.1f} MDP")
+            if a.trapped_cash > 0:
+                st.markdown(
+                    f"- **Trapped Cash:** {a.trapped_cash:,.1f} MDP @ tax {a.trapped_cash_tax_rate:.0%} "
+                    f"→ haircut {a.trapped_cash * a.trapped_cash_tax_rate:,.1f} MDP"
+                )
+
+        # Failure adjustment breakdown
+        if a.probability_of_failure > 0:
+            st.markdown("---")
+            st.markdown("**🔻 Failure Adjustment Bridge:**")
+            dcf_op_value = out.sum_pv_fcff + out.pv_terminal
+            if a.failure_proceeds_basis == "B":
+                book_cap = base.equity_book + base.financial_debt
+                distress = book_cap * a.failure_proceeds_pct
+                basis_label = f"Book Capital ({book_cap:,.1f})"
+            else:
+                distress = dcf_op_value * a.failure_proceeds_pct
+                basis_label = f"DCF Fair Value ({dcf_op_value:,.1f})"
+
+            st.markdown(
+                f"- DCF Operating Value (pre-failure): **{dcf_op_value:,.1f} MDP**\n"
+                f"- Distress Proceeds: {basis_label} × {a.failure_proceeds_pct:.0%} = **{distress:,.1f} MDP**\n"
+                f"- Final EV = (1-{a.probability_of_failure:.0%}) × {dcf_op_value:,.1f} + "
+                f"{a.probability_of_failure:.0%} × {distress:,.1f} = **{out.enterprise_value:,.1f} MDP**"
+            )
 
     # Proyeccion grafico
     st.subheader("Proyeccion FCFF")
