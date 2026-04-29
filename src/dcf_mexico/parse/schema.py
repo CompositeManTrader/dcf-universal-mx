@@ -168,6 +168,9 @@ class CashFlow:
     dividends_paid: float = 0.0
     cff: float = 0.0
     net_change_cash: float = 0.0
+    disposal_loss_gain: float = 0.0                 # (-) Pérdida (utilidad) por disposicion de activos
+                                                     # CNBV: positivo = perdida, negativo = ganancia
+                                                     # Bloomberg: Disposal of Assets (positivo = gain to abnormal)
 
     @property
     def capex_gross(self) -> float:

@@ -572,6 +572,14 @@ class XBRLReader:
             "Incremento (disminución) neto de efectivo y equivalentes de efectivo",
             "Incremento (disminucion) neto de efectivo y equivalentes de efectivo",
         )
+        # Disposal of Assets (CNBV: positivo=loss, negativo=gain)
+        # Para Bloomberg "Disposal of Assets" (positivo = ganancia abnormal)
+        # invertimos el signo abajo en el reclassifier
+        cf.disposal_loss_gain = g(
+            "+ (-) Pérdida (utilidad) por la disposición de activos no circulantes",
+            "+ (-) Pérdida (utilidad) por la disposicion de activos no circulantes",
+            "Pérdida (utilidad) por la disposición de activos no circulantes",
+        )
         return cf
 
     # -----------------------------------------------------------------

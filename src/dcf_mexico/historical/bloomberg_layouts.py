@@ -104,13 +104,114 @@ def _safe_get(obj, attr, default=0.0):
     return default if v is None else v
 
 
+# ===========================================================================
+# RECLASSIFICATION RULES: convierte CNBV "As Reported" -> Bloomberg "Adjusted"
+# Cada emisora tiene su propio set de reclasificaciones especificas.
+# ===========================================================================
+
+def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0) -> dict:
+    """Reclasifica metricas CNBV -> formato Bloomberg para CUERVO (BECLE).
+
+    Reglas CUERVO-especificas (verificadas vs Bloomberg Q4 2025):
+      1. 'Otros gastos' CNBV -> Bloomberg 'Selling & Marketing'
+         (CUERVO es spirits-heavy marketing; BB reclasifica)
+      2. 'Other Operating Expense' Bloomberg = -Otros_ingresos - Disposal_gain (neto)
+      3. 'Interest Expense' Bloomberg = Gastos_financieros + |Ingresos_financieros si<0|
+         (CNBV reporta Ingresos financieros NEGATIVO = perdida neta -> BB suma a Int Exp)
+      4. 'Operating Income' Bloomberg = EBIT_CNBV + Disposal_gain
+         (BB clasifica disposal como ganancia operativa; CNBV no)
+      5. 'Pretax Adjusted' Bloomberg = Pretax_GAAP + Disposal_gain
+         (BB excluye disposal de "Adjusted" como item abnormal)
+
+    disposal_period: Disposal of Assets POSITIVO = ganancia (signo BB) para el periodo
+                      (CNBV viene como "Pérdida (utilidad)" donde negativo=ganancia,
+                      el caller debe pasar -cf.disposal_loss_gain del periodo).
+    """
+    selling_cnbv = m.get("selling_expenses", 0) or 0
+    ga_cnbv      = m.get("ga_expenses", 0) or 0
+    other_inc    = m.get("other_op_income", 0) or 0
+    other_exp    = m.get("other_op_expense", 0) or 0
+    int_exp_cnbv = m.get("interest_expense", 0) or 0
+    int_inc_cnbv = m.get("interest_income", 0) or 0
+    ebit_cnbv    = m.get("ebit", 0) or 0
+    pretax_gaap  = m.get("pretax_gaap", 0) or 0
+
+    # --- 1: Selling absorbe Otros gastos ---
+    selling_bb = selling_cnbv + other_exp                # 481.66 + 2,989.71 = 3,471.37
+    sga_bb     = selling_bb + ga_cnbv                     # 3,471.37 + 732.37 = 4,203.74
+
+    # --- 2: Other Op Expense neto = -Otros_ingresos - Disposal_gain ---
+    other_op_expense_bb = -other_inc - disposal_period    # -438.20 - 63.27 = -501.47
+
+    op_expenses_total_bb = sga_bb + other_op_expense_bb   # 4,203.74 - 501.47 = 3,702.27
+
+    # --- 4: Operating Income BB = EBIT CNBV + Disposal_gain ---
+    ebit_bb = ebit_cnbv + disposal_period                  # 2,349.43 + 63.27 = 2,412.70
+
+    # --- 3: Interest Expense absorbe Ingresos_financieros negativos ---
+    if int_inc_cnbv < 0:
+        int_exp_bb = int_exp_cnbv + abs(int_inc_cnbv)
+        int_inc_bb = 0.0
+    else:
+        int_exp_bb = int_exp_cnbv
+        int_inc_bb = int_inc_cnbv
+    net_interest_bb = int_exp_bb - int_inc_bb
+
+    fx_loss     = m.get("fx_loss", 0) or 0
+    affiliates  = m.get("affiliates_loss", 0) or 0
+    other_nop   = m.get("other_non_op", 0) or 0
+    non_op_loss_bb = net_interest_bb + fx_loss + affiliates + other_nop
+
+    # --- 5: Pretax Adjusted = Pretax_GAAP + Disposal (porque BB lo saca de Adj) ---
+    pretax_adjusted_bb = pretax_gaap + disposal_period    # 1,999.81 + 63.27 = 2,063.08
+    abnormal_losses_bb = disposal_period                   # 63.27
+    disposal_assets_bb = disposal_period                   # 63.27
+
+    # EBITDA recalc con nuevo EBIT
+    da_value = (m.get("ebitda", 0) or 0) - ebit_cnbv      # extraer D&A original
+    ebitda_bb = ebit_bb + da_value
+
+    # Margenes recalc con nuevo EBIT
+    revenue = m.get("revenue", 0) or 0
+    operating_margin_bb = (ebit_bb / revenue) if revenue else 0
+
+    # Update dict
+    m["selling_expenses"]    = selling_bb
+    m["sga_total"]           = sga_bb
+    m["other_op_expense"]    = other_op_expense_bb
+    m["op_expenses_total"]   = op_expenses_total_bb
+    m["ebit"]                = ebit_bb
+    m["ebita"]               = ebit_bb
+    m["interest_expense"]    = int_exp_bb
+    m["interest_income"]     = int_inc_bb
+    m["net_interest"]        = net_interest_bb
+    m["non_op_loss"]         = non_op_loss_bb
+    m["pretax_adjusted"]     = pretax_adjusted_bb
+    m["abnormal_losses"]     = abnormal_losses_bb
+    m["disposal_assets"]     = disposal_assets_bb
+    m["ebitda"]              = ebitda_bb
+    m["operating_margin"]    = operating_margin_bb
+    return m
+
+
+# Registry: ticker -> reclassification function
+TICKER_RECLASS_RULES = {
+    "CUERVO": _apply_cuervo_reclass,
+}
+
+
 def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
-                              prev_year_snap=None) -> dict:
+                              prev_year_snap=None, ticker=None,
+                              disposal_period: float = 0.0) -> dict:
     """Calcula TODAS las metricas Bloomberg-style para un periodo.
 
     snap: PeriodSnapshot del periodo actual.
     annual_only: si True, usa income (acum YTD); si False, income_quarter (3M).
     prev_year_snap: misma quarter, año anterior (para Growth YoY).
+    ticker: si presente y hay regla en TICKER_RECLASS_RULES, aplica
+            reclasificacion CNBV->Bloomberg al final.
+    disposal_period: Disposal of Assets en BB-sign (positivo=gain) para el periodo,
+                      ya pre-calculado por el caller (puede requerir derivacion trim).
     """
     res = snap.parsed
     # Source: income_quarter para trim, income para anual; fallback a income
@@ -210,70 +311,43 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
     total_cash_div = to_mdp(abs(_safe_get(cf, "dividends_paid")))
     dps = (total_cash_div / shares_mn) if shares_mn else None
 
-    return {
-        "revenue":          revenue,
-        "growth_yoy":       growth_yoy,
-        "rd_in_cogs":       0.0,
-        "cost_of_revenue":  cost_of_revenue,
-        "gross_profit":     gross_profit,
-        "other_op_income":  other_op_income,
-        "op_expenses_total":op_expenses_total,
-        "sga_total":        sga_total,
-        "selling_expenses": selling,
-        "ga_expenses":      ga,
-        "rd_in_opex":       0.0,
-        "other_op_expense": other_op_expense,
-        "ebit":             ebit,
-        "non_op_loss":      non_op_loss,
-        "net_interest":     net_interest,
-        "interest_expense": interest_exp,
-        "interest_income":  interest_inc,
-        "fx_loss":          fx_result,
-        "affiliates_loss":  affiliates_loss,
-        "other_non_op":     other_non_op,
-        "pretax_adjusted":  pretax_adjusted,
-        "abnormal_losses":  abnormal,
-        "disposal_assets":  disposal_assets,
-        "asset_writedown":  asset_writedown,
-        "unrealized_inv":   unrealized_inv,
-        "pretax_gaap":      pretax_gaap,
-        "tax_expense":      tax_expense,
-        "current_tax":      current_tax,
-        "deferred_tax":     deferred_tax,
-        "income_cont_ops":  income_cont_ops,
-        "net_xo":           net_xo,
-        "disc_ops":         disc_ops,
-        "acc_changes":      acc_changes,
-        "ni_incl_mi":       ni_incl_mi,
-        "minority_interest":minority,
-        "net_income_gaap":  ni_gaap,
-        "preferred_div":    preferred_div,
-        "other_adj":        other_adj,
-        "ni_common_gaap":   ni_common_gaap,
-        "ni_common_adj":    ni_common_adj,
-        "net_abnormal":     0.0,
-        "net_xo_2":         0.0,
-        "shares_basic":     shares_mn,
-        "eps_basic_gaap":   eps_basic_gaap,
-        "eps_basic_cont":   eps_basic_gaap,   # = GAAP (no disc ops)
-        "eps_basic_adj":    eps_basic_gaap,   # = GAAP (sin abnormal adj)
-        "shares_diluted":   shares_mn,
-        "eps_dil_gaap":     eps_dil_gaap,
-        "eps_dil_cont":     eps_dil_gaap,
-        "eps_dil_adj":      eps_dil_gaap,
-        "accounting_std":   "IAS/IFRS",
-        "ebitda":           ebitda,
-        "ebitda_margin_ttm":ebitda_margin_ttm,
-        "ebita":            ebit,
-        "gross_margin":     gross_margin,
-        "operating_margin": operating_margin,
-        "profit_margin":    profit_margin,
-        "sales_per_emp":    None,
-        "dps":              dps,
-        "total_cash_div":   total_cash_div,
-        "export_sales":     None,
-        "dep_expense":      da_value,
+    # Ensamblar dict de salida (luego se aplica reclassification por ticker)
+    output = {
+        "revenue": revenue, "growth_yoy": growth_yoy, "rd_in_cogs": 0.0,
+        "cost_of_revenue": cost_of_revenue, "gross_profit": gross_profit,
+        "other_op_income": other_op_income,
+        "op_expenses_total": sga_total + other_op_expense,
+        "sga_total": sga_total, "selling_expenses": selling, "ga_expenses": ga,
+        "rd_in_opex": 0.0, "other_op_expense": other_op_expense, "ebit": ebit,
+        "non_op_loss": non_op_loss, "net_interest": net_interest,
+        "interest_expense": interest_exp, "interest_income": interest_inc,
+        "fx_loss": fx_result, "affiliates_loss": affiliates_loss,
+        "other_non_op": other_non_op,
+        "pretax_adjusted": pretax_adjusted, "abnormal_losses": abnormal,
+        "disposal_assets": disposal_assets, "asset_writedown": asset_writedown,
+        "unrealized_inv": unrealized_inv, "pretax_gaap": pretax_gaap,
+        "tax_expense": tax_expense, "current_tax": current_tax,
+        "deferred_tax": deferred_tax, "income_cont_ops": income_cont_ops,
+        "net_xo": net_xo, "disc_ops": disc_ops, "acc_changes": acc_changes,
+        "ni_incl_mi": ni_incl_mi, "minority_interest": minority,
+        "net_income_gaap": ni_gaap, "preferred_div": preferred_div,
+        "other_adj": other_adj, "ni_common_gaap": ni_common_gaap,
+        "ni_common_adj": ni_common_adj, "net_abnormal": 0.0, "net_xo_2": 0.0,
+        "shares_basic": shares_mn, "eps_basic_gaap": eps_basic_gaap,
+        "eps_basic_cont": eps_basic_gaap, "eps_basic_adj": eps_basic_gaap,
+        "shares_diluted": shares_mn, "eps_dil_gaap": eps_dil_gaap,
+        "eps_dil_cont": eps_dil_gaap, "eps_dil_adj": eps_dil_gaap,
+        "accounting_std": "IAS/IFRS", "ebitda": ebitda,
+        "ebitda_margin_ttm": ebitda_margin_ttm, "ebita": ebit,
+        "gross_margin": gross_margin, "operating_margin": operating_margin,
+        "profit_margin": profit_margin, "sales_per_emp": None, "dps": dps,
+        "total_cash_div": total_cash_div, "export_sales": None,
+        "dep_expense": da_value,
     }
+    if ticker and ticker in TICKER_RECLASS_RULES:
+        # disposal_period ya viene en BB-sign (positivo=gain) en MDP
+        output = TICKER_RECLASS_RULES[ticker](output, disposal_period=disposal_period)
+    return output
 
 
 def _income_adjusted_lines(use_quarter_data: bool):
@@ -541,15 +615,21 @@ def _derive_cf_pure_quarter(series, max_periods=None):
 # ---------------------------------------------------------------------------
 
 def build_income_adjusted_panel(series, annual_only=False,
-                                  fx_rate_usdmxn=19.5, max_periods=None):
+                                  fx_rate_usdmxn=19.5, max_periods=None,
+                                  ticker=None):
     """Income Statement EXACTO estilo Bloomberg Adjusted.
 
     Si annual_only=True usa income (acumulado del Q4 = full year).
     Si annual_only=False usa income_quarter (3 meses puros).
+    Si `ticker` esta en TICKER_RECLASS_RULES, aplica reclassification CNBV->BB.
     """
     snaps = series.annual if annual_only else series.snapshots
     if max_periods:
         snaps = snaps[-max_periods:]
+
+    # Auto-detectar ticker si no se pasa
+    if ticker is None:
+        ticker = series.ticker
 
     labels = [l for l, _, _ in BLOOMBERG_INCOME_LAYOUT]
     kinds  = [k for _, _, k in BLOOMBERG_INCOME_LAYOUT]
@@ -560,11 +640,33 @@ def build_income_adjusted_panel(series, annual_only=False,
     # Index para Growth YoY: same quarter, prev year
     by_year_q = {(s.year, s.quarter): s for s in series.snapshots}
 
+    # Helper: deriva disposal del periodo (trim puro o anual)
+    # CNBV "+ (-) Pérdida (utilidad) por disposicion": positivo = LOSS (add-back en CF
+    # porque la perdida no afecto cash). Bloomberg "Disposal of Assets" positivo
+    # tambien = LOSS (que se excluye de Pretax Adjusted como abnormal).
+    # MISMO SIGNO -> no invertir. Verificado CUERVO Q4 2025: +63.272 ambos.
+    def _disposal_for_period(s_curr, fx):
+        cf_acum = getattr(s_curr.parsed.cashflow, "disposal_loss_gain", 0) or 0
+        if annual_only:
+            return cf_acum * fx / 1_000_000
+        # Trimestral: derivar Q puro = Q_acum - prev_Q_same_year_acum
+        prev_q_map = {"2": "1", "3": "2", "4": "3", "4D": "3"}
+        prev_q = prev_q_map.get(s_curr.quarter)
+        if prev_q is None:
+            return cf_acum * fx / 1_000_000   # Q1
+        prev_snap_same_yr = by_year_q.get((s_curr.year, prev_q))
+        if prev_snap_same_yr is None:
+            return cf_acum * fx / 1_000_000   # fallback
+        prev_acum = getattr(prev_snap_same_yr.parsed.cashflow, "disposal_loss_gain", 0) or 0
+        return (cf_acum - prev_acum) * fx / 1_000_000
+
     cols_data = {}
     for s in snaps:
         fx = _detect_fx_mult(s, fx_rate_usdmxn)
         prev_snap = by_year_q.get((s.year - 1, s.quarter))
-        metrics = _compute_income_metrics(s, annual_only, fx, prev_snap)
+        disposal = _disposal_for_period(s, fx)
+        metrics = _compute_income_metrics(s, annual_only, fx, prev_snap,
+                                            ticker=ticker, disposal_period=disposal)
 
         col_vals = []
         for label, key, kind in BLOOMBERG_INCOME_LAYOUT:
