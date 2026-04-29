@@ -680,56 +680,96 @@ if mode == "Single DCF":
             ])
 
             def _render_panel(panel_df, kinds_list, title):
+                """Renderiza tabla estilo Bloomberg con HTML puro (full styling)."""
                 if panel_df.empty or panel_df.shape[1] == 0:
                     st.warning(f"Sin datos para {title}.")
                     return
                 fmt_df = format_panel(panel_df, kinds_list)
+                import html as _html
 
-                # Bloomberg-style row coloring
-                def _row_style(row):
-                    i = list(fmt_df.index).index(row.name)
+                # CSS Bloomberg-grade
+                css = """
+                <style>
+                .bb-wrap { overflow-x: auto; margin: 4px 0 18px 0; }
+                .bb-table {
+                    border-collapse: collapse;
+                    width: 100%;
+                    font-family: "Segoe UI","Arial","Helvetica Neue",sans-serif;
+                    font-size: 12.5px;
+                    table-layout: auto;
+                }
+                .bb-table th, .bb-table td {
+                    padding: 4px 12px;
+                    border-bottom: 1px solid #E5E7EB;
+                }
+                .bb-col-head {
+                    text-align: right;
+                    background: #F9FAFB;
+                    color: #111827;
+                    font-weight: 700;
+                    border-bottom: 2px solid #1F4E79 !important;
+                    position: sticky; top: 0; z-index: 2;
+                }
+                .bb-row-head {
+                    text-align: left;
+                    white-space: pre;
+                    padding-left: 12px;
+                    font-weight: inherit;
+                    color: inherit;
+                    background: inherit;
+                }
+                .bb-table td { text-align: right; font-variant-numeric: tabular-nums; }
+                /* Row variants */
+                .bb-r-header   { background: #1F4E79; color: #FFFFFF; font-weight: 700; }
+                .bb-r-header   td, .bb-r-header   th { color: #FFFFFF !important; font-weight: 700 !important; }
+                .bb-r-subtotal { background: #DCEDC8; color: #14532D; font-weight: 700; }
+                .bb-r-subtotal td, .bb-r-subtotal th { font-weight: 700 !important; }
+                .bb-r-section  { background: #4B5563; color: #FFFFFF; font-weight: 600; font-style: italic; }
+                .bb-r-section  td, .bb-r-section  th { color: #FFFFFF !important; }
+                .bb-r-ratio    { background: #F1F8E9; color: #1F2937; font-style: italic; }
+                .bb-r-ratio_eps{ background: #FFF8E1; color: #1F2937; font-style: italic; }
+                .bb-r-ratio_x  { background: #FFF3E0; color: #1F2937; font-style: italic; }
+                .bb-r-raw_days { background: #FCE7F3; color: #1F2937; font-style: italic; }
+                .bb-r-raw      { background: #F9FBF7; color: #1F2937; }
+                .bb-r-string   { background: #F3F4F6; color: #374151; font-style: italic; }
+                .bb-r-sub      { background: #FAFCFA; color: #4B5563; font-size: 11.5px; }
+                .bb-r-bold_line{ background: #F9FBF7; color: #111827; font-weight: 700; }
+                .bb-r-bold_line td, .bb-r-bold_line th { font-weight: 700 !important; }
+                .bb-r-spacer   { background: #FFFFFF; height: 8px; }
+                .bb-r-spacer td, .bb-r-spacer th { padding: 0 12px; border-bottom: none; }
+                .bb-r-line     { background: #FFFFFF; color: #1F2937; }
+                .bb-r-line:hover, .bb-r-bold_line:hover, .bb-r-sub:hover { background: #EFF6FF; }
+                </style>
+                """
+
+                # Build HTML
+                rows_html = []
+                # Header
+                head_cells = "".join(
+                    f'<th class="bb-col-head">{_html.escape(str(c))}</th>'
+                    for c in fmt_df.columns
+                )
+                rows_html.append(f'<tr><th class="bb-col-head bb-row-head">&nbsp;</th>{head_cells}</tr>')
+
+                for i, (idx, row) in enumerate(fmt_df.iterrows()):
                     kind = kinds_list[i] if i < len(kinds_list) else "line"
-                    if kind == "header":
-                        return ["background-color: #1F4E79; color: white; font-weight: 700;"] * len(row)
-                    if kind == "subtotal":
-                        return ["background-color: #DCEDC8; font-weight: 600; color: #1F2937;"] * len(row)
-                    if kind == "section":
-                        return ["background-color: #6B7280; color: white; font-weight: 600; font-style: italic;"] * len(row)
-                    if kind == "ratio":
-                        return ["background-color: #F1F8E9; font-style: italic; color: #374151;"] * len(row)
-                    if kind == "ratio_eps":
-                        return ["background-color: #FFF8E1; font-style: italic; color: #374151;"] * len(row)
-                    if kind == "string":
-                        return ["background-color: #F3F4F6; color: #374151; font-style: italic;"] * len(row)
-                    if kind == "sub":
-                        return ["background-color: #FAFCFA; color: #4B5563; font-size: 11px;"] * len(row)
-                    if kind == "bold_line":
-                        return ["background-color: #F9FBF7; color: #1F2937; font-weight: 700;"] * len(row)
-                    if kind == "spacer":
-                        return ["background-color: white;"] * len(row)
-                    return ["background-color: #F9FBF7;"] * len(row)
-
-                try:
-                    styler = fmt_df.style.apply(_row_style, axis=1)
-                    styler = styler.set_properties(**{
-                        "text-align": "right",
-                        "padding": "3px 10px",
-                        "font-size": "12px",
-                    })
-                    # Preservar leading spaces en la columna del concepto (index)
-                    # para que indentacion 2/4 espacios se vea visualmente
-                    styler = styler.set_table_styles([
-                        {"selector": "th.row_heading", "props": [("white-space", "pre"),
-                                                                    ("text-align", "left")]},
-                        {"selector": "th.col_heading", "props": [("text-align", "right")]},
-                    ])
-                    st.dataframe(
-                        styler,
-                        use_container_width=True,
-                        height=min(1200, 28 + 28 * len(fmt_df)),
+                    css_cls = f"bb-r-{kind}"
+                    # Preservar leading spaces convirtiendolos a &nbsp; (white-space:pre tambien aplica)
+                    label_html = _html.escape(str(idx)).replace(" ", "&nbsp;")
+                    cells = "".join(
+                        f'<td>{_html.escape(str(row[c])) if row[c] is not None else ""}</td>'
+                        for c in fmt_df.columns
                     )
-                except Exception:
-                    st.dataframe(fmt_df, use_container_width=True)
+                    rows_html.append(
+                        f'<tr class="{css_cls}"><th class="bb-row-head">{label_html}</th>{cells}</tr>'
+                    )
+
+                table_html = (
+                    f'{css}<div class="bb-wrap"><table class="bb-table">'
+                    + "".join(rows_html)
+                    + "</table></div>"
+                )
+                st.markdown(table_html, unsafe_allow_html=True)
 
             with sub_is:
                 df_is, kinds_is = build_income_adjusted_panel(
