@@ -660,7 +660,15 @@ class XBRLReader:
             "- Reembolsos de prestamos",
             "Reembolsos de préstamos",
         )
-        cf.dividends_paid = g("- Dividendos pagados", "Dividendos pagados")
+        # "- Dividendos pagados" duplicado: row 31 (CFO=0) y row 74 (Financing).
+        # Tomar la ULTIMA ocurrencia no-cero (Financing).
+        div_paid_rows = idx.find_all_rows("- Dividendos pagados")
+        cf.dividends_paid = 0.0
+        for r in reversed(div_paid_rows):
+            v = idx.get_at_row(r, col=col)
+            if v and abs(v) > 0.001:
+                cf.dividends_paid = v * factor
+                break
         cf.cff = g(
             "Flujos de efectivo netos procedentes de (utilizados en) actividades de financiamiento",
             "Flujos de efectivo netos procedentes (utilizados en) actividades de financiamiento",

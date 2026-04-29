@@ -1005,15 +1005,16 @@ def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
     cash_st_debt = 0.0                       # CUERVO no separa ST debt en CF
     cash_from_lt_debt = debt_issued_p        # CNBV row 69
     repay_lt_debt = -debt_repaid_p          # CNBV stored positive; BB negative
-    cash_repay_debt = cash_st_debt + cash_from_lt_debt + repay_lt_debt
+    # BB INCLUYE lease_payments en "Cash From (Repayment) Debt" (no en Other Fin)
+    cash_repay_debt = cash_st_debt + cash_from_lt_debt + repay_lt_debt - abs(lease_pmt_p)
 
     incr_cap_stock = 0.0
     decr_cap_stock = 0.0
     cash_repurch_eq = incr_cap_stock + decr_cap_stock
 
-    # Other Financing = lease_payments only (interest_paid_fin reclasificado a CFO)
-    # CUERVO CNBV: lease_pmt stored positive (label "-"); BB negative
-    other_fin = -abs(lease_pmt_p)
+    # Other Financing = 0 en BB (lease ya esta en cash_repay_debt; interest_paid_fin
+    # ya esta en CFO via reclassification)
+    other_fin = 0.0
     disc_ops_fin = 0.0
     # BB CFF = CNBV CFF + interest_paid_financing (revertir: BB no clasifica
     # interest paid en financing, lo manda a operating)
@@ -1035,23 +1036,25 @@ def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
     # ===== REFERENCE ITEMS =====
     # EBITDA del periodo
     ebitda_period = ebit_period + da_period
-    # Interest Received: usar row 58 CFI si existe (es el cash recibido real);
-    # fallback a abs(int_recv_p) (row 34 signed CFO).
-    interest_received = abs(int_recv_cfi_p) if int_recv_cfi_p else abs(int_recv_p)
+    # Interest Received BB-style: SUMA magnitudes de interest_received_cfo y
+    # interest_paid_cfo. CUERVO los usa como pares de cancelacion entre CFO/CFI;
+    # BB las roll up como "Interest Received" total magnitude.
+    interest_received = abs(int_recv_p) + abs(int_paid_cfo_p)
 
-    # FCF (Bloomberg standard) = CFO - CapEx
-    capex_total = capex_ppe_p + capex_intang_p
-    fcf = cfo_total - capex_total
+    # FCF Bloomberg = CFO - CapEx_PPE only (NO incluye intangibles)
+    fcf = cfo_total - capex_ppe_p
 
     # FCFF Bloomberg "pre-tax operating" style:
-    # FCFF = EBITDA + Tax Expense - CapEx
+    # FCFF = EBITDA + Tax Expense - CapEx_total (incluye intangibles)
     # (verified vs CUERVO Q4 2025 trim: 2,680.27 vs BB 2,681.85, diff 0.06%)
+    capex_total = capex_ppe_p + capex_intang_p
     fcff = ebitda_period + tax_expense_period - capex_total
 
-    # FCFE = FCF - Net Debt Repayment + Net Debt Issuance - Lease Principal
-    fcfe = fcf - (debt_repaid_p - debt_issued_p) - abs(lease_pmt_p)
+    # FCFE Bloomberg = FCF + Cash From (Repayment) Debt
+    # (Cash From Debt ya incluye debt_issued, -debt_repaid, y -lease_pmt)
+    fcfe = fcf + cash_repay_debt
 
-    # Per share
+    # Per share (usar ni_period que aqui es NI_controlling)
     fcf_per_share = (fcf / shares) if shares else 0
     px_to_fcf = (market_price / fcf_per_share) if (market_price and fcf_per_share) else 0
     cf_to_ni = (cfo_total / ni_period) if ni_period else 0
@@ -1447,16 +1450,19 @@ def build_cf_standardized_panel(series, annual_only=False,
     for s in snaps:
         fx = _detect_fx_mult(s, fx_rate_usdmxn)
 
-        # NI / EBIT / D&A / Tax Expense del periodo
+        # NI controlling / EBIT / D&A / Tax Expense del periodo
+        # BB usa Net Income CONTROLLING (excluye minority interest).
         if annual_only:
             inc = s.parsed.income
-            ni_period = (inc.net_income or 0) * fx / 1_000_000
+            ni_ctrl = inc.net_income_controlling or inc.net_income or 0
+            ni_period = ni_ctrl * fx / 1_000_000
             ebit_period = (inc.ebit or 0) * fx / 1_000_000
             tax_exp_p = (inc.tax_expense or 0) * fx / 1_000_000
             da_period = (s.parsed.informative.da_12m or 0) * fx / 1_000_000
         else:
             inc_q = getattr(s.parsed, "income_quarter", None) or s.parsed.income
-            ni_period = (inc_q.net_income or 0) * fx / 1_000_000
+            ni_ctrl = inc_q.net_income_controlling or inc_q.net_income or 0
+            ni_period = ni_ctrl * fx / 1_000_000
             ebit_period = (inc_q.ebit or 0) * fx / 1_000_000
             tax_exp_p = (inc_q.tax_expense or 0) * fx / 1_000_000
             # da_quarter del periodo, fallback a derivar de da_12m
@@ -1471,7 +1477,8 @@ def build_cf_standardized_panel(series, annual_only=False,
         ebit_12m = (s.parsed.informative.ebit_12m or 0) * fx / 1_000_000
         da_12m = (s.parsed.informative.da_12m or 0) * fx / 1_000_000
         ebitda_12m = ebit_12m + da_12m
-        ebitda_ttm_margin = (ebitda_12m / rev_12m) if rev_12m else 0
+        # BB muestra TTM EBITDA Margin como porcentaje (×100)
+        ebitda_ttm_margin = (ebitda_12m / rev_12m * 100) if rev_12m else 0
 
         # CF period values (todos derivados de acum)
         cfo_pre_adj_p = _derive_period(s, fx, ("cashflow", "cfo_pre_adj"))
