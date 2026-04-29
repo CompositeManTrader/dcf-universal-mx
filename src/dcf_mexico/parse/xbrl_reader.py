@@ -763,6 +763,18 @@ class XBRLReader:
             "+ (-) Impuestos a las utilidades reembolsados (pagados)",
         )
 
+        # CFI: "+ Intereses cobrados" (row 58) — CUERVO espeja row 34 aqui;
+        #      "+ Dividendos recibidos" puede aparecer 2x (row 32 CFO, row 56 CFI).
+        cf.interest_received_in_cfi = g("+ Intereses cobrados")
+        # dividendos_received CFI: tomar la SEGUNDA ocurrencia (CFI section)
+        div_rec_rows = idx.find_all_rows("+ Dividendos recibidos")
+        if len(div_rec_rows) >= 2:
+            cf.dividends_received_cfi = (idx.get_at_row(div_rec_rows[1], col=col) or 0) * factor
+        elif len(div_rec_rows) == 1:
+            # Solo una ocurrencia; si esta en rango CFI (>= row 50), asignar
+            if div_rec_rows[0] >= 50:
+                cf.dividends_received_cfi = (idx.get_at_row(div_rec_rows[0], col=col) or 0) * factor
+
         # FX effect on cash
         cf.fx_effect_on_cash = g(
             "Efectos de la variación en la tasa de cambio sobre el efectivo y equivalentes al efectivo",

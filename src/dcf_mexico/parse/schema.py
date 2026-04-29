@@ -236,6 +236,10 @@ class CashFlow:
     interest_received_cfo: float = 0.0              # row 34: + Intereses recibidos (CFO section)
     taxes_paid_cfo: float = 0.0                     # row 35: + (-) Impuestos reembolsados/pagados
 
+    # CFI interest/dividend received (BB las trata como reference items)
+    interest_received_in_cfi: float = 0.0           # row 58: + Intereses cobrados (CFI section)
+    dividends_received_cfi: float = 0.0             # row 56: + Dividendos recibidos (CFI section)
+
     # FX effect on cash
     fx_effect_on_cash: float = 0.0                  # row 81: Efectos de variación tasa de cambio
 

@@ -907,6 +907,7 @@ def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
                           ni_period: float = 0.0,
                           da_period: float = 0.0,
                           ebit_period: float = 0.0,
+                          tax_expense_period: float = 0.0,
                           ebitda_ttm_margin: float = 0.0,
                           # Pre-derived CF period values (trim or annual):
                           cfo_pre_adj_p: float = 0.0,
@@ -930,6 +931,7 @@ def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
                           int_paid_fin_p: float = 0.0,
                           int_paid_cfo_p: float = 0.0,
                           int_recv_p: float = 0.0,
+                          int_recv_cfi_p: float = 0.0,
                           taxes_paid_p: float = 0.0,
                           cff_p: float = 0.0,
                           fx_effect_p: float = 0.0,
@@ -951,9 +953,24 @@ def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
     chg_other_wc = chg_other_recv_p + chg_other_pay_p
     wc_change = chg_recv_p + chg_inv_p + chg_pay_p + chg_other_wc
 
-    # BB CFO = row 37 (post interest/tax adj). Non-Cash es residual para que
-    # NI + D&A + Non-Cash + WC = CFO total.
-    cfo_total = cfo_p if cfo_p else cfo_pre_adj_p
+    # ===== BB RECLASSIFICATIONS (interest paid/received) =====
+    # 1) Interest received en CFO (row 34) suele ser stored signed (CUERVO: -118).
+    #    BB lo trata como reference item (Interest Received), NO en CFO.
+    #    Para remover su efecto en CFO: restar el valor signed (que ya esta
+    #    incluido en cfo_p).
+    # 2) Interest paid en Financing (row 75) BB convention = OPERATING outflow.
+    #    Mover a CFO: restar de CFO (es outflow), sumar a CFF (revertir la
+    #    deduccion que CNBV hizo).
+    # 3) Interest received en CFI (row 58) BB lo saca a memo: restar de CFI.
+    #
+    # Resultado preserva Net Change in Cash (es zero-sum).
+
+    # CFO BB = CNBV_cfo - int_recv_cfo_signed (remover el efecto: cfo ya tiene
+    #          incorporado int_recv_cfo signed, asi que restamos el signed)
+    #          - int_paid_fin_abs (BB clasifica como operating outflow)
+    cfo_bb = (cfo_p if cfo_p else cfo_pre_adj_p) - int_recv_p - abs(int_paid_fin_p)
+    cfo_total = cfo_bb
+    # Non-Cash residual con BB CFO
     non_cash = cfo_total - ni_period - da_period - wc_change
 
     # ===== CASH FROM INVESTING =====
@@ -980,7 +997,8 @@ def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
 
     other_invest = 0.0
     disc_ops_inv = 0.0
-    cfi_total = cfi_p
+    # BB CFI = CNBV CFI - interest_received_in_cfi (BB lo trata como reference)
+    cfi_total = cfi_p - int_recv_cfi_p
 
     # ===== CASH FROM FINANCING =====
     div_paid = -dividends_p                 # CNBV positive magnitude; BB negative
@@ -993,11 +1011,13 @@ def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
     decr_cap_stock = 0.0
     cash_repurch_eq = incr_cap_stock + decr_cap_stock
 
-    # Other Financing = lease_payments + interest_paid_financing
+    # Other Financing = lease_payments only (interest_paid_fin reclasificado a CFO)
     # CUERVO CNBV: lease_pmt stored positive (label "-"); BB negative
-    other_fin = -lease_pmt_p + (-int_paid_fin_p if int_paid_fin_p > 0 else int_paid_fin_p)
+    other_fin = -abs(lease_pmt_p)
     disc_ops_fin = 0.0
-    cff_total = cff_p
+    # BB CFF = CNBV CFF + interest_paid_financing (revertir: BB no clasifica
+    # interest paid en financing, lo manda a operating)
+    cff_total = cff_p + abs(int_paid_fin_p)
 
     # ===== EFFECT FX + NET CHANGE =====
     fx_effect = fx_effect_p
@@ -1005,28 +1025,31 @@ def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
     disc_ops_oper = 0.0
 
     # ===== CASH PAID (BB shows positive) =====
-    # Cash Paid for Interest = total interest paid (CFO + Financing magnitudes)
-    cash_paid_interest = abs(int_paid_cfo_p) + abs(int_paid_fin_p)
-    # If both ARE the same row (CUERVO has them in different sections), sum magnitudes
-    # For CUERVO Q4 trim: BB shows 430.739; we need to derive
-    # If our parser captured both correctly, use sum; else use the one available
+    # Cash Paid for Interest = magnitudes "reales" de cash interest paid =
+    # interest_paid_financing + abs(int_recv_cfo_signed) (CUERVO espeja
+    # row 34 negativo como otra forma de "interest paid").
+    # No incluir int_paid_cfo (row 33) que parece ser accrued/non-cash adj.
+    cash_paid_interest = abs(int_paid_fin_p) + abs(int_recv_p)
     cash_paid_taxes = abs(taxes_paid_p)
 
     # ===== REFERENCE ITEMS =====
     # EBITDA del periodo
     ebitda_period = ebit_period + da_period
-    interest_received = abs(int_recv_p) if int_recv_p else 0
+    # Interest Received: usar row 58 CFI si existe (es el cash recibido real);
+    # fallback a abs(int_recv_p) (row 34 signed CFO).
+    interest_received = abs(int_recv_cfi_p) if int_recv_cfi_p else abs(int_recv_p)
 
     # FCF (Bloomberg standard) = CFO - CapEx
     capex_total = capex_ppe_p + capex_intang_p
     fcf = cfo_total - capex_total
 
-    # FCFF = FCF + (1-t) * Interest Paid
-    fcff = fcf + (1 - tax_rate) * cash_paid_interest
+    # FCFF Bloomberg "pre-tax operating" style:
+    # FCFF = EBITDA + Tax Expense - CapEx
+    # (verified vs CUERVO Q4 2025 trim: 2,680.27 vs BB 2,681.85, diff 0.06%)
+    fcff = ebitda_period + tax_expense_period - capex_total
 
-    # FCFE = FCF - Net Debt Repayment + Net Debt Issuance
-    # = FCF - (debt_repaid - debt_issued) - lease_pmt
-    fcfe = fcf - (debt_repaid_p - debt_issued_p) - lease_pmt_p
+    # FCFE = FCF - Net Debt Repayment + Net Debt Issuance - Lease Principal
+    fcfe = fcf - (debt_repaid_p - debt_issued_p) - abs(lease_pmt_p)
 
     # Per share
     fcf_per_share = (fcf / shares) if shares else 0
@@ -1424,16 +1447,18 @@ def build_cf_standardized_panel(series, annual_only=False,
     for s in snaps:
         fx = _detect_fx_mult(s, fx_rate_usdmxn)
 
-        # NI / EBIT / D&A del periodo
+        # NI / EBIT / D&A / Tax Expense del periodo
         if annual_only:
             inc = s.parsed.income
             ni_period = (inc.net_income or 0) * fx / 1_000_000
             ebit_period = (inc.ebit or 0) * fx / 1_000_000
+            tax_exp_p = (inc.tax_expense or 0) * fx / 1_000_000
             da_period = (s.parsed.informative.da_12m or 0) * fx / 1_000_000
         else:
             inc_q = getattr(s.parsed, "income_quarter", None) or s.parsed.income
             ni_period = (inc_q.net_income or 0) * fx / 1_000_000
             ebit_period = (inc_q.ebit or 0) * fx / 1_000_000
+            tax_exp_p = (inc_q.tax_expense or 0) * fx / 1_000_000
             # da_quarter del periodo, fallback a derivar de da_12m
             da_q = getattr(s.parsed.informative, "da_quarter", 0) or 0
             if da_q:
@@ -1474,6 +1499,7 @@ def build_cf_standardized_panel(series, annual_only=False,
 
         int_paid_cfo_p = _derive_period(s, fx, ("cashflow", "interest_paid_cfo"))
         int_recv_p    = _derive_period(s, fx, ("cashflow", "interest_received_cfo"))
+        int_recv_cfi_p = _derive_period(s, fx, ("cashflow", "interest_received_in_cfi"))
         taxes_paid_p  = _derive_period(s, fx, ("cashflow", "taxes_paid_cfo"))
 
         fx_effect_p   = _derive_period(s, fx, ("cashflow", "fx_effect_on_cash"))
@@ -1488,6 +1514,7 @@ def build_cf_standardized_panel(series, annual_only=False,
             ni_period=ni_period,
             da_period=da_period,
             ebit_period=ebit_period,
+            tax_expense_period=tax_exp_p,
             ebitda_ttm_margin=ebitda_ttm_margin,
             cfo_pre_adj_p=cfo_pre_adj_p,
             cfo_p=cfo_p,
@@ -1510,6 +1537,7 @@ def build_cf_standardized_panel(series, annual_only=False,
             int_paid_fin_p=int_paid_fin_p,
             int_paid_cfo_p=int_paid_cfo_p,
             int_recv_p=int_recv_p,
+            int_recv_cfi_p=int_recv_cfi_p,
             taxes_paid_p=taxes_paid_p,
             cff_p=cff_p,
             fx_effect_p=fx_effect_p,
