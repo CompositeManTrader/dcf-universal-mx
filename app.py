@@ -203,7 +203,7 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 # Cache  (versionado para invalidar tras cambios de schema)
 # ---------------------------------------------------------------------------
-_PARSE_CACHE_VERSION = "v3-quarter"   # bump cuando cambies ParseResult schema
+_PARSE_CACHE_VERSION = "v4-bloomberg-exact"   # bump cuando cambies ParseResult schema
 
 @st.cache_data(show_spinner=False)
 def _parse_cached(filepath: str, _v: str = _PARSE_CACHE_VERSION):
@@ -684,7 +684,7 @@ if mode == "Single DCF":
                     return
                 fmt_df = format_panel(panel_df, kinds_list)
 
-                # Apply Bloomberg-style row coloring
+                # Bloomberg-style row coloring
                 def _row_style(row):
                     i = list(fmt_df.index).index(row.name)
                     kind = kinds_list[i] if i < len(kinds_list) else "line"
@@ -692,8 +692,16 @@ if mode == "Single DCF":
                         return ["background-color: #1F4E79; color: white; font-weight: 700;"] * len(row)
                     if kind == "subtotal":
                         return ["background-color: #DCEDC8; font-weight: 600; color: #1F2937;"] * len(row)
+                    if kind == "section":
+                        return ["background-color: #6B7280; color: white; font-weight: 600; font-style: italic;"] * len(row)
                     if kind == "ratio":
                         return ["background-color: #F1F8E9; font-style: italic; color: #374151;"] * len(row)
+                    if kind == "ratio_eps":
+                        return ["background-color: #FFF8E1; font-style: italic; color: #374151;"] * len(row)
+                    if kind == "string":
+                        return ["background-color: #F3F4F6; color: #374151; font-style: italic;"] * len(row)
+                    if kind == "sub":
+                        return ["background-color: #FAFCFA; color: #4B5563; font-size: 11px;"] * len(row)
                     if kind == "spacer":
                         return ["background-color: white;"] * len(row)
                     return ["background-color: #F9FBF7;"] * len(row)
@@ -702,13 +710,13 @@ if mode == "Single DCF":
                     styler = fmt_df.style.apply(_row_style, axis=1)
                     styler = styler.set_properties(**{
                         "text-align": "right",
-                        "padding": "4px 10px",
+                        "padding": "3px 10px",
                         "font-size": "12px",
                     })
                     st.dataframe(
                         styler,
                         use_container_width=True,
-                        height=min(900, 35 + 32 * len(fmt_df)),
+                        height=min(1200, 28 + 28 * len(fmt_df)),
                     )
                 except Exception:
                     st.dataframe(fmt_df, use_container_width=True)

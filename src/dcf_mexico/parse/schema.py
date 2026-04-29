@@ -89,8 +89,12 @@ class IncomeStatement:
     revenue: float = 0.0
     cost_of_sales: float = 0.0
     gross_profit: float = 0.0
-    operating_expenses: float = 0.0
-    other_operating: float = 0.0
+    operating_expenses: float = 0.0          # = selling + g&a + general (sumados)
+    selling_expenses: float = 0.0            # Gastos de venta (separado)
+    ga_expenses: float = 0.0                 # Gastos de administracion (separado)
+    other_operating_income: float = 0.0      # Otros ingresos (positivo)
+    other_operating_expense: float = 0.0     # Otros gastos (positivo)
+    other_operating: float = 0.0             # = other_op_income - other_op_expense (legacy)
     ebit: float = 0.0
     interest_income: float = 0.0
     interest_expense: float = 0.0
@@ -133,6 +137,10 @@ class IncomeStatementQuarter:
     cost_of_sales: float = 0.0
     gross_profit: float = 0.0
     operating_expenses: float = 0.0
+    selling_expenses: float = 0.0
+    ga_expenses: float = 0.0
+    other_operating_income: float = 0.0
+    other_operating_expense: float = 0.0
     other_operating: float = 0.0
     ebit: float = 0.0
     interest_income: float = 0.0
@@ -179,7 +187,8 @@ class CashFlow:
 class Informative:
     shares_outstanding: float = 0.0                 # Suma de todas las series
     shares_by_series: dict = field(default_factory=dict)
-    da_12m: float = 0.0                             # D&A 12 meses (de 700003 o 700002)
+    da_12m: float = 0.0                             # D&A 12 meses (de 700003)
+    da_quarter: float = 0.0                         # D&A del TRIMESTRE puro (700002 col 1)
     revenue_12m: float = 0.0
     revenue_12m_prior: float = 0.0
     ebit_12m: float = 0.0

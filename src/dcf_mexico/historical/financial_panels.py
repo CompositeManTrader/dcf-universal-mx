@@ -211,7 +211,13 @@ def build_cf_panel(series, annual_only: bool = False,
 
 
 def format_panel(df: pd.DataFrame, kinds: list[str]) -> pd.DataFrame:
-    """Formatea valores: % para 'ratio', MDP con separador para resto."""
+    """Formatea valores segun kind:
+       - 'ratio'     -> % con 2 decimales (ej. 22.43%)
+       - 'ratio_eps' -> 4 decimales (ej. 0.3892 para EPS)
+       - 'string'   -> texto raw (ej. 'IAS/IFRS')
+       - 'spacer'/'section' -> vacio
+       - resto      -> MDP con separador miles (ej. 11,076.7)
+    """
     if df.empty or df.shape[1] == 0:
         return pd.DataFrame(index=df.index, columns=df.columns, dtype=object)
 
@@ -220,10 +226,16 @@ def format_panel(df: pd.DataFrame, kinds: list[str]) -> pd.DataFrame:
         col_fmt = []
         for i, val in enumerate(df[col]):
             kind = kinds[i] if i < len(kinds) else "line"
-            if kind == "spacer" or val is None or pd.isna(val):
-                col_fmt.append("" if kind == "spacer" else "—")
+            if kind in ("spacer", "section"):
+                col_fmt.append("")
+            elif val is None or (isinstance(val, float) and pd.isna(val)):
+                col_fmt.append("—")
             elif kind == "ratio":
                 col_fmt.append(f"{val:.2%}")
+            elif kind == "ratio_eps":
+                col_fmt.append(f"{val:.4f}")
+            elif kind == "string":
+                col_fmt.append(str(val))
             else:
                 col_fmt.append(f"{val:,.1f}")
         fmt_data[col] = col_fmt

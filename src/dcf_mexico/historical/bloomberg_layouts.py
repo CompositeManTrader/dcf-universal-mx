@@ -17,9 +17,264 @@ from typing import Optional
 from .panel import _detect_fx_mult
 
 
-# ---------------------------------------------------------------------------
-# INCOME - Adjusted (estilo Bloomberg)
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# INCOME - Adjusted EXACTO Bloomberg (CUERVO compatible, generico para CNBV)
+# ===========================================================================
+
+# Layout: (display_label, key_in_metrics, kind)
+# kind:  header (resaltado azul), subtotal (verde), line (normal),
+#        sub (line indentada gris claro), ratio (%), ratio_eps (4 dec),
+#        string (raw text), section (separador), spacer (vacio)
+BLOOMBERG_INCOME_LAYOUT = [
+    ("Revenue",                                "revenue",            "header"),
+    ("    Growth (YoY)",                       "growth_yoy",         "ratio"),
+    ("    + Sales & Services Revenue",         "revenue",            "sub"),
+    ("  - Cost of Revenue",                    "cost_of_revenue",    "line"),
+    ("    + Cost of Goods & Services",         "cost_of_revenue",    "sub"),
+    ("    + Research & Development",           "rd_in_cogs",         "sub"),
+    ("Gross Profit",                           "gross_profit",       "subtotal"),
+    ("  + Other Operating Income",             "other_op_income",    "line"),
+    ("  - Operating Expenses",                 "op_expenses_total",  "line"),
+    ("    + Selling, General & Admin",         "sga_total",          "sub"),
+    ("    + Selling & Marketing",              "selling_expenses",   "sub"),
+    ("    + General & Administrative",         "ga_expenses",        "sub"),
+    ("    + Research & Development",           "rd_in_opex",         "sub"),
+    ("    + Other Operating Expense",          "other_op_expense",   "sub"),
+    ("Operating Income (Loss)",                "ebit",               "header"),
+    ("  - Non-Operating (Income) Loss",        "non_op_loss",        "line"),
+    ("    + Interest Expense, Net",            "net_interest",       "sub"),
+    ("    + Interest Expense",                 "interest_expense",   "sub"),
+    ("    - Interest Income",                  "interest_income",    "sub"),
+    ("    + Foreign Exch (Gain) Loss",         "fx_loss",            "sub"),
+    ("    + (Income) Loss from Affiliates",    "affiliates_loss",    "sub"),
+    ("    + Other Non-Op (Income) Loss",       "other_non_op",       "sub"),
+    ("Pretax Income (Loss), Adjusted",         "pretax_adjusted",    "subtotal"),
+    ("  - Abnormal Losses (Gains)",            "abnormal_losses",    "line"),
+    ("    + Disposal of Assets",               "disposal_assets",    "sub"),
+    ("    + Asset Write-Down",                 "asset_writedown",    "sub"),
+    ("    + Unrealized Investments",           "unrealized_inv",     "sub"),
+    ("Pretax Income (Loss), GAAP",             "pretax_gaap",        "subtotal"),
+    ("  - Income Tax Expense (Benefit)",       "tax_expense",        "line"),
+    ("    + Current Income Tax",               "current_tax",        "sub"),
+    ("    + Deferred Income Tax",              "deferred_tax",       "sub"),
+    ("Income (Loss) from Cont Ops",            "income_cont_ops",    "subtotal"),
+    ("  - Net Extraordinary Losses (Gains)",   "net_xo",             "line"),
+    ("    + Discontinued Operations",          "disc_ops",           "sub"),
+    ("    + XO & Accounting Changes",          "acc_changes",        "sub"),
+    ("Income (Loss) Incl. MI",                 "ni_incl_mi",         "subtotal"),
+    ("  - Minority Interest",                  "minority_interest",  "line"),
+    ("Net Income, GAAP",                       "net_income_gaap",    "header"),
+    ("  - Preferred Dividends",                "preferred_div",      "line"),
+    ("  - Other Adjustments",                  "other_adj",          "line"),
+    ("Net Income Avail to Common, GAAP",       "ni_common_gaap",     "header"),
+    ("",                                       None,                 "spacer"),
+    ("Net Income Avail to Common, Adj",        "ni_common_adj",      "header"),
+    ("  Net Abnormal Losses (Gains)",          "net_abnormal",       "line"),
+    ("  Net Extraordinary Losses (Gains)",     "net_xo_2",           "line"),
+    ("",                                       None,                 "spacer"),
+    ("Basic Weighted Avg Shares",              "shares_basic",       "line"),
+    ("Basic EPS, GAAP",                        "eps_basic_gaap",     "ratio_eps"),
+    ("Basic EPS from Cont Ops, GAAP",          "eps_basic_cont",     "ratio_eps"),
+    ("Basic EPS from Cont Ops, Adjusted",      "eps_basic_adj",      "ratio_eps"),
+    ("",                                       None,                 "spacer"),
+    ("Diluted Weighted Avg Shares",            "shares_diluted",     "line"),
+    ("Diluted EPS, GAAP",                      "eps_dil_gaap",       "ratio_eps"),
+    ("Diluted EPS from Cont Ops, GAAP",        "eps_dil_cont",       "ratio_eps"),
+    ("Diluted EPS from Cont Ops, Adjusted",    "eps_dil_adj",        "ratio_eps"),
+    ("",                                       None,                 "spacer"),
+    ("Reference Items",                        None,                 "section"),
+    ("Accounting Standard",                    "accounting_std",     "string"),
+    ("EBITDA",                                 "ebitda",             "line"),
+    ("EBITDA Margin (T12M)",                   "ebitda_margin_ttm",  "ratio"),
+    ("EBITA",                                  "ebita",              "line"),
+    ("EBIT",                                   "ebit",               "line"),
+    ("Gross Margin",                           "gross_margin",       "ratio"),
+    ("Operating Margin",                       "operating_margin",   "ratio"),
+    ("Profit Margin",                          "profit_margin",      "ratio"),
+    ("Sales per Employee",                     "sales_per_emp",      "line"),
+    ("Dividends per Share",                    "dps",                "ratio_eps"),
+    ("Total Cash Common Dividends",            "total_cash_div",     "line"),
+    ("Export Sales",                           "export_sales",       "line"),
+    ("Depreciation Expense",                   "dep_expense",        "line"),
+]
+
+
+def _safe_get(obj, attr, default=0.0):
+    v = getattr(obj, attr, default)
+    return default if v is None else v
+
+
+def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
+                              prev_year_snap=None) -> dict:
+    """Calcula TODAS las metricas Bloomberg-style para un periodo.
+
+    snap: PeriodSnapshot del periodo actual.
+    annual_only: si True, usa income (acum YTD); si False, income_quarter (3M).
+    prev_year_snap: misma quarter, año anterior (para Growth YoY).
+    """
+    res = snap.parsed
+    # Source: income_quarter para trim, income para anual; fallback a income
+    if (not annual_only) and getattr(res, "income_quarter", None) is not None:
+        inc = res.income_quarter
+    else:
+        inc = res.income
+
+    M = 1_000_000
+
+    def to_mdp(v):
+        try:
+            return (float(v or 0) * fx_mult) / M
+        except (TypeError, ValueError):
+            return 0.0
+
+    revenue          = to_mdp(_safe_get(inc, "revenue"))
+    cost_of_revenue  = to_mdp(_safe_get(inc, "cost_of_sales"))
+    gross_profit     = to_mdp(_safe_get(inc, "gross_profit"))
+    selling          = to_mdp(_safe_get(inc, "selling_expenses"))
+    ga               = to_mdp(_safe_get(inc, "ga_expenses"))
+    sga_total        = selling + ga
+    other_op_income  = to_mdp(_safe_get(inc, "other_operating_income"))
+    other_op_expense = to_mdp(_safe_get(inc, "other_operating_expense"))
+    op_expenses_total= sga_total + other_op_expense
+    ebit             = to_mdp(_safe_get(inc, "ebit"))
+
+    interest_exp     = to_mdp(_safe_get(inc, "interest_expense"))
+    interest_inc     = to_mdp(_safe_get(inc, "interest_income"))
+    net_interest     = interest_exp - interest_inc
+    fx_result        = to_mdp(_safe_get(inc, "fx_result"))
+    associates       = to_mdp(_safe_get(inc, "associates_result"))
+    affiliates_loss  = -associates  # Bloomberg: positivo = loss; CNBV: positivo = gain
+    other_non_op     = 0.0   # CNBV no separa explicitamente
+    non_op_loss      = net_interest + fx_result + affiliates_loss + other_non_op
+
+    pretax_gaap      = to_mdp(_safe_get(inc, "pretax_income"))
+    pretax_adjusted  = pretax_gaap   # sin separacion abnormal
+    abnormal         = pretax_gaap - pretax_adjusted   # = 0
+    disposal_assets  = 0.0
+    asset_writedown  = 0.0
+    unrealized_inv   = 0.0
+
+    tax_expense      = to_mdp(_safe_get(inc, "tax_expense"))
+    current_tax      = None  # CNBV no separa current vs deferred
+    deferred_tax     = None
+    income_cont_ops  = pretax_gaap - tax_expense
+
+    net_xo           = 0.0
+    disc_ops         = 0.0
+    acc_changes      = 0.0
+
+    ni_incl_mi       = to_mdp(_safe_get(inc, "net_income"))
+    minority         = to_mdp(_safe_get(inc, "net_income_minority"))
+    ni_gaap          = to_mdp(_safe_get(inc, "net_income_controlling"))
+    preferred_div    = 0.0
+    other_adj        = 0.0
+    ni_common_gaap   = ni_gaap - preferred_div - other_adj
+    ni_common_adj    = ni_common_gaap   # sin ajuste abnormal
+
+    shares_mn        = res.informative.shares_outstanding / M  # millones de acciones
+    eps_basic_gaap   = (ni_common_gaap / shares_mn) if shares_mn else 0.0
+    eps_dil_gaap     = eps_basic_gaap   # CUERVO no diluted
+
+    # Growth YoY: revenue actual / revenue mismo Q año anterior
+    growth_yoy = None
+    if prev_year_snap is not None:
+        prev_inc = (prev_year_snap.parsed.income_quarter
+                    if (not annual_only and getattr(prev_year_snap.parsed, "income_quarter", None))
+                    else prev_year_snap.parsed.income)
+        prev_fx = _detect_fx_mult(prev_year_snap, 19.5)  # default rate; suficiente para % YoY
+        prev_rev = to_mdp(_safe_get(prev_inc, "revenue")) * (prev_fx / fx_mult)  # ajustar FX
+        if prev_rev:
+            growth_yoy = revenue / prev_rev - 1.0
+
+    # D&A: trimestral usa da_quarter, anual usa da_12m
+    if annual_only:
+        da_value = to_mdp(res.informative.da_12m)
+        ebitda = ebit + da_value
+    else:
+        da_q = to_mdp(getattr(res.informative, "da_quarter", 0))
+        da_value = da_q
+        ebitda = ebit + da_q
+
+    # T12M EBITDA margin (siempre LTM)
+    ebitda_12m = to_mdp(res.informative.ebit_12m or 0) + to_mdp(res.informative.da_12m or 0)
+    revenue_12m = to_mdp(res.informative.revenue_12m or 0)
+    ebitda_margin_ttm = (ebitda_12m / revenue_12m) if revenue_12m else 0.0
+
+    # Margenes del periodo actual
+    gross_margin     = (gross_profit / revenue) if revenue else 0.0
+    operating_margin = (ebit / revenue) if revenue else 0.0
+    profit_margin    = (ni_common_gaap / revenue) if revenue else 0.0
+
+    # Dividends
+    cf = res.cashflow
+    total_cash_div = to_mdp(abs(_safe_get(cf, "dividends_paid")))
+    dps = (total_cash_div / shares_mn) if shares_mn else None
+
+    return {
+        "revenue":          revenue,
+        "growth_yoy":       growth_yoy,
+        "rd_in_cogs":       0.0,
+        "cost_of_revenue":  cost_of_revenue,
+        "gross_profit":     gross_profit,
+        "other_op_income":  other_op_income,
+        "op_expenses_total":op_expenses_total,
+        "sga_total":        sga_total,
+        "selling_expenses": selling,
+        "ga_expenses":      ga,
+        "rd_in_opex":       0.0,
+        "other_op_expense": other_op_expense,
+        "ebit":             ebit,
+        "non_op_loss":      non_op_loss,
+        "net_interest":     net_interest,
+        "interest_expense": interest_exp,
+        "interest_income":  interest_inc,
+        "fx_loss":          fx_result,
+        "affiliates_loss":  affiliates_loss,
+        "other_non_op":     other_non_op,
+        "pretax_adjusted":  pretax_adjusted,
+        "abnormal_losses":  abnormal,
+        "disposal_assets":  disposal_assets,
+        "asset_writedown":  asset_writedown,
+        "unrealized_inv":   unrealized_inv,
+        "pretax_gaap":      pretax_gaap,
+        "tax_expense":      tax_expense,
+        "current_tax":      current_tax,
+        "deferred_tax":     deferred_tax,
+        "income_cont_ops":  income_cont_ops,
+        "net_xo":           net_xo,
+        "disc_ops":         disc_ops,
+        "acc_changes":      acc_changes,
+        "ni_incl_mi":       ni_incl_mi,
+        "minority_interest":minority,
+        "net_income_gaap":  ni_gaap,
+        "preferred_div":    preferred_div,
+        "other_adj":        other_adj,
+        "ni_common_gaap":   ni_common_gaap,
+        "ni_common_adj":    ni_common_adj,
+        "net_abnormal":     0.0,
+        "net_xo_2":         0.0,
+        "shares_basic":     shares_mn,
+        "eps_basic_gaap":   eps_basic_gaap,
+        "eps_basic_cont":   eps_basic_gaap,   # = GAAP (no disc ops)
+        "eps_basic_adj":    eps_basic_gaap,   # = GAAP (sin abnormal adj)
+        "shares_diluted":   shares_mn,
+        "eps_dil_gaap":     eps_dil_gaap,
+        "eps_dil_cont":     eps_dil_gaap,
+        "eps_dil_adj":      eps_dil_gaap,
+        "accounting_std":   "IAS/IFRS",
+        "ebitda":           ebitda,
+        "ebitda_margin_ttm":ebitda_margin_ttm,
+        "ebita":            ebit,
+        "gross_margin":     gross_margin,
+        "operating_margin": operating_margin,
+        "profit_margin":    profit_margin,
+        "sales_per_emp":    None,
+        "dps":              dps,
+        "total_cash_div":   total_cash_div,
+        "export_sales":     None,
+        "dep_expense":      da_value,
+    }
+
 
 def _income_adjusted_lines(use_quarter_data: bool):
     """Devuelve INCOME_LINES adaptado para vista anual o trimestral.
@@ -287,14 +542,40 @@ def _derive_cf_pure_quarter(series, max_periods=None):
 
 def build_income_adjusted_panel(series, annual_only=False,
                                   fx_rate_usdmxn=19.5, max_periods=None):
-    """Income Statement estilo Bloomberg Adjusted.
+    """Income Statement EXACTO estilo Bloomberg Adjusted.
 
     Si annual_only=True usa income (acumulado del Q4 = full year).
     Si annual_only=False usa income_quarter (3 meses puros).
     """
-    rows_def = _income_adjusted_lines(use_quarter_data=not annual_only)
-    return _build_panel_with_view(series, rows_def, annual_only,
-                                    fx_rate_usdmxn, max_periods)
+    snaps = series.annual if annual_only else series.snapshots
+    if max_periods:
+        snaps = snaps[-max_periods:]
+
+    labels = [l for l, _, _ in BLOOMBERG_INCOME_LAYOUT]
+    kinds  = [k for _, _, k in BLOOMBERG_INCOME_LAYOUT]
+
+    if not snaps:
+        return pd.DataFrame(index=labels), kinds
+
+    # Index para Growth YoY: same quarter, prev year
+    by_year_q = {(s.year, s.quarter): s for s in series.snapshots}
+
+    cols_data = {}
+    for s in snaps:
+        fx = _detect_fx_mult(s, fx_rate_usdmxn)
+        prev_snap = by_year_q.get((s.year - 1, s.quarter))
+        metrics = _compute_income_metrics(s, annual_only, fx, prev_snap)
+
+        col_vals = []
+        for label, key, kind in BLOOMBERG_INCOME_LAYOUT:
+            if key is None or kind in ("spacer", "section"):
+                col_vals.append(None)
+            else:
+                col_vals.append(metrics.get(key))
+        cols_data[s.label] = col_vals
+
+    df = pd.DataFrame(cols_data, index=labels)
+    return df, kinds
 
 
 def build_bs_standardized_panel(series, annual_only=False,

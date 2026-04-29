@@ -439,10 +439,14 @@ class XBRLReader:
         gastos_venta = g("Gastos de venta")
         gastos_admin = g("Gastos de administración", "Gastos de administracion")
         gastos_grales = g("Gastos generales")
+        is_.selling_expenses = gastos_venta
+        is_.ga_expenses = gastos_admin
         is_.operating_expenses = gastos_venta + gastos_admin + gastos_grales
         # Otros operativos: ingresos menos gastos (CNBV los reporta separados)
         otros_ing = g("Otros ingresos")
         otros_gst = g("Otros gastos")
+        is_.other_operating_income = otros_ing
+        is_.other_operating_expense = otros_gst
         is_.other_operating = otros_ing - otros_gst
         is_.ebit = g(
             "Utilidad (pérdida) de operación",
@@ -608,16 +612,22 @@ class XBRLReader:
                 col=1, default=0.0,
             ) * factor
 
-        # 700002 - D&A acumulada (fallback si 700003 vacio)
-        if inf.da_12m == 0:
-            idxda = self._idx(SHEET_INFO_DA)
-            if idxda is not None:
+        # 700002 - D&A acumulada (fallback si 700003 vacio) + da_quarter (col 1)
+        idxda = self._idx(SHEET_INFO_DA)
+        if idxda is not None:
+            if inf.da_12m == 0:
                 col_acum = self._detect_acum_col(idxda, default=3)
                 inf.da_12m = idxda.get_first(
                     "Depreciación y amortización operativa",
                     "Depreciacion y amortizacion operativa",
                     col=col_acum, default=0.0,
                 ) * factor
+            # D&A del trimestre puro (col 1)
+            inf.da_quarter = idxda.get_first(
+                "Depreciación y amortización operativa",
+                "Depreciacion y amortizacion operativa",
+                col=1, default=0.0,
+            ) * factor
 
         return inf
 
