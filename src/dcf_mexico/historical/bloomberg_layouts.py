@@ -24,14 +24,23 @@ from .panel import _detect_fx_mult
 def _income_adjusted_lines(use_quarter_data: bool):
     """Devuelve INCOME_LINES adaptado para vista anual o trimestral.
 
-    use_quarter_data=True -> usa res.income_quarter (3 meses puros)
+    use_quarter_data=True -> intenta res.income_quarter (3 meses puros);
+                              fallback a res.income si no existe.
     use_quarter_data=False -> usa res.income (acumulado, full year para Q4)
     """
-    src = "income_quarter" if use_quarter_data else "income"
+    def _resolve_obj(r):
+        """Devuelve el income object adecuado, con fallback."""
+        if use_quarter_data:
+            obj = getattr(r, "income_quarter", None)
+            if obj is not None:
+                return obj
+            # Fallback a income (acumulado) si no hay quarter
+            return getattr(r, "income", None)
+        return getattr(r, "income", None)
 
     def _get(field):
         def f(r):
-            obj = getattr(r, src, None)
+            obj = _resolve_obj(r)
             if obj is None:
                 return None
             return getattr(obj, field, None)
@@ -39,8 +48,9 @@ def _income_adjusted_lines(use_quarter_data: bool):
 
     def _ratio(num_field, den_field):
         def f(r):
-            obj = getattr(r, src, None)
-            if obj is None: return None
+            obj = _resolve_obj(r)
+            if obj is None:
+                return None
             num = getattr(obj, num_field, 0) or 0
             den = getattr(obj, den_field, 0) or 0
             return (num / den) if den else 0
@@ -55,8 +65,8 @@ def _income_adjusted_lines(use_quarter_data: bool):
         ("Operating Income (EBIT)",            _get("ebit"),                  "header"),
         ("",                                   None,                          "spacer"),
         ("- Interest Expense, Net",            lambda r: (
-            (getattr(getattr(r, src, None) or type('X', (), {})(), 'interest_expense', 0) or 0) -
-            (getattr(getattr(r, src, None) or type('X', (), {})(), 'interest_income', 0) or 0)
+            ((getattr(_resolve_obj(r) or type('X', (), {})(), 'interest_expense', 0) or 0) -
+             (getattr(_resolve_obj(r) or type('X', (), {})(), 'interest_income', 0) or 0))
         ),                                                                     "line"),
         ("    + Interest Expense",             _get("interest_expense"),      "line"),
         ("    - Interest Income",              _get("interest_income"),       "line"),
@@ -71,7 +81,7 @@ def _income_adjusted_lines(use_quarter_data: bool):
         # Reference items
         ("Reference Items",                    None,                          "section"),
         ("D&A (12M trailing)",                 lambda r: r.informative.da_12m,"line"),
-        ("EBITDA (EBIT + D&A 12M)",            lambda r: ((getattr(getattr(r, src), 'ebit', 0) or 0) + (r.informative.da_12m or 0)), "subtotal"),
+        ("EBITDA (EBIT + D&A 12M)",            lambda r: ((getattr(_resolve_obj(r) or type('X', (), {})(), 'ebit', 0) or 0) + (r.informative.da_12m or 0)), "subtotal"),
         ("",                                   None,                          "spacer"),
         ("Gross Margin",                       _ratio("gross_profit", "revenue"),  "ratio"),
         ("Operating Margin",                   _ratio("ebit", "revenue"),     "ratio"),

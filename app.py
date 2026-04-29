@@ -201,10 +201,12 @@ st.markdown("""
 
 
 # ---------------------------------------------------------------------------
-# Cache
+# Cache  (versionado para invalidar tras cambios de schema)
 # ---------------------------------------------------------------------------
+_PARSE_CACHE_VERSION = "v3-quarter"   # bump cuando cambies ParseResult schema
+
 @st.cache_data(show_spinner=False)
-def _parse_cached(filepath: str):
+def _parse_cached(filepath: str, _v: str = _PARSE_CACHE_VERSION):
     return parse_xbrl(filepath)
 
 
