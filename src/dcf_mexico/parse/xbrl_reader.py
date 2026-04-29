@@ -127,6 +127,23 @@ class SheetIndex:
                 total += v
         return total
 
+    def find_all_rows(self, label: str) -> list:
+        """Devuelve TODOS los row indices que matchean el label.
+        Util para CNBV CF donde 'Intereses pagados' aparece en CFO y Financing."""
+        key = _normalize(label)
+        rows = []
+        for i in range(len(self.df)):
+            lbl = _safe_str(self.df.iloc[i, 0])
+            if _normalize(lbl) == key:
+                rows.append(i)
+        return rows
+
+    def get_at_row(self, row_idx: int, col: int = 1) -> Optional[float]:
+        """Get value at specific (row, col). Util cuando find_all_rows devuelve multiples."""
+        if row_idx >= self.df.shape[0] or col >= self.df.shape[1]:
+            return None
+        return _safe_num(self.df.iloc[row_idx, col])
+
     def sum_across_series(self, label: str) -> float:
         """Para 700000 multi-serie: si el header indica 'Serie X [miembro]' / '[Eje]',
         suma todas las columnas. Si el header son periodos ('Trimestre Actual', etc.),
@@ -652,14 +669,106 @@ class XBRLReader:
             "Incremento (disminución) neto de efectivo y equivalentes de efectivo",
             "Incremento (disminucion) neto de efectivo y equivalentes de efectivo",
         )
-        # Disposal of Assets (CNBV: positivo=loss, negativo=gain)
-        # Para Bloomberg "Disposal of Assets" (positivo = ganancia abnormal)
-        # invertimos el signo abajo en el reclassifier
+        # Disposal of Assets
         cf.disposal_loss_gain = g(
             "+ (-) Pérdida (utilidad) por la disposición de activos no circulantes",
             "+ (-) Pérdida (utilidad) por la disposicion de activos no circulantes",
             "Pérdida (utilidad) por la disposición de activos no circulantes",
         )
+
+        # ---- NEW Bloomberg CF Standardized fields ----
+        # CFO antes de interest/tax adjustments (BB usa este como "Cash from Operating")
+        cf.cfo_pre_adj = g(
+            "Flujos de efectivo netos procedentes (utilizados en) operaciones",
+            "Flujos de efectivo netos procedentes de (utilizados en) operaciones",
+        )
+
+        # D&A en CF (puede diferir de informative.da_12m si hay impairments)
+        cf.da_in_cf = g(
+            "+ Gastos de depreciación y amortización",
+            "Gastos de depreciación y amortización",
+            "Gastos de depreciacion y amortizacion",
+        )
+
+        # Working capital changes
+        cf.chg_inventories = g(
+            "+ (-) Disminuciones (incrementos) en los inventarios",
+            "+ (-) Disminuciones (incrementos) en inventarios",
+        )
+        cf.chg_receivables = g(
+            "+ (-) Disminución (incremento) de clientes",
+            "+ (-) Disminucion (incremento) de clientes",
+        )
+        cf.chg_other_receivables = g(
+            "+ (-) Disminuciones (incrementos) en otras cuentas por cobrar derivadas de las actividades de operación",
+            "+ (-) Disminuciones (incrementos) en otras cuentas por cobrar derivadas de las actividades de operacion",
+        )
+        cf.chg_payables = g(
+            "+ (-) Incremento (disminución) de proveedores",
+            "+ (-) Incremento (disminucion) de proveedores",
+        )
+        cf.chg_other_payables = g(
+            "+ (-) Incrementos (disminuciones) en otras cuentas por pagar derivadas de las actividades de operación",
+            "+ (-) Incrementos (disminuciones) en otras cuentas por pagar derivadas de las actividades de operacion",
+        )
+
+        # Non-cash items
+        cf.other_non_cash_items_cf = g(
+            "+ Otras partidas distintas al efectivo",
+        )
+        cf.provisions_cf = g("+ Provisiones")
+        cf.fx_unrealized_cf = g(
+            "+ (-) Pérdida (utilidad) de moneda extranjera no realizadas",
+            "+ (-) Perdida (utilidad) de moneda extranjera no realizadas",
+        )
+        cf.associates_cf = g(
+            "+ Participación en asociadas y negocios conjuntos",
+            "+ Participacion en asociadas y negocios conjuntos",
+        )
+
+        # CF Investing
+        cf.cash_from_loss_of_control = g(
+            "+ Flujos de efectivo procedentes de la pérdida de control de subsidiarias u otros negocios",
+            "+ Flujos de efectivo procedentes de la perdida de control de subsidiarias u otros negocios",
+        )
+        cf.cash_for_obtain_control = g(
+            "- Flujos de efectivo utilizados para obtener el control de subsidiarias u otros negocios",
+        )
+        cf.sales_of_intangibles = g(
+            "+ Importes procedentes de ventas de activos intangibles",
+        )
+
+        # CF Financing
+        cf.lease_payments_cf = g(
+            "- Pagos de pasivos por arrendamientos",
+            "- Pagos de pasivos por arrendamientos financieros",
+        )
+
+        # ---- DUPLICATE LABELS (CFO + Financing) ----
+        # Algunos labels aparecen MULTIPLES veces en hoja 520000:
+        # "- Intereses pagados" -> row 33 (CFO), row 57 (Inv=0), row 75 (Financing)
+        # Usamos find_all_rows para distinguir por orden de aparicion.
+        int_paid_rows = idx.find_all_rows("- Intereses pagados")
+        if len(int_paid_rows) >= 1:
+            cf.interest_paid_cfo = (idx.get_at_row(int_paid_rows[0], col=col) or 0) * factor
+        # Tomar la ULTIMA ocurrencia que sea no-cero como financing
+        # (CUERVO: row 33=-828, row 57=0, row 75=+958)
+        for r in reversed(int_paid_rows):
+            v = idx.get_at_row(r, col=col)
+            if v and abs(v) > 0.001:
+                cf.interest_paid_financing = v * factor
+                break
+        cf.interest_received_cfo = g("+ Intereses recibidos")
+        cf.taxes_paid_cfo = g(
+            "+ (-) Impuestos a las utilidades reembolsados (pagados)",
+        )
+
+        # FX effect on cash
+        cf.fx_effect_on_cash = g(
+            "Efectos de la variación en la tasa de cambio sobre el efectivo y equivalentes al efectivo",
+            "Efectos de la variacion en la tasa de cambio sobre el efectivo y equivalentes al efectivo",
+        )
+
         return cf
 
     # -----------------------------------------------------------------

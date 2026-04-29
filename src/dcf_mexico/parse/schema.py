@@ -194,21 +194,50 @@ class IncomeStatementQuarter:
 
 @dataclass
 class CashFlow:
-    """Acumulado del periodo."""
-    cfo: float = 0.0                                # Flujo de operacion
-    capex_ppe: float = 0.0                          # Compras PPE (positivo = outflow)
-    capex_intangibles: float = 0.0
-    sales_of_ppe: float = 0.0                       # Ventas PPE (positivo = inflow)
-    acquisitions: float = 0.0
-    cfi: float = 0.0                                # Flujo de inversion (puede ser negativo)
-    debt_issued: float = 0.0
-    debt_repaid: float = 0.0
-    dividends_paid: float = 0.0
-    cff: float = 0.0
-    net_change_cash: float = 0.0
-    disposal_loss_gain: float = 0.0                 # (-) Pérdida (utilidad) por disposicion de activos
-                                                     # CNBV: positivo = perdida, negativo = ganancia
-                                                     # Bloomberg: Disposal of Assets (positivo = gain to abnormal)
+    """Acumulado del periodo (CNBV hoja 520000)."""
+    # Existing
+    cfo: float = 0.0                                # row 37: CFO TOTAL (incl interest/tax adj)
+    capex_ppe: float = 0.0                          # row 46: Compras PPE (positivo = outflow)
+    capex_intangibles: float = 0.0                  # row 48: Compras intangibles
+    sales_of_ppe: float = 0.0                       # row 45: Importes venta PPE
+    acquisitions: float = 0.0                       # rows 39-40 net
+    cfi: float = 0.0                                # row 61: Flujo de inversion
+    debt_issued: float = 0.0                        # row 69: Importes procedentes de prestamos
+    debt_repaid: float = 0.0                        # row 70: Reembolsos de prestamos
+    dividends_paid: float = 0.0                     # row 74
+    cff: float = 0.0                                # row 78: Flujo de financiamiento
+    net_change_cash: float = 0.0                    # row 82
+    disposal_loss_gain: float = 0.0                 # row 16
+
+    # NEW for Bloomberg CF Standardized
+    cfo_pre_adj: float = 0.0                        # row 30: CFO ANTES de interest/tax adj (BB usa este)
+    da_in_cf: float = 0.0                           # row 9: + Gastos de D&A en CF (puede diferir de info.da)
+    chg_inventories: float = 0.0                    # row 18: + (-) Disminuciones (incrementos) inventarios
+    chg_receivables: float = 0.0                    # row 19: + (-) Disminución (incremento) clientes
+    chg_other_receivables: float = 0.0              # row 20: + (-) Disminuciones otras cuentas cobrar
+    chg_payables: float = 0.0                       # row 21: + (-) Incremento (disminución) proveedores
+    chg_other_payables: float = 0.0                 # row 22: + (-) Incrementos otras cuentas pagar
+    other_non_cash_items_cf: float = 0.0            # row 23: + Otras partidas distintas al efectivo
+    provisions_cf: float = 0.0                      # row 11: + Provisiones
+    fx_unrealized_cf: float = 0.0                   # row 12: + (-) Pérdida (utilidad) FX no realizadas
+    associates_cf: float = 0.0                      # row 17: + Participación en asociadas
+
+    # CF Investing
+    cash_from_loss_of_control: float = 0.0          # row 39: + Flujos por perdida de control de subs
+    cash_for_obtain_control: float = 0.0            # row 40: - Flujos para obtener control de subs
+    sales_of_intangibles: float = 0.0               # row 47: + Ventas de activos intangibles
+
+    # CF Financing
+    lease_payments_cf: float = 0.0                  # row 72: - Pagos de pasivos por arrendamientos
+    interest_paid_financing: float = 0.0            # row 75: - Intereses pagados (en financiamiento)
+
+    # CFO interest/tax adjustments (rows 31-36 within CFO section)
+    interest_paid_cfo: float = 0.0                  # row 33: - Intereses pagados (CFO section)
+    interest_received_cfo: float = 0.0              # row 34: + Intereses recibidos (CFO section)
+    taxes_paid_cfo: float = 0.0                     # row 35: + (-) Impuestos reembolsados/pagados
+
+    # FX effect on cash
+    fx_effect_on_cash: float = 0.0                  # row 81: Efectos de variación tasa de cambio
 
     @property
     def capex_gross(self) -> float:

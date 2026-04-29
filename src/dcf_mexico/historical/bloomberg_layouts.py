@@ -830,11 +830,265 @@ BS_STANDARDIZED_LINES = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# CASH FLOW - Standardized (estilo Bloomberg)
-# Para trimestral hay que DERIVAR (snapshot Q acum - snapshot Q-1 acum)
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# CASH FLOW - Standardized EXACTO Bloomberg
+# Para trimestral: derivar Q puro (Q acum - Q-1 acum mismo año) para TODO
+# Para anual: usar acum del Q4 / 4D (full year)
+# ===========================================================================
 
+BLOOMBERG_CF_LAYOUT = [
+    ("Cash from Operating Activities",                  None,                "section"),
+    ("  + Net Income",                                  "ni",                "line"),
+    ("  + Depreciation & Amortization",                 "da_cf",             "line"),
+    ("  + Non-Cash Items",                              "non_cash",          "line"),
+    ("    + Other Non-Cash Adj",                        "non_cash",          "sub"),
+    ("  + Chg in Non-Cash Work Cap",                    "wc_change",         "line"),
+    ("    + (Inc) Dec in Accts Receiv",                 "chg_receivables",   "sub"),
+    ("    + (Inc) Dec in Inventories",                  "chg_inventories",   "sub"),
+    ("    + Inc (Dec) in Accts Payable",                "chg_payables",      "sub"),
+    ("    + Inc (Dec) in Other",                        "chg_other_wc",      "sub"),
+    ("  + Net Cash From Disc Ops",                      "disc_ops_oper",     "line"),
+    ("Cash from Operating Activities",                  "cfo_total",         "header"),
+    ("",                                                None,                "spacer"),
+    ("Cash from Investing Activities",                  None,                "section"),
+    ("  + Change in Fixed & Intang",                    "chg_fixed_intang",  "line"),
+    ("    + Disp in Fixed & Intang",                    "disp_fixed_intang", "sub"),
+    ("    + Disp of Fixed Prod Assets",                 "disp_fixed_prod",   "sub"),
+    ("    + Disp of Intangible Assets",                 "disp_intang",       "sub"),
+    ("    + Acq of Fixed & Intang",                     "acq_fixed_intang",  "sub"),
+    ("    + Acq of Fixed Prod Assets",                  "acq_fixed_prod",    "sub"),
+    ("    + Acq of Intangible Assets",                  "acq_intang",        "sub"),
+    ("  + Net Change in LT Investment",                 "net_chg_lt_inv",    "line"),
+    ("    + Dec in LT Investment",                      "dec_lt_inv",        "sub"),
+    ("    + Inc in LT Investment",                      "inc_lt_inv",        "sub"),
+    ("  + Net Cash From Acq & Div",                     "cash_acq_div",      "line"),
+    ("    + Cash from Divestitures",                    "cash_divest",       "sub"),
+    ("    + Cash for Acq of Subs",                      "cash_acq_subs",     "sub"),
+    ("    + Cash for JVs",                              "cash_jvs",          "sub"),
+    ("  + Other Investing Activities",                  "other_invest",      "line"),
+    ("  + Net Cash From Disc Ops",                      "disc_ops_inv",      "line"),
+    ("Cash from Investing Activities",                  "cfi_total",         "header"),
+    ("",                                                None,                "spacer"),
+    ("Cash from Financing Activities",                  None,                "section"),
+    ("  + Dividends Paid",                              "div_paid",          "line"),
+    ("  + Cash From (Repayment) Debt",                  "cash_repay_debt",   "line"),
+    ("    + Cash From (Repay) ST Debt",                 "cash_st_debt",      "sub"),
+    ("    + Cash From LT Debt",                         "cash_from_lt_debt", "sub"),
+    ("    + Repayments of LT Debt",                     "repay_lt_debt",     "sub"),
+    ("  + Cash (Repurchase) of Equity",                 "cash_repurch_eq",   "line"),
+    ("    + Increase in Capital Stock",                 "incr_cap_stock",    "sub"),
+    ("    + Decrease in Capital Stock",                 "decr_cap_stock",    "sub"),
+    ("  + Other Financing Activities",                  "other_fin",         "line"),
+    ("  + Net Cash From Disc Ops",                      "disc_ops_fin",      "line"),
+    ("Cash from Financing Activities",                  "cff_total",         "header"),
+    ("",                                                None,                "spacer"),
+    ("  Effect of Foreign Exchange Rates",              "fx_effect",         "line"),
+    ("",                                                None,                "spacer"),
+    ("Net Changes in Cash",                             "net_chg_cash",      "header"),
+    ("",                                                None,                "spacer"),
+    ("Cash Paid for Taxes",                             "cash_paid_taxes",   "line"),
+    ("Cash Paid for Interest",                          "cash_paid_interest","line"),
+    ("",                                                None,                "spacer"),
+    ("Reference Items",                                 None,                "section"),
+    ("EBITDA",                                          "ebitda",            "line"),
+    ("Trailing 12M EBITDA Margin",                      "ebitda_margin_ttm", "ratio"),
+    ("Interest Received",                               "interest_received", "line"),
+    ("Free Cash Flow",                                  "fcf",               "subtotal"),
+    ("Free Cash Flow to Firm",                          "fcff",              "subtotal"),
+    ("Free Cash Flow to Equity",                        "fcfe",              "subtotal"),
+    ("Free Cash Flow per Basic Share",                  "fcf_per_share",     "ratio_eps"),
+    ("Price to Free Cash Flow",                         "px_to_fcf",         "ratio_x"),
+    ("Cash Flow to Net Income",                         "cf_to_ni",          "ratio_x"),
+]
+
+
+def _compute_cf_metrics(snap, fx_mult: float, ticker=None,
+                          # Pre-derived period values:
+                          ni_period: float = 0.0,
+                          da_period: float = 0.0,
+                          ebit_period: float = 0.0,
+                          ebitda_ttm_margin: float = 0.0,
+                          # Pre-derived CF period values (trim or annual):
+                          cfo_pre_adj_p: float = 0.0,
+                          cfo_p: float = 0.0,
+                          chg_inv_p: float = 0.0,
+                          chg_recv_p: float = 0.0,
+                          chg_other_recv_p: float = 0.0,
+                          chg_pay_p: float = 0.0,
+                          chg_other_pay_p: float = 0.0,
+                          capex_ppe_p: float = 0.0,
+                          capex_intang_p: float = 0.0,
+                          sales_ppe_p: float = 0.0,
+                          sales_intang_p: float = 0.0,
+                          loss_control_p: float = 0.0,
+                          obtain_control_p: float = 0.0,
+                          cfi_p: float = 0.0,
+                          debt_issued_p: float = 0.0,
+                          debt_repaid_p: float = 0.0,
+                          dividends_p: float = 0.0,
+                          lease_pmt_p: float = 0.0,
+                          int_paid_fin_p: float = 0.0,
+                          int_paid_cfo_p: float = 0.0,
+                          int_recv_p: float = 0.0,
+                          taxes_paid_p: float = 0.0,
+                          cff_p: float = 0.0,
+                          fx_effect_p: float = 0.0,
+                          net_chg_cash_p: float = 0.0,
+                          # Para FCF/FCFF/FCFE references:
+                          shares: float = 0.0,
+                          market_price: float = 0.0,
+                          tax_rate: float = 0.30) -> dict:
+    """Calcula TODAS las metricas Bloomberg-style del Cash Flow.
+
+    Todos los valores pre-derivados ya vienen en MDP del periodo correcto
+    (trim si vista trimestral, anual si vista anual).
+    Signos preservan convencion CNBV; la reclassificacion BB se hace abajo.
+    """
+
+    # ===== CASH FROM OPERATING =====
+    # BB CFO = row 30 (cfo_pre_adj) - antes de interest/tax adjustments
+    # WC change components
+    chg_other_wc = chg_other_recv_p + chg_other_pay_p
+    wc_change = chg_recv_p + chg_inv_p + chg_pay_p + chg_other_wc
+
+    # BB CFO = row 37 (post interest/tax adj). Non-Cash es residual para que
+    # NI + D&A + Non-Cash + WC = CFO total.
+    cfo_total = cfo_p if cfo_p else cfo_pre_adj_p
+    non_cash = cfo_total - ni_period - da_period - wc_change
+
+    # ===== CASH FROM INVESTING =====
+    # BB convention: CapEx negativo (outflow), Disposals positivo (inflow)
+    # CNBV: capex_ppe stored as positive magnitude (CNBV "-" prefix means outflow)
+    acq_fixed_prod = -capex_ppe_p     # BB negative
+    acq_intang = -capex_intang_p
+    acq_fixed_intang = acq_fixed_prod + acq_intang
+    disp_fixed_prod = sales_ppe_p
+    disp_intang = sales_intang_p
+    disp_fixed_intang = disp_fixed_prod + disp_intang
+    chg_fixed_intang = acq_fixed_intang + disp_fixed_intang
+
+    # LT Investment changes (CUERVO no tiene)
+    dec_lt_inv = 0.0
+    inc_lt_inv = 0.0
+    net_chg_lt_inv = dec_lt_inv + inc_lt_inv
+
+    # Acquisitions / Divestitures
+    cash_divest = loss_control_p           # CNBV: + Flujos por perdida control
+    cash_acq_subs = -obtain_control_p      # CNBV stored positive; BB negative
+    cash_jvs = 0.0
+    cash_acq_div = cash_divest + cash_acq_subs + cash_jvs
+
+    other_invest = 0.0
+    disc_ops_inv = 0.0
+    cfi_total = cfi_p
+
+    # ===== CASH FROM FINANCING =====
+    div_paid = -dividends_p                 # CNBV positive magnitude; BB negative
+    cash_st_debt = 0.0                       # CUERVO no separa ST debt en CF
+    cash_from_lt_debt = debt_issued_p        # CNBV row 69
+    repay_lt_debt = -debt_repaid_p          # CNBV stored positive; BB negative
+    cash_repay_debt = cash_st_debt + cash_from_lt_debt + repay_lt_debt
+
+    incr_cap_stock = 0.0
+    decr_cap_stock = 0.0
+    cash_repurch_eq = incr_cap_stock + decr_cap_stock
+
+    # Other Financing = lease_payments + interest_paid_financing
+    # CUERVO CNBV: lease_pmt stored positive (label "-"); BB negative
+    other_fin = -lease_pmt_p + (-int_paid_fin_p if int_paid_fin_p > 0 else int_paid_fin_p)
+    disc_ops_fin = 0.0
+    cff_total = cff_p
+
+    # ===== EFFECT FX + NET CHANGE =====
+    fx_effect = fx_effect_p
+    net_chg_cash = net_chg_cash_p
+    disc_ops_oper = 0.0
+
+    # ===== CASH PAID (BB shows positive) =====
+    # Cash Paid for Interest = total interest paid (CFO + Financing magnitudes)
+    cash_paid_interest = abs(int_paid_cfo_p) + abs(int_paid_fin_p)
+    # If both ARE the same row (CUERVO has them in different sections), sum magnitudes
+    # For CUERVO Q4 trim: BB shows 430.739; we need to derive
+    # If our parser captured both correctly, use sum; else use the one available
+    cash_paid_taxes = abs(taxes_paid_p)
+
+    # ===== REFERENCE ITEMS =====
+    # EBITDA del periodo
+    ebitda_period = ebit_period + da_period
+    interest_received = abs(int_recv_p) if int_recv_p else 0
+
+    # FCF (Bloomberg standard) = CFO - CapEx
+    capex_total = capex_ppe_p + capex_intang_p
+    fcf = cfo_total - capex_total
+
+    # FCFF = FCF + (1-t) * Interest Paid
+    fcff = fcf + (1 - tax_rate) * cash_paid_interest
+
+    # FCFE = FCF - Net Debt Repayment + Net Debt Issuance
+    # = FCF - (debt_repaid - debt_issued) - lease_pmt
+    fcfe = fcf - (debt_repaid_p - debt_issued_p) - lease_pmt_p
+
+    # Per share
+    fcf_per_share = (fcf / shares) if shares else 0
+    px_to_fcf = (market_price / fcf_per_share) if (market_price and fcf_per_share) else 0
+    cf_to_ni = (cfo_total / ni_period) if ni_period else 0
+
+    return {
+        "ni": ni_period,
+        "da_cf": da_period,
+        "non_cash": non_cash,
+        "wc_change": wc_change,
+        "chg_receivables": chg_recv_p,
+        "chg_inventories": chg_inv_p,
+        "chg_payables": chg_pay_p,
+        "chg_other_wc": chg_other_wc,
+        "disc_ops_oper": disc_ops_oper,
+        "cfo_total": cfo_total,
+        "chg_fixed_intang": chg_fixed_intang,
+        "disp_fixed_intang": disp_fixed_intang,
+        "disp_fixed_prod": disp_fixed_prod,
+        "disp_intang": disp_intang,
+        "acq_fixed_intang": acq_fixed_intang,
+        "acq_fixed_prod": acq_fixed_prod,
+        "acq_intang": acq_intang,
+        "net_chg_lt_inv": net_chg_lt_inv,
+        "dec_lt_inv": dec_lt_inv,
+        "inc_lt_inv": inc_lt_inv,
+        "cash_acq_div": cash_acq_div,
+        "cash_divest": cash_divest,
+        "cash_acq_subs": cash_acq_subs,
+        "cash_jvs": cash_jvs,
+        "other_invest": other_invest,
+        "disc_ops_inv": disc_ops_inv,
+        "cfi_total": cfi_total,
+        "div_paid": div_paid,
+        "cash_repay_debt": cash_repay_debt,
+        "cash_st_debt": cash_st_debt,
+        "cash_from_lt_debt": cash_from_lt_debt,
+        "repay_lt_debt": repay_lt_debt,
+        "cash_repurch_eq": cash_repurch_eq,
+        "incr_cap_stock": incr_cap_stock,
+        "decr_cap_stock": decr_cap_stock,
+        "other_fin": other_fin,
+        "disc_ops_fin": disc_ops_fin,
+        "cff_total": cff_total,
+        "fx_effect": fx_effect,
+        "net_chg_cash": net_chg_cash,
+        "cash_paid_taxes": cash_paid_taxes,
+        "cash_paid_interest": cash_paid_interest,
+        "ebitda": ebitda_period,
+        "ebitda_margin_ttm": ebitda_ttm_margin,
+        "interest_received": interest_received,
+        "fcf": fcf,
+        "fcff": fcff,
+        "fcfe": fcfe,
+        "fcf_per_share": fcf_per_share,
+        "px_to_fcf": px_to_fcf,
+        "cf_to_ni": cf_to_ni,
+    }
+
+
+# Layout viejo (compatibilidad; ya no se usa)
 CF_STANDARDIZED_LINES = [
     ("Cash from Operating Activities",      None,                                                       "section"),
     ("+ Net Income",                        lambda r: r.income.net_income,                              "line"),
@@ -1114,53 +1368,164 @@ def build_bs_standardized_panel(series, annual_only=False,
 
 
 def build_cf_standardized_panel(series, annual_only=False,
-                                  fx_rate_usdmxn=19.5, max_periods=None):
-    """Cash Flow estilo Bloomberg Standardized.
+                                  fx_rate_usdmxn=19.5, max_periods=None,
+                                  ticker=None):
+    """Cash Flow EXACTO estilo Bloomberg Standardized.
 
-    Si annual_only=True: usa CF acumulado (Q4 = full year) directo.
-    Si annual_only=False: deriva CF puro trimestral (Q acum - Q-1 acum).
+    Si annual_only=True usa CF acumulado del Q4/4D (full year).
+    Si annual_only=False deriva CF puro trimestral (Q acum - Q-1 acum mismo año).
+
+    Para income/D&A:
+      - annual: income (acum YTD del Q4) + informative.da_12m
+      - trim:   income_quarter (3M puro) + informative.da_quarter
     """
     snaps = series.annual if annual_only else series.snapshots
     if max_periods:
         snaps = snaps[-max_periods:]
+
+    if ticker is None:
+        ticker = series.ticker
+
+    labels = [l for l, _, _ in BLOOMBERG_CF_LAYOUT]
+    kinds  = [k for _, _, k in BLOOMBERG_CF_LAYOUT]
+
     if not snaps:
-        labels = [l for l, _, _ in CF_STANDARDIZED_LINES]
-        return pd.DataFrame(index=labels), [k for _, _, k in CF_STANDARDIZED_LINES]
+        return pd.DataFrame(index=labels), kinds
 
-    if annual_only:
-        return _build_panel_with_view(series, CF_STANDARDIZED_LINES,
-                                        annual_only, fx_rate_usdmxn, max_periods)
+    # Index para deriving Q puro: por (year, quarter)
+    by_year_q = {(s.year, s.quarter): s for s in series.snapshots}
 
-    # Vista trimestral: derivar valores
-    derived = _derive_cf_pure_quarter(series, max_periods)
+    # Helper generico: deriva un campo CF/info del periodo (trim puro o anual)
+    def _derive_period(s_curr, fx, acum_path):
+        obj = s_curr.parsed
+        for p in acum_path[:-1]:
+            obj = getattr(obj, p, None)
+            if obj is None:
+                return 0.0
+        cf_acum = getattr(obj, acum_path[-1], 0) or 0
+        if annual_only:
+            return cf_acum * fx / 1_000_000
+        prev_q_map = {"2": "1", "3": "2", "4": "3", "4D": "3"}
+        prev_q = prev_q_map.get(s_curr.quarter)
+        if prev_q is None:
+            return cf_acum * fx / 1_000_000   # Q1
+        prev_snap = by_year_q.get((s_curr.year, prev_q))
+        if prev_snap is None:
+            return cf_acum * fx / 1_000_000
+        prev_obj = prev_snap.parsed
+        for p in acum_path[:-1]:
+            prev_obj = getattr(prev_obj, p, None)
+            if prev_obj is None:
+                return cf_acum * fx / 1_000_000
+        prev_acum = getattr(prev_obj, acum_path[-1], 0) or 0
+        return (cf_acum - prev_acum) * fx / 1_000_000
+
     cols_data = {}
-    kinds = [k for _, _, k in CF_STANDARDIZED_LINES]
-    labels = [l for l, _, _ in CF_STANDARDIZED_LINES]
+    for s in snaps:
+        fx = _detect_fx_mult(s, fx_rate_usdmxn)
 
-    for snap, derived_cf in derived:
-        fx = _detect_fx_mult(snap, fx_rate_usdmxn)
-        # Construir parser-like con el cashflow derivado pero income_quarter para income
-        from types import SimpleNamespace
-        # Necesitamos: r.income.net_income (usa el quarter), r.informative.da_12m,
-        # r.cashflow.* (usar derived)
-        proxy = SimpleNamespace(
-            income=snap.parsed.income_quarter or snap.parsed.income,
-            informative=snap.parsed.informative,
-            cashflow=derived_cf,
-            balance=snap.parsed.balance,
-        )
-        col_vals = []
-        for label, getter, kind in CF_STANDARDIZED_LINES:
-            if kind in ("spacer", "section") or getter is None:
-                col_vals.append(None)
-                continue
-            raw = _safe(getter, proxy)
-            if raw is None:
-                col_vals.append(None)
-            elif kind in ("ratio", "raw"):
-                col_vals.append(raw)
+        # NI / EBIT / D&A del periodo
+        if annual_only:
+            inc = s.parsed.income
+            ni_period = (inc.net_income or 0) * fx / 1_000_000
+            ebit_period = (inc.ebit or 0) * fx / 1_000_000
+            da_period = (s.parsed.informative.da_12m or 0) * fx / 1_000_000
+        else:
+            inc_q = getattr(s.parsed, "income_quarter", None) or s.parsed.income
+            ni_period = (inc_q.net_income or 0) * fx / 1_000_000
+            ebit_period = (inc_q.ebit or 0) * fx / 1_000_000
+            # da_quarter del periodo, fallback a derivar de da_12m
+            da_q = getattr(s.parsed.informative, "da_quarter", 0) or 0
+            if da_q:
+                da_period = da_q * fx / 1_000_000
             else:
-                col_vals.append((raw * fx) / 1_000_000)
-        cols_data[snap.label] = col_vals
+                da_period = _derive_period(s, fx, ("cashflow", "da_in_cf"))
 
-    return pd.DataFrame(cols_data, index=labels), kinds
+        # EBITDA TTM margin (ya viene en informative)
+        rev_12m = (s.parsed.informative.revenue_12m or 0) * fx / 1_000_000
+        ebit_12m = (s.parsed.informative.ebit_12m or 0) * fx / 1_000_000
+        da_12m = (s.parsed.informative.da_12m or 0) * fx / 1_000_000
+        ebitda_12m = ebit_12m + da_12m
+        ebitda_ttm_margin = (ebitda_12m / rev_12m) if rev_12m else 0
+
+        # CF period values (todos derivados de acum)
+        cfo_pre_adj_p = _derive_period(s, fx, ("cashflow", "cfo_pre_adj"))
+        cfo_p         = _derive_period(s, fx, ("cashflow", "cfo"))
+        chg_inv_p     = _derive_period(s, fx, ("cashflow", "chg_inventories"))
+        chg_recv_p    = _derive_period(s, fx, ("cashflow", "chg_receivables"))
+        chg_other_recv_p = _derive_period(s, fx, ("cashflow", "chg_other_receivables"))
+        chg_pay_p     = _derive_period(s, fx, ("cashflow", "chg_payables"))
+        chg_other_pay_p = _derive_period(s, fx, ("cashflow", "chg_other_payables"))
+
+        capex_ppe_p   = _derive_period(s, fx, ("cashflow", "capex_ppe"))
+        capex_intang_p = _derive_period(s, fx, ("cashflow", "capex_intangibles"))
+        sales_ppe_p   = _derive_period(s, fx, ("cashflow", "sales_of_ppe"))
+        sales_intang_p = _derive_period(s, fx, ("cashflow", "sales_of_intangibles"))
+        loss_control_p = _derive_period(s, fx, ("cashflow", "cash_from_loss_of_control"))
+        obtain_control_p = _derive_period(s, fx, ("cashflow", "cash_for_obtain_control"))
+        cfi_p         = _derive_period(s, fx, ("cashflow", "cfi"))
+
+        debt_issued_p = _derive_period(s, fx, ("cashflow", "debt_issued"))
+        debt_repaid_p = _derive_period(s, fx, ("cashflow", "debt_repaid"))
+        dividends_p   = _derive_period(s, fx, ("cashflow", "dividends_paid"))
+        lease_pmt_p   = _derive_period(s, fx, ("cashflow", "lease_payments_cf"))
+        int_paid_fin_p = _derive_period(s, fx, ("cashflow", "interest_paid_financing"))
+        cff_p         = _derive_period(s, fx, ("cashflow", "cff"))
+
+        int_paid_cfo_p = _derive_period(s, fx, ("cashflow", "interest_paid_cfo"))
+        int_recv_p    = _derive_period(s, fx, ("cashflow", "interest_received_cfo"))
+        taxes_paid_p  = _derive_period(s, fx, ("cashflow", "taxes_paid_cfo"))
+
+        fx_effect_p   = _derive_period(s, fx, ("cashflow", "fx_effect_on_cash"))
+        net_chg_cash_p = _derive_period(s, fx, ("cashflow", "net_change_cash"))
+
+        # Shares y precio (para per-share metrics)
+        shares = (s.parsed.informative.shares_outstanding or 0) / 1_000_000  # ya en unidades; pasar a M
+        market_price = 0.0   # No tenemos precio en parser; placeholder
+
+        metrics = _compute_cf_metrics(
+            s, fx, ticker=ticker,
+            ni_period=ni_period,
+            da_period=da_period,
+            ebit_period=ebit_period,
+            ebitda_ttm_margin=ebitda_ttm_margin,
+            cfo_pre_adj_p=cfo_pre_adj_p,
+            cfo_p=cfo_p,
+            chg_inv_p=chg_inv_p,
+            chg_recv_p=chg_recv_p,
+            chg_other_recv_p=chg_other_recv_p,
+            chg_pay_p=chg_pay_p,
+            chg_other_pay_p=chg_other_pay_p,
+            capex_ppe_p=capex_ppe_p,
+            capex_intang_p=capex_intang_p,
+            sales_ppe_p=sales_ppe_p,
+            sales_intang_p=sales_intang_p,
+            loss_control_p=loss_control_p,
+            obtain_control_p=obtain_control_p,
+            cfi_p=cfi_p,
+            debt_issued_p=debt_issued_p,
+            debt_repaid_p=debt_repaid_p,
+            dividends_p=dividends_p,
+            lease_pmt_p=lease_pmt_p,
+            int_paid_fin_p=int_paid_fin_p,
+            int_paid_cfo_p=int_paid_cfo_p,
+            int_recv_p=int_recv_p,
+            taxes_paid_p=taxes_paid_p,
+            cff_p=cff_p,
+            fx_effect_p=fx_effect_p,
+            net_chg_cash_p=net_chg_cash_p,
+            shares=shares,
+            market_price=market_price,
+            tax_rate=0.30,
+        )
+
+        col_vals = []
+        for label, key, kind in BLOOMBERG_CF_LAYOUT:
+            if key is None or kind in ("spacer", "section"):
+                col_vals.append(None)
+            else:
+                col_vals.append(metrics.get(key))
+        cols_data[s.label] = col_vals
+
+    df = pd.DataFrame(cols_data, index=labels)
+    return df, kinds
