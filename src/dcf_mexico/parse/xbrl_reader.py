@@ -29,6 +29,7 @@ from .schema import (
     CompanyInfo,
     DCFInputs,
     IncomeStatement,
+    IncomeStatementQuarter,
     Informative,
     ValidationReport,
 )
@@ -162,6 +163,7 @@ class ParseResult:
     informative: Informative
     dcf: DCFInputs
     validation: ValidationReport
+    income_quarter: IncomeStatementQuarter = None  # PURE 3-month quarter (col 1 XBRL)
     raw_sheets: dict = field(default_factory=dict)
 
     def summary(self) -> pd.DataFrame:
@@ -416,17 +418,15 @@ class XBRLReader:
     # -----------------------------------------------------------------
     # 310000 - Estado de Resultados (acumulado)
     # -----------------------------------------------------------------
-    def _parse_income(self, factor: float) -> IncomeStatement:
-        is_ = IncomeStatement()
+    def _parse_income_at_col(self, factor: float, col: int, target_cls):
+        """Parser generico de IS para una columna especifica.
+        col=3 -> acumulado año actual; col=1 -> trimestre actual."""
+        is_ = target_cls()
         idx = self._idx(SHEET_IS)
         if idx is None:
             return is_
 
-        # col=3 -> acumulado año actual (estandar CNBV en 310000)
-        # cols: 1=Trim actual, 2=Trim prior, 3=Acum actual, 4=Acum prior
-        col_acum = self._detect_acum_col(idx, default=3)
-
-        g = lambda *labels: idx.get_first(*labels, col=col_acum, default=0.0) * factor
+        g = lambda *labels: idx.get_first(*labels, col=col, default=0.0) * factor
 
         is_.revenue = g(
             "Ingresos",
@@ -484,6 +484,18 @@ class XBRLReader:
             "Utilidad (perdida) atribuible a la participacion no controladora",
         )
         return is_
+
+    def _parse_income(self, factor: float) -> IncomeStatement:
+        """Income statement ACUMULADO (col 3 estandar CNBV)."""
+        idx = self._idx(SHEET_IS)
+        if idx is None:
+            return IncomeStatement()
+        col_acum = self._detect_acum_col(idx, default=3)
+        return self._parse_income_at_col(factor, col_acum, IncomeStatement)
+
+    def _parse_income_quarter(self, factor: float) -> IncomeStatementQuarter:
+        """Income statement del TRIMESTRE PURO (col 1 'Trimestre Actual')."""
+        return self._parse_income_at_col(factor, 1, IncomeStatementQuarter)
 
     # -----------------------------------------------------------------
     def _detect_acum_col(self, idx: SheetIndex, default: int = 3) -> int:
@@ -698,6 +710,7 @@ class XBRLReader:
         factor = self._rounding_factor(info)
         bs = self._parse_balance(factor)
         is_ = self._parse_income(factor)
+        is_q = self._parse_income_quarter(factor)
         cf = self._parse_cashflow(factor)
         inf = self._parse_informative(factor)
         dcf = self._build_dcf(info, bs, is_, cf, inf)
@@ -706,6 +719,7 @@ class XBRLReader:
             info=info,
             balance=bs,
             income=is_,
+            income_quarter=is_q,
             cashflow=cf,
             informative=inf,
             dcf=dcf,

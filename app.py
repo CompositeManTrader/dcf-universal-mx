@@ -59,6 +59,9 @@ try:
         build_bs_panel,
         build_cf_panel,
         format_panel,
+        build_income_adjusted_panel,
+        build_bs_standardized_panel,
+        build_cf_standardized_panel,
     )
     HAS_HISTORICAL = True
 except ImportError as _e:
@@ -709,27 +712,32 @@ if mode == "Single DCF":
                     st.dataframe(fmt_df, use_container_width=True)
 
             with sub_is:
-                df_is, kinds_is = build_income_panel(
+                df_is, kinds_is = build_income_adjusted_panel(
                     hs_ef_view, annual_only=use_annual_flag,
                     fx_rate_usdmxn=fx_rate, max_periods=max_n,
                 )
-                st.markdown(f"#### Income Statement — {df_is.shape[1]} periodos  •  In Millions of MXN")
+                vista_label = "FY (12M)" if use_annual_flag else "3M Quarter Pure"
+                st.markdown(f"#### Income — Adjusted (Bloomberg style) "
+                             f"• {df_is.shape[1]} periodos • {vista_label} • In MDP")
                 _render_panel(df_is, kinds_is, "Income")
 
             with sub_bs:
-                df_bs, kinds_bs = build_bs_panel(
+                df_bs, kinds_bs = build_bs_standardized_panel(
                     hs_ef_view, annual_only=use_annual_flag,
                     fx_rate_usdmxn=fx_rate, max_periods=max_n,
                 )
-                st.markdown(f"#### Balance Sheet — {df_bs.shape[1]} periodos  •  In Millions of MXN")
+                st.markdown(f"#### Balance Sheet — Standardized (Bloomberg style) "
+                             f"• {df_bs.shape[1]} periodos • In MDP")
                 _render_panel(df_bs, kinds_bs, "Balance")
 
             with sub_cf:
-                df_cf, kinds_cf = build_cf_panel(
+                df_cf, kinds_cf = build_cf_standardized_panel(
                     hs_ef_view, annual_only=use_annual_flag,
                     fx_rate_usdmxn=fx_rate, max_periods=max_n,
                 )
-                st.markdown(f"#### Cash Flow — {df_cf.shape[1]} periodos  •  In Millions of MXN")
+                vista_cf = "FY accumulated" if use_annual_flag else "3M Quarter (derived)"
+                st.markdown(f"#### Cash Flow — Standardized (Bloomberg style) "
+                             f"• {df_cf.shape[1]} periodos • {vista_cf} • In MDP")
                 _render_panel(df_cf, kinds_cf, "Cash Flow")
 
     # ----- TAB Estados close, TAB Historical open -----

@@ -81,7 +81,11 @@ class BalanceSheet:
 
 @dataclass
 class IncomeStatement:
-    """Acumulado del periodo (no trimestre individual)."""
+    """Acumulado del periodo (NO trimestre individual).
+
+    Para los valores PURE QUARTER (3 meses cerrando en period_end),
+    ver `IncomeStatementQuarter` (camp 'quarter' en ParseResult).
+    """
     revenue: float = 0.0
     cost_of_sales: float = 0.0
     gross_profit: float = 0.0
@@ -116,6 +120,30 @@ class IncomeStatement:
             r = self.tax_expense / self.pretax_income
             return r if 0.0 <= r <= 0.50 else 0.30
         return 0.30
+
+
+@dataclass
+class IncomeStatementQuarter:
+    """Income statement del TRIMESTRE PURO (3 meses, no acumulado).
+
+    Viene de col 1 de hoja 310000 del XBRL CNBV ('Trimestre Actual').
+    Para Q1, equivale a income (acumulado=trimestre). Para Q2/Q3/Q4 difiere.
+    """
+    revenue: float = 0.0
+    cost_of_sales: float = 0.0
+    gross_profit: float = 0.0
+    operating_expenses: float = 0.0
+    other_operating: float = 0.0
+    ebit: float = 0.0
+    interest_income: float = 0.0
+    interest_expense: float = 0.0
+    fx_result: float = 0.0
+    associates_result: float = 0.0
+    pretax_income: float = 0.0
+    tax_expense: float = 0.0
+    net_income: float = 0.0
+    net_income_controlling: float = 0.0
+    net_income_minority: float = 0.0
 
 
 @dataclass
