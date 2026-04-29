@@ -61,6 +61,27 @@ except ImportError as _e:
     HAS_HISTORICAL = False
     _HIST_ERR = str(_e)
 
+try:
+    from dcf_mexico.validation import (
+        compare_all_periods,
+        find_bloomberg_file,
+        CUERVO_INCOME_AR, CUERVO_BS_AR, CUERVO_CF_AR,
+    )
+    from dcf_mexico.config import find_all_xbrl, parse_period_tag
+    HAS_VALIDATION = True
+    # Registry de mappings disponibles
+    BLOOMBERG_MAPPINGS = {
+        "CUERVO": {
+            "Income - As Reported":     CUERVO_INCOME_AR,
+            "Bal Sheet - As Reported":  CUERVO_BS_AR,
+            "Cash Flow - As Reported":  CUERVO_CF_AR,
+        },
+    }
+except ImportError as _e:
+    HAS_VALIDATION = False
+    _VAL_ERR = str(_e)
+    BLOOMBERG_MAPPINGS = {}
+
 from dcf_mexico.view import build_all_sheets, BLOOMBERG_HEADER
 
 
@@ -573,9 +594,10 @@ if mode == "Single DCF":
 
     # Define tabs (each section becomes a tab via __enter__/__exit__ to avoid
     # massive re-indentation. This is equivalent to `with tab:` blocks).
-    (tab_hist, tab_val, tab_stories, tab_pic,
+    (tab_hist, tab_valid, tab_val, tab_stories, tab_pic,
      tab_sens, tab_dupont, tab_diag, tab_dl) = st.tabs([
         "📅 Historical",
+        "🔍 Bloomberg Validation",
         "📈 Valuation Output",
         "📖 Stories to Numbers",
         "🎨 Valuation as Picture",
@@ -757,8 +779,169 @@ if mode == "Single DCF":
                 st.dataframe(pd.DataFrame(stat_rows), hide_index=True,
                               use_container_width=True)
 
-    # ----- TAB Historical close, TAB Valuation Output open -----
+    # ----- TAB Historical close, TAB Bloomberg Validation open -----
     tab_hist.__exit__(None, None, None)
+    tab_valid.__enter__()
+
+    st.subheader(f"Bloomberg 'As Reported' Validation — {issuer.ticker}")
+    st.caption(
+        "Compara los valores parseados del XBRL CNBV contra el Bloomberg 'As Reported'. "
+        "Si los conceptos coinciden ⟹ el parser es fiel al reporte oficial. Las "
+        "diferencias se clasifican: **OK** (<0.5%), **WARN** (0.5%-5%), **ERROR** (>5%)."
+    )
+
+    if not HAS_VALIDATION:
+        st.error(f"Validation module no disponible: {_VAL_ERR}")
+    elif issuer.ticker not in BLOOMBERG_MAPPINGS:
+        st.warning(
+            f"No hay mapping Bloomberg definido para **{issuer.ticker}**. "
+            f"Hoy disponible: {list(BLOOMBERG_MAPPINGS.keys())}.\n\n"
+            f"Para agregar este ticker:\n"
+            f"1. Sube `Edos_{issuer.ticker.lower()}_anuales.xlsx` a `data/bloomberg/`\n"
+            f"2. Crea `src/dcf_mexico/validation/mappings/{issuer.ticker.lower()}.py` "
+            f"con el mapping de labels Bloomberg → parser fields."
+        )
+    else:
+        bb_fp = find_bloomberg_file(issuer.ticker, "anuales")
+        if bb_fp is None:
+            st.error(
+                f"No se encontro el Bloomberg Excel. Ponlo en: "
+                f"`data/bloomberg/Edos_{issuer.ticker.lower()}_anuales.xlsx`"
+            )
+        else:
+            st.caption(f"Bloomberg file: `{bb_fp.name}`")
+            mappings_avail = BLOOMBERG_MAPPINGS[issuer.ticker]
+
+            # UI controls
+            colA, colB = st.columns([2, 1])
+            with colA:
+                sheet_pick = st.selectbox(
+                    "Hoja a validar",
+                    list(mappings_avail.keys()),
+                    key=f"valid_sheet_{issuer.ticker}",
+                )
+            with colB:
+                rel_tol = st.number_input(
+                    "Tolerancia % (OK)",
+                    min_value=0.001, max_value=0.10,
+                    value=0.005, step=0.001, format="%.3f",
+                    help="Diff abs(parser-bb)/bb por debajo = OK",
+                )
+
+            # Parse all CUERVO XBRL Q4 (preliminary annual)
+            with st.spinner("Parseando XBRLs Q4 disponibles..."):
+                files_all = find_all_xbrl(issuer.ticker)
+                parsed_q4_by_year = {}
+                for fp_x in files_all:
+                    year_x, q_x = parse_period_tag(fp_x)
+                    if q_x in ("4", "4D"):
+                        try:
+                            parsed_q4_by_year[year_x] = _parse_cached(str(fp_x))
+                        except Exception:
+                            continue
+
+            if not parsed_q4_by_year:
+                st.warning(
+                    f"No hay XBRL anuales/Q4 parseables para {issuer.ticker} en `data/raw_xbrl/`. "
+                    f"Necesitas archivos `ifrsxbrl_{issuer.ticker}_<YYYY>-4.xls` o `4D`."
+                )
+            else:
+                st.caption(f"Anios parseados (Q4/4D): {sorted(parsed_q4_by_year.keys())}")
+
+                results = compare_all_periods(
+                    bb_fp, sheet_pick, mappings_avail[sheet_pick],
+                    parsed_q4_by_year,
+                    sheet_label=sheet_pick.split(" - ")[0],
+                    fx_rate=market.fx_rate_usdmxn,
+                )
+
+                if not results:
+                    st.warning(f"Ningun periodo coincide entre Bloomberg y XBRL para {sheet_pick}.")
+                else:
+                    # Period selector
+                    period_pick = st.selectbox(
+                        "Periodo a inspeccionar",
+                        sorted(results.keys(), reverse=True),
+                        key=f"valid_period_{issuer.ticker}",
+                    )
+                    res_pick = results[period_pick]
+
+                    # Status KPIs
+                    cs1, cs2, cs3, cs4 = st.columns(4)
+                    cs1.metric("OK (<0.5% diff)",  res_pick.n_ok)
+                    cs2.metric("WARN (0.5-5%)",    res_pick.n_warn)
+                    cs3.metric("ERROR (>5%)",      res_pick.n_error)
+                    cs4.metric("N/A",               res_pick.n_na)
+
+                    # Table with color coding
+                    tbl = res_pick.table.copy()
+                    # Format columns
+                    fmt_tbl = pd.DataFrame({
+                        "Concept":     tbl["Concept"],
+                        "Parser path": tbl["Parser path"],
+                        "Bloomberg":   tbl["Bloomberg"].apply(
+                            lambda v: f"{v:,.2f}" if v is not None and not pd.isna(v) else "—"),
+                        "Parser":      tbl["Parser"].apply(
+                            lambda v: f"{v:,.2f}" if v is not None and not pd.isna(v) else "—"),
+                        "Diff abs":    tbl["Diff abs"].apply(
+                            lambda v: f"{v:+,.2f}" if v is not None and not pd.isna(v) else "—"),
+                        "Diff %":      tbl["Diff %"].apply(
+                            lambda v: f"{v*100:+.4f}%" if v is not None and not pd.isna(v) else "—"),
+                        "Status":      tbl["Status"],
+                        "Notes":       tbl["Notes"],
+                    })
+
+                    def _status_style(row):
+                        s = row["Status"]
+                        if s == "OK":
+                            return ["background-color: rgba(46, 160, 67, 0.25)"] * len(row)
+                        if s == "WARN":
+                            return ["background-color: rgba(245, 158, 11, 0.30)"] * len(row)
+                        if s == "ERROR":
+                            return ["background-color: rgba(218, 54, 51, 0.35)"] * len(row)
+                        return ["background-color: rgba(120, 120, 120, 0.15)"] * len(row)
+
+                    try:
+                        styler = fmt_tbl.style.apply(_status_style, axis=1).hide(axis="index")
+                        styler = styler.set_properties(**{"padding": "4px 8px"})
+                        styler = styler.set_properties(
+                            subset=["Bloomberg", "Parser", "Diff abs", "Diff %"],
+                            **{"text-align": "right"})
+                        st.dataframe(styler, use_container_width=True,
+                                      height=min(800, 35 + 35 * len(fmt_tbl)))
+                    except Exception:
+                        st.dataframe(fmt_tbl, hide_index=True, use_container_width=True)
+
+                    # Multi-period summary heatmap
+                    st.markdown("### Resumen multi-periodo")
+                    summary_rows = []
+                    for p, r in sorted(results.items()):
+                        total = r.n_ok + r.n_warn + r.n_error + r.n_na
+                        summary_rows.append({
+                            "Periodo": p,
+                            "OK":     r.n_ok,
+                            "WARN":   r.n_warn,
+                            "ERROR":  r.n_error,
+                            "N/A":    r.n_na,
+                            "% OK":   f"{(r.n_ok / total * 100) if total else 0:.0f}%",
+                        })
+                    sum_df = pd.DataFrame(summary_rows)
+                    st.dataframe(sum_df, hide_index=True, use_container_width=True)
+
+                    # Errors detail
+                    errors = tbl[tbl["Status"] == "ERROR"]
+                    if not errors.empty:
+                        st.markdown("### ERRORS detail (>5% diff)")
+                        st.caption(
+                            "Revisa estos. Comunmente son: D&A (Bloomberg incluye write-offs/amort intangibles), "
+                            "diferencias de presentacion, o ajustes Non-GAAP."
+                        )
+                        st.dataframe(errors[["Concept", "Bloomberg", "Parser",
+                                              "Diff %", "Notes"]],
+                                      hide_index=True, use_container_width=True)
+
+    # ----- TAB Bloomberg Validation close, TAB Valuation Output open -----
+    tab_valid.__exit__(None, None, None)
     tab_val.__enter__()
 
     # ---- 1) Valuation Output (Damodaran-style wide projection) ----
