@@ -196,6 +196,9 @@ class Informative:
     revenue_12m_prior: float = 0.0
     ebit_12m: float = 0.0
     ebit_12m_prior: float = 0.0
+    num_employees: float = 0.0                      # 700000 "Numero de empleados"
+    num_workers: float = 0.0                        # 700000 "Numero de obreros"
+    deferred_tax_acum: float = 0.0                  # 800200 "Impuesto diferido" acumulado periodo
 
 
 @dataclass

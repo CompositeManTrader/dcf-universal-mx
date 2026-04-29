@@ -109,23 +109,21 @@ def _safe_get(obj, attr, default=0.0):
 # Cada emisora tiene su propio set de reclasificaciones especificas.
 # ===========================================================================
 
-def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0) -> dict:
+def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0,
+                            deferred_tax_period: float = 0.0) -> dict:
     """Reclasifica metricas CNBV -> formato Bloomberg para CUERVO (BECLE).
 
     Reglas CUERVO-especificas (verificadas vs Bloomberg Q4 2025):
       1. 'Otros gastos' CNBV -> Bloomberg 'Selling & Marketing'
-         (CUERVO es spirits-heavy marketing; BB reclasifica)
-      2. 'Other Operating Expense' Bloomberg = -Otros_ingresos - Disposal_gain (neto)
-      3. 'Interest Expense' Bloomberg = Gastos_financieros + |Ingresos_financieros si<0|
-         (CNBV reporta Ingresos financieros NEGATIVO = perdida neta -> BB suma a Int Exp)
-      4. 'Operating Income' Bloomberg = EBIT_CNBV + Disposal_gain
-         (BB clasifica disposal como ganancia operativa; CNBV no)
-      5. 'Pretax Adjusted' Bloomberg = Pretax_GAAP + Disposal_gain
-         (BB excluye disposal de "Adjusted" como item abnormal)
-
-    disposal_period: Disposal of Assets POSITIVO = ganancia (signo BB) para el periodo
-                      (CNBV viene como "Pérdida (utilidad)" donde negativo=ganancia,
-                      el caller debe pasar -cf.disposal_loss_gain del periodo).
+      2. 'Other Operating Income' = 0 (BB no lo muestra; folda en Other Op Expense)
+      3. 'Other Operating Expense' Bloomberg = -Otros_ingresos - Disposal_gain (neto)
+      4. 'Interest Expense' Bloomberg = Gastos_financieros + |Ingresos_financieros si<0|
+      5. 'Operating Income' Bloomberg = EBIT_CNBV + Disposal_gain
+      6. 'Pretax Adjusted' Bloomberg = Pretax_GAAP + Disposal_gain
+      7. Tax breakdown: deferred = del periodo (de hoja 800200 derivado);
+         current = total_tax - deferred
+      8. Net Abnormal Losses (Gains) = Disposal × (1 - effective_tax_rate)
+      9. NI Common Adj = NI_GAAP + Net_Abnormal
     """
     selling_cnbv = m.get("selling_expenses", 0) or 0
     ga_cnbv      = m.get("ga_expenses", 0) or 0
@@ -175,9 +173,26 @@ def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0) -> dict:
     revenue = m.get("revenue", 0) or 0
     operating_margin_bb = (ebit_bb / revenue) if revenue else 0
 
+    # Net Abnormal Losses (after-tax) y NI Adj
+    # Net Abnormal = Disposal × (1 - MARGINAL_tax_rate). Bloomberg usa marginal MX = 30%.
+    tax_expense  = m.get("tax_expense", 0) or 0
+    pretax_gaap_orig = pretax_gaap
+    MARGINAL_TAX_MX = 0.30  # Bloomberg standard para tax-effecting de abnormals
+    net_abnormal = disposal_period * (1 - MARGINAL_TAX_MX)
+    ni_gaap_val = m.get("net_income_gaap", 0) or 0
+    ni_common_gaap_val = m.get("ni_common_gaap", 0) or 0
+    ni_common_adj = ni_common_gaap_val + net_abnormal
+
+    # Tax breakdown
+    current_tax = tax_expense - deferred_tax_period
+
+    # Other Operating Income BB = 0 (folded into Other Op Expense for CUERVO)
+    # (CNBV "Otros ingresos" se neteo en other_op_expense_bb arriba)
+
     # Update dict
     m["selling_expenses"]    = selling_bb
     m["sga_total"]           = sga_bb
+    m["other_op_income"]     = 0.0      # BB lo deja blank
     m["other_op_expense"]    = other_op_expense_bb
     m["op_expenses_total"]   = op_expenses_total_bb
     m["ebit"]                = ebit_bb
@@ -191,6 +206,10 @@ def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0) -> dict:
     m["disposal_assets"]     = disposal_assets_bb
     m["ebitda"]              = ebitda_bb
     m["operating_margin"]    = operating_margin_bb
+    m["current_tax"]         = current_tax
+    m["deferred_tax"]        = deferred_tax_period
+    m["net_abnormal"]        = net_abnormal
+    m["ni_common_adj"]       = ni_common_adj
     return m
 
 
@@ -202,7 +221,9 @@ TICKER_RECLASS_RULES = {
 
 def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
                               prev_year_snap=None, ticker=None,
-                              disposal_period: float = 0.0) -> dict:
+                              disposal_period: float = 0.0,
+                              deferred_tax_period: float = 0.0,
+                              dividends_period_mdp: float = 0.0) -> dict:
     """Calcula TODAS las metricas Bloomberg-style para un periodo.
 
     snap: PeriodSnapshot del periodo actual.
@@ -306,10 +327,17 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
     operating_margin = (ebit / revenue) if revenue else 0.0
     profit_margin    = (ni_common_gaap / revenue) if revenue else 0.0
 
-    # Dividends
+    # Dividends (period actual; el caller puede sobrescribir con dividends_period_mdp ya derivado)
     cf = res.cashflow
-    total_cash_div = to_mdp(abs(_safe_get(cf, "dividends_paid")))
+    if dividends_period_mdp != 0.0:
+        total_cash_div = dividends_period_mdp
+    else:
+        total_cash_div = to_mdp(abs(_safe_get(cf, "dividends_paid")))
     dps = (total_cash_div / shares_mn) if shares_mn else None
+
+    # Sales per Employee (revenue / num_employees) en MXN unidades
+    num_emp = _safe_get(res.informative, "num_employees", 0)
+    sales_per_emp = (revenue * 1e6 / num_emp) if num_emp else None
 
     # Ensamblar dict de salida (luego se aplica reclassification por ticker)
     output = {
@@ -340,13 +368,17 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
         "accounting_std": "IAS/IFRS", "ebitda": ebitda,
         "ebitda_margin_ttm": ebitda_margin_ttm, "ebita": ebit,
         "gross_margin": gross_margin, "operating_margin": operating_margin,
-        "profit_margin": profit_margin, "sales_per_emp": None, "dps": dps,
+        "profit_margin": profit_margin, "sales_per_emp": sales_per_emp, "dps": dps,
         "total_cash_div": total_cash_div, "export_sales": None,
         "dep_expense": da_value,
     }
     if ticker and ticker in TICKER_RECLASS_RULES:
-        # disposal_period ya viene en BB-sign (positivo=gain) en MDP
-        output = TICKER_RECLASS_RULES[ticker](output, disposal_period=disposal_period)
+        # disposal_period y deferred_tax_period ya vienen calculados en MDP
+        output = TICKER_RECLASS_RULES[ticker](
+            output,
+            disposal_period=disposal_period,
+            deferred_tax_period=deferred_tax_period,
+        )
     return output
 
 
@@ -640,33 +672,60 @@ def build_income_adjusted_panel(series, annual_only=False,
     # Index para Growth YoY: same quarter, prev year
     by_year_q = {(s.year, s.quarter): s for s in series.snapshots}
 
-    # Helper: deriva disposal del periodo (trim puro o anual)
-    # CNBV "+ (-) Pérdida (utilidad) por disposicion": positivo = LOSS (add-back en CF
-    # porque la perdida no afecto cash). Bloomberg "Disposal of Assets" positivo
-    # tambien = LOSS (que se excluye de Pretax Adjusted como abnormal).
-    # MISMO SIGNO -> no invertir. Verificado CUERVO Q4 2025: +63.272 ambos.
-    def _disposal_for_period(s_curr, fx):
-        cf_acum = getattr(s_curr.parsed.cashflow, "disposal_loss_gain", 0) or 0
+    # Helper generico: deriva un campo del periodo (trim puro o anual)
+    # acum_path: ej. ('cashflow', 'disposal_loss_gain') o ('informative', 'deferred_tax_acum')
+    def _derive_period(s_curr, fx, acum_path):
+        obj = s_curr.parsed
+        for p in acum_path[:-1]:
+            obj = getattr(obj, p, None)
+            if obj is None:
+                return 0.0
+        cf_acum = getattr(obj, acum_path[-1], 0) or 0
         if annual_only:
             return cf_acum * fx / 1_000_000
-        # Trimestral: derivar Q puro = Q_acum - prev_Q_same_year_acum
         prev_q_map = {"2": "1", "3": "2", "4": "3", "4D": "3"}
         prev_q = prev_q_map.get(s_curr.quarter)
         if prev_q is None:
             return cf_acum * fx / 1_000_000   # Q1
         prev_snap_same_yr = by_year_q.get((s_curr.year, prev_q))
         if prev_snap_same_yr is None:
-            return cf_acum * fx / 1_000_000   # fallback
-        prev_acum = getattr(prev_snap_same_yr.parsed.cashflow, "disposal_loss_gain", 0) or 0
+            return cf_acum * fx / 1_000_000
+        # Navegar al campo en prev snap
+        prev_obj = prev_snap_same_yr.parsed
+        for p in acum_path[:-1]:
+            prev_obj = getattr(prev_obj, p, None)
+            if prev_obj is None:
+                return cf_acum * fx / 1_000_000
+        prev_acum = getattr(prev_obj, acum_path[-1], 0) or 0
         return (cf_acum - prev_acum) * fx / 1_000_000
+
+    # CNBV "+ (-) Pérdida (utilidad) por disposicion": positivo = LOSS (add-back en CF).
+    # Bloomberg "Disposal of Assets" positivo = LOSS abnormal. MISMO SIGNO.
+    def _disposal_for_period(s_curr, fx):
+        return _derive_period(s_curr, fx, ("cashflow", "disposal_loss_gain"))
+
+    # Deferred tax del periodo (de hoja 800200)
+    def _deferred_tax_for_period(s_curr, fx):
+        return _derive_period(s_curr, fx, ("informative", "deferred_tax_acum"))
+
+    # Dividendos del periodo (de CF dividends_paid)
+    def _dividends_for_period(s_curr, fx):
+        d = _derive_period(s_curr, fx, ("cashflow", "dividends_paid"))
+        return abs(d)   # CNBV tiene signo variable; Bloomberg lo muestra en magnitud
 
     cols_data = {}
     for s in snaps:
         fx = _detect_fx_mult(s, fx_rate_usdmxn)
         prev_snap = by_year_q.get((s.year - 1, s.quarter))
         disposal = _disposal_for_period(s, fx)
-        metrics = _compute_income_metrics(s, annual_only, fx, prev_snap,
-                                            ticker=ticker, disposal_period=disposal)
+        deferred_tax = _deferred_tax_for_period(s, fx)
+        dividends   = _dividends_for_period(s, fx)
+        metrics = _compute_income_metrics(
+            s, annual_only, fx, prev_snap, ticker=ticker,
+            disposal_period=disposal,
+            deferred_tax_period=deferred_tax,
+            dividends_period_mdp=dividends,
+        )
 
         col_vals = []
         for label, key, kind in BLOOMBERG_INCOME_LAYOUT:

@@ -214,6 +214,7 @@ SHEET_CF = "520000"
 SHEET_INFO_BS = "700000"
 SHEET_INFO_DA = "700002"
 SHEET_INFO_12M = "700003"
+SHEET_NOTES_TAX = "800200"   # Impuestos: current vs deferred breakdown
 
 # Tipos de emisora financiera (banco, casa de bolsa, sofol, aseguradora, fideicomiso)
 FINANCIAL_ISSUER_TYPES = {"BM", "CB", "SF", "SA", "FI", "FFC"}
@@ -598,6 +599,9 @@ class XBRLReader:
                 or idx.sum_across_series("Número de acciones en circulacion")
             )
             inf.shares_by_series = self._extract_series_breakdown(idx)
+            # Numero de empleados (col 1 = trim actual)
+            inf.num_employees = idx.get_or("Numero de empleados", col=1, default=0.0)
+            inf.num_workers = idx.get_or("Numero de obreros", col=1, default=0.0)
 
         # 700003 - Datos a 12 meses
         idx12 = self._idx(SHEET_INFO_12M)
@@ -634,6 +638,14 @@ class XBRLReader:
             inf.da_quarter = idxda.get_first(
                 "Depreciación y amortización operativa",
                 "Depreciacion y amortizacion operativa",
+                col=1, default=0.0,
+            ) * factor
+
+        # 800200 - Notas: Impuesto diferido (acumulado)
+        idxtax = self._idx(SHEET_NOTES_TAX)
+        if idxtax is not None:
+            inf.deferred_tax_acum = idxtax.get_first(
+                "Impuesto diferido",
                 col=1, default=0.0,
             ) * factor
 
