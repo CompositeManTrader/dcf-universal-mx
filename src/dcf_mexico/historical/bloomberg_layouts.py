@@ -1477,8 +1477,8 @@ def build_cf_standardized_panel(series, annual_only=False,
         ebit_12m = (s.parsed.informative.ebit_12m or 0) * fx / 1_000_000
         da_12m = (s.parsed.informative.da_12m or 0) * fx / 1_000_000
         ebitda_12m = ebit_12m + da_12m
-        # BB muestra TTM EBITDA Margin como porcentaje (×100)
-        ebitda_ttm_margin = (ebitda_12m / rev_12m * 100) if rev_12m else 0
+        # Pasar como decimal (0.2556); el formatter "ratio" lo convierte a %
+        ebitda_ttm_margin = (ebitda_12m / rev_12m) if rev_12m else 0
 
         # CF period values (todos derivados de acum)
         cfo_pre_adj_p = _derive_period(s, fx, ("cashflow", "cfo_pre_adj"))

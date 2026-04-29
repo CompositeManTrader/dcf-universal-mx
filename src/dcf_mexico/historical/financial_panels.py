@@ -231,7 +231,7 @@ def format_panel(df: pd.DataFrame, kinds: list[str]) -> pd.DataFrame:
             elif val is None or (isinstance(val, float) and pd.isna(val)):
                 col_fmt.append("—")
             elif kind == "ratio":
-                col_fmt.append(f"{val:.2%}")
+                col_fmt.append(f"{val:.4%}")
             elif kind == "ratio_eps":
                 col_fmt.append(f"{val:.4f}")
             elif kind == "ratio_x":
