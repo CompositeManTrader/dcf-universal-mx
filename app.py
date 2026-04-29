@@ -32,9 +32,23 @@ from dcf_mexico.valuation import (
     FinancialAssumptions,
     FinancialBase,
     value_financial,
-    dupont_from_parser,
-    export_dcf_to_excel,
 )
+
+# Imports nuevos (defensivos: no rompen la app si fallan)
+try:
+    from dcf_mexico.valuation import dupont_from_parser
+    HAS_DUPONT = True
+except ImportError as _e:
+    HAS_DUPONT = False
+    _DUPONT_ERR = str(_e)
+
+try:
+    from dcf_mexico.valuation import export_dcf_to_excel
+    HAS_EXCEL_EXPORT = True
+except ImportError as _e:
+    HAS_EXCEL_EXPORT = False
+    _EXCEL_ERR = str(_e)
+
 from dcf_mexico.view import build_all_sheets, BLOOMBERG_HEADER
 
 
@@ -1152,6 +1166,8 @@ if mode == "Single DCF":
     st.caption("Descomposicion del ROE en sus componentes (3-step + 5-step extended).")
 
     try:
+        if not HAS_DUPONT:
+            raise ImportError(f"DuPont module not available: {_DUPONT_ERR}")
         # Calcular FX multiplier para emisoras USD
         currency = (res.info.currency or "MXN").upper().strip()
         fx_mult = market.fx_rate_usdmxn if currency == "USD" else 1.0
@@ -1337,6 +1353,8 @@ if mode == "Single DCF":
     )
 
     try:
+        if not HAS_EXCEL_EXPORT:
+            raise ImportError(f"Excel export not available: {_EXCEL_ERR}")
         excel_bytes = export_dcf_to_excel(base, a, out)
         st.download_button(
             label=f"📥 Descargar DCF Excel — {issuer.ticker}",
