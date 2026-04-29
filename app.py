@@ -591,6 +591,244 @@ if mode == "Single DCF":
             import traceback
             st.code(traceback.format_exc())
 
+    # ============================================================
+    # 🎯 QUALITY AUDIT + 3 ESCENARIOS Bear/Base/Bull
+    # (la "lección Damodaran" automatizada)
+    # ============================================================
+    with st.expander("🎯 **Quality Audit + 3 Escenarios** — auditoria automática Damodaran-style",
+                     expanded=True):
+        st.caption(
+            "Cada input se valida contra: (1) histórico de la empresa, "
+            "(2) benchmark sectorial Damodaran, (3) rangos razonables. "
+            "Genera 3 escenarios Bear/Base/Bull con weighted expected value."
+        )
+        try:
+            from src.dcf_mexico.analysis import (
+                validate_all_inputs, generate_scenarios, get_sector
+            )
+
+            # Reload series si no se cargó arriba
+            if 'hs_for_suggest' not in dir():
+                hs_for_suggest = load_historical(
+                    issuer.ticker,
+                    parse_func=lambda fp: _parse_cached(str(fp)),
+                )
+
+            # Sector identificado
+            sector_obj = get_sector(issuer.ticker)
+            if sector_obj:
+                st.info(f"🏭 **Sector identificado:** {sector_obj.sector_name_es} "
+                        f"({sector_obj.sector_name})\n\n📚 *{sector_obj.description}*")
+            else:
+                st.warning(f"⚠️ Ticker `{issuer.ticker}` no mapeado a un sector. "
+                           "Validación usará solo histórico empresa, sin benchmarks sectoriales.")
+
+            # ============================================================
+            # PARTE 1: VALIDACION DE INPUTS ACTUALES
+            # ============================================================
+            st.markdown("### 📋 Validación de tus inputs actuales")
+            # Sliders ya leen de session_state. Construir user_inputs desde defaults
+            # que se calcularán abajo (estimación)
+            try_user_inputs = {
+                'revenue_growth_y1': st.session_state.get(
+                    f"sug_{issuer.ticker}_revenue_growth_y1",
+                    market.revenue_growth_high * 100
+                ) / 100,
+                'revenue_growth_y2y5': st.session_state.get(
+                    f"sug_{issuer.ticker}_revenue_growth_y2y5",
+                    market.revenue_growth_high * 100
+                ) / 100,
+                'op_margin_target': st.session_state.get(
+                    f"sug_{issuer.ticker}_op_margin_target",
+                    sector.target_op_margin * 100
+                ) / 100,
+                'sales_to_capital': st.session_state.get(
+                    f"sug_{issuer.ticker}_sales_to_capital",
+                    sector.sales_to_capital
+                ),
+                'beta_unlevered': sector.beta_unlevered,
+                'effective_tax': st.session_state.get(
+                    f"sug_{issuer.ticker}_effective_tax_rate",
+                    market.marginal_tax * 100
+                ) / 100,
+            }
+
+            validations = validate_all_inputs(hs_for_suggest, issuer.ticker, try_user_inputs)
+
+            # Color por quality score
+            def _quality_color(score_value: str) -> str:
+                if "Excellent" in score_value: return "#16A34A"
+                if "Defensible" in score_value: return "#16A34A"
+                if "Aggressive" in score_value: return "#EAB308"
+                if "Optimistic" in score_value or "Pessimistic" in score_value: return "#DC2626"
+                return "#6B7280"
+
+            # 2 columns layout
+            v_per_row = 2
+            for i in range(0, len(validations), v_per_row):
+                cols = st.columns(v_per_row)
+                for j, col in enumerate(cols):
+                    if i + j >= len(validations):
+                        continue
+                    v = validations[i + j]
+                    with col:
+                        score_color = _quality_color(v.quality_score.value)
+                        # Header
+                        st.markdown(
+                            f"<div style='border-left:4px solid {score_color}; padding-left:10px; margin-bottom:5px;'>"
+                            f"<strong>{v.name}</strong><br>"
+                            f"<span style='font-size:18px; color:{score_color};'>"
+                            f"{v.quality_score.value}</span>"
+                            f"</div>",
+                            unsafe_allow_html=True,
+                        )
+                        # Comparativos
+                        u_str = (f"{v.user_value*100:.2f}%" if v.unit == "%" and v.user_value is not None
+                                 else (f"{v.user_value:.3f}" if v.user_value is not None else "—"))
+                        h_str = (f"{v.historical_value*100:.2f}%" if v.unit == "%" and v.historical_value is not None
+                                 else (f"{v.historical_value:.3f}" if v.historical_value is not None else "—"))
+                        s_str = (f"{v.sector_value*100:.2f}%" if v.unit == "%" and v.sector_value is not None
+                                 else (f"{v.sector_value:.3f}" if v.sector_value is not None else "—"))
+                        st.markdown(
+                            f"**Tu input:** `{u_str}`  •  **Hist:** `{h_str}`  •  **Sector:** `{s_str}`"
+                        )
+                        # Bear/Base/Bull suggested
+                        bear_str = (f"{v.bear_value*100:+.1f}%" if v.unit == "%"
+                                    else f"{v.bear_value:.2f}")
+                        base_str = (f"{v.base_value*100:+.1f}%" if v.unit == "%"
+                                    else f"{v.base_value:.2f}")
+                        bull_str = (f"{v.bull_value*100:+.1f}%" if v.unit == "%"
+                                    else f"{v.bull_value:.2f}")
+                        st.markdown(
+                            f"🎯 **Sugerido:** "
+                            f"Bear `{bear_str}` • Base `{base_str}` • Bull `{bull_str}`"
+                        )
+                        # Warnings
+                        if v.warnings:
+                            for w in v.warnings:
+                                st.warning(f"⚠️ {w}")
+                        # Detalle
+                        with st.expander("📚 Ver narrativa completa"):
+                            st.markdown(v.rationale)
+                            if v.historical_breakdown is not None and not v.historical_breakdown.empty:
+                                st.markdown("**Breakdown histórico:**")
+                                st.dataframe(v.historical_breakdown, hide_index=True,
+                                             use_container_width=True)
+
+            # ============================================================
+            # PARTE 2: 3 ESCENARIOS + WEIGHTED EV
+            # ============================================================
+            st.markdown("---")
+            st.markdown("### 🎰 3 Escenarios automáticos (Bear / Base / Bull)")
+
+            sc_c1, sc_c2, sc_c3 = st.columns(3)
+            with sc_c1:
+                p_bear = st.slider("Probabilidad Bear", 0.0, 1.0, 0.30, 0.05,
+                                    key=f"p_bear_{issuer.ticker}")
+            with sc_c2:
+                p_base = st.slider("Probabilidad Base", 0.0, 1.0, 0.50, 0.05,
+                                    key=f"p_base_{issuer.ticker}")
+            with sc_c3:
+                p_bull = st.slider("Probabilidad Bull", 0.0, 1.0, 0.20, 0.05,
+                                    key=f"p_bull_{issuer.ticker}")
+
+            # Normalizar probabilidades
+            p_total = p_bear + p_base + p_bull
+            if p_total > 0 and abs(p_total - 1.0) > 0.01:
+                p_bear, p_base, p_bull = p_bear/p_total, p_base/p_total, p_bull/p_total
+                st.caption(f"Probabilidades normalizadas: Bear {p_bear*100:.0f}% / Base {p_base*100:.0f}% / Bull {p_bull*100:.0f}%")
+
+            # Generar escenarios
+            try:
+                scenarios = generate_scenarios(
+                    hs_for_suggest, issuer.ticker, base,
+                    market_price=float(issuer.market_price),
+                    p_bear=p_bear, p_base=p_base, p_bull=p_bull,
+                )
+
+                # Tabla resumen
+                summary = scenarios.summary_table(float(issuer.market_price))
+
+                # Display con cards visuales
+                st.markdown("#### 💎 Resumen de escenarios")
+                m_c1, m_c2, m_c3, m_c4, m_c5 = st.columns(5)
+                with m_c1:
+                    st.metric(f"🐻 Bear (P={p_bear*100:.0f}%)",
+                              f"${scenarios.bear.value_per_share:.2f}",
+                              f"{scenarios.bear.upside_pct*100:+.1f}%",
+                              delta_color="inverse")
+                with m_c2:
+                    st.metric(f"🟡 Base (P={p_base*100:.0f}%)",
+                              f"${scenarios.base.value_per_share:.2f}",
+                              f"{scenarios.base.upside_pct*100:+.1f}%",
+                              delta_color="inverse")
+                with m_c3:
+                    st.metric(f"🐂 Bull (P={p_bull*100:.0f}%)",
+                              f"${scenarios.bull.value_per_share:.2f}",
+                              f"{scenarios.bull.upside_pct*100:+.1f}%",
+                              delta_color="inverse")
+                with m_c4:
+                    st.metric(f"⚖️ Weighted EV",
+                              f"${scenarios.weighted_expected_value:.2f}",
+                              f"{scenarios.weighted_upside*100:+.1f}%",
+                              delta_color="inverse")
+                with m_c5:
+                    st.metric(f"📈 Market",
+                              f"${float(issuer.market_price):.2f}", "")
+
+                # Drivers usados
+                st.markdown("#### 🎛️ Drivers de cada escenario")
+                drivers_rows = []
+                for sc in [scenarios.bear, scenarios.base, scenarios.bull]:
+                    row = {"Escenario": f"{sc.name}"}
+                    row.update(sc.drivers)
+                    row["Value/Share"] = f"${sc.value_per_share:.2f}"
+                    row["Upside"] = f"{sc.upside_pct*100:+.1f}%"
+                    drivers_rows.append(row)
+                drivers_df = pd.DataFrame(drivers_rows)
+                st.dataframe(drivers_df, hide_index=True, use_container_width=True)
+
+                # Veredicto
+                st.markdown("#### 🎯 Veredicto Damodaran")
+                w_up = scenarios.weighted_upside
+                if w_up > 0.20:
+                    st.success(
+                        f"✅ **COMPRA** — Weighted EV (${scenarios.weighted_expected_value:.2f}) "
+                        f"está {w_up*100:+.1f}% arriba del precio. Margen de seguridad amplio."
+                    )
+                elif w_up > 0.05:
+                    st.success(
+                        f"🟢 **COMPRA MODERADA** — Weighted EV {w_up*100:+.1f}% arriba del precio."
+                    )
+                elif w_up > -0.05:
+                    st.info(
+                        f"⚪ **FAIR VALUE** — Weighted EV "
+                        f"(${scenarios.weighted_expected_value:.2f}) cerca del precio "
+                        f"({float(issuer.market_price):.2f})."
+                    )
+                elif w_up > -0.20:
+                    st.warning(
+                        f"🟡 **SOBREVALORADA MODERADA** — Weighted EV "
+                        f"{abs(w_up)*100:.1f}% por debajo del precio. "
+                        f"Probabilidad de retorno positivo: ~{p_bull*100:.0f}% (solo Bull)."
+                    )
+                else:
+                    st.error(
+                        f"🔴 **SOBREVALORADA** — Weighted EV "
+                        f"{abs(w_up)*100:.1f}% por debajo del precio. "
+                        f"Solo Bull case justifica entrar (P={p_bull*100:.0f}%)."
+                    )
+
+            except Exception as e_sc:
+                st.error(f"Error generando escenarios: {e_sc}")
+                import traceback
+                st.code(traceback.format_exc())
+
+        except Exception as e_qa:
+            st.error(f"Error en Quality Audit: {e_qa}")
+            import traceback
+            st.code(traceback.format_exc())
+
     st.subheader("Drivers DCF (editables)")
     st.caption("⚡ Si tocaste *'Usar todas las sugerencias'* arriba, los sliders ya tienen el valor calculado del histórico.")
 
