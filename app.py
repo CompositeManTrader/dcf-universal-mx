@@ -925,12 +925,13 @@ if mode == "Single DCF":
 
     # Define tabs (each section becomes a tab via __enter__/__exit__ to avoid
     # massive re-indentation. This is equivalent to `with tab:` blocks).
-    (tab_estados, tab_hist, tab_valid, tab_val, tab_stories, tab_pic,
+    (tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_stories, tab_pic,
      tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
         "📊 Estados Financieros",
         "📅 Historical",
         "🔍 Bloomberg Validation",
         "📈 Valuation Output",
+        "🔮 Forecast EEFF",
         "📖 Stories to Numbers",
         "🎨 Valuation as Picture",
         "🎯 Sensitivity",
@@ -1689,6 +1690,209 @@ if mode == "Single DCF":
 
     # ----- TAB 1 close, TAB 2 open -----
     tab_val.__exit__(None, None, None)
+    tab_forecast.__enter__()
+
+    # ============================================================
+    # 🔮 TAB FORECAST EEFF — proyección driver-based integrada con DCF
+    # ============================================================
+    st.subheader(f"🔮 Forecast Estados Financieros — {issuer.ticker}")
+    st.caption(
+        "Proyección driver-based estilo Damodaran. Los DRIVERS (revenue growth, "
+        "EBIT margin, CapEx %, etc.) se calculan automáticamente del histórico — "
+        "puedes editarlos. Los 3 EEFF (Income, Balance, Cash Flow) se proyectan "
+        "consistentemente y el FCFF resultante alimenta el DCF."
+    )
+
+    try:
+        from src.dcf_mexico.projection import (
+            BaseFinancials, ProjectionDrivers, project_financials, run_backtest
+        )
+
+        # 1) Cargar histórico
+        hs_fc = load_historical(
+            issuer.ticker,
+            parse_func=lambda fp: _parse_cached(str(fp)),
+        )
+        if not hs_fc.snapshots or len(hs_fc.annual) < 2:
+            st.warning(
+                f"Necesitas al menos 2 años anuales de XBRL parseados. "
+                f"Actualmente: {len(hs_fc.annual)} años. "
+                "Sube más archivos a `data/raw_xbrl/`."
+            )
+        else:
+            # 2) Configuración
+            cfg_c1, cfg_c2, cfg_c3 = st.columns([1, 1, 1])
+            with cfg_c1:
+                horizon = st.slider("Horizonte (años)", 3, 10, 5, key=f"fc_horizon_{issuer.ticker}")
+            with cfg_c2:
+                smoothing = st.selectbox(
+                    "Método de drivers",
+                    ["median", "avg", "last"],
+                    index=0,
+                    format_func=lambda x: {"median": "Mediana (robusto)",
+                                            "avg": "Promedio",
+                                            "last": "Último observado"}[x],
+                    key=f"fc_smoothing_{issuer.ticker}",
+                )
+            with cfg_c3:
+                show_bs = st.checkbox("Mostrar Balance Sheet proyectado", value=True,
+                                       key=f"fc_show_bs_{issuer.ticker}")
+
+            # 3) Calcular drivers desde histórico
+            curr_fc = (res.info.currency or "MXN").upper().strip()
+            fx_fc = market.fx_rate_usdmxn if curr_fc == "USD" else 1.0
+            base_fc = BaseFinancials.from_snapshot(hs_fc.annual[-1], fx_mult=fx_fc)
+            drivers_fc = ProjectionDrivers.from_history(
+                hs_fc, horizon=horizon, fx_mult=fx_fc, smoothing=smoothing
+            )
+
+            # 4) Editor de drivers (data_editor para edición año a año)
+            st.markdown("##### 🎛️ Drivers (auto-calculados, editables)")
+            st.caption("Edita cualquier celda para sensibilizar la proyección. Tax y CapEx % "
+                       "están en decimal (0.27 = 27%). Días son enteros.")
+
+            year_labels = [f"Y{i+1} ({base_fc.year + i + 1})" for i in range(horizon)]
+            drivers_data = {
+                "Driver": [
+                    "Revenue Growth",
+                    "Gross Margin",
+                    "OpEx % Rev (display)",
+                    "EBIT Margin (PRIMARIO)",
+                    "D&A % Rev",
+                    "Tax Rate",
+                    "CapEx % Rev",
+                    "DIO (days)",
+                    "DSO (days)",
+                    "DPO (days)",
+                    "Payout Ratio",
+                ],
+            }
+            for i in range(horizon):
+                drivers_data[year_labels[i]] = [
+                    round(drivers_fc.revenue_growth_path[i], 4),
+                    round(drivers_fc.gross_margin_path[i], 4),
+                    round(drivers_fc.opex_pct_revenue_path[i], 4),
+                    round(drivers_fc.ebit_margin_path[i], 4),
+                    round(drivers_fc.da_pct_revenue_path[i], 4),
+                    round(drivers_fc.tax_rate_path[i], 4),
+                    round(drivers_fc.capex_pct_revenue_path[i], 4),
+                    int(round(drivers_fc.dio_days_path[i])),
+                    int(round(drivers_fc.dso_days_path[i])),
+                    int(round(drivers_fc.dpo_days_path[i])),
+                    round(drivers_fc.payout_ratio_path[i], 4) if drivers_fc.payout_ratio_path else 0.30,
+                ]
+            df_drivers = pd.DataFrame(drivers_data)
+            edited = st.data_editor(
+                df_drivers, hide_index=True, use_container_width=True,
+                key=f"fc_drivers_editor_{issuer.ticker}_{horizon}_{smoothing}",
+            )
+
+            # Reconstruir drivers desde lo editado
+            edited_drivers = ProjectionDrivers(
+                horizon=horizon,
+                revenue_growth_path=[float(edited.iloc[0][year_labels[i]]) for i in range(horizon)],
+                gross_margin_path=[float(edited.iloc[1][year_labels[i]]) for i in range(horizon)],
+                opex_pct_revenue_path=[float(edited.iloc[2][year_labels[i]]) for i in range(horizon)],
+                ebit_margin_path=[float(edited.iloc[3][year_labels[i]]) for i in range(horizon)],
+                da_pct_revenue_path=[float(edited.iloc[4][year_labels[i]]) for i in range(horizon)],
+                tax_rate_path=[float(edited.iloc[5][year_labels[i]]) for i in range(horizon)],
+                capex_pct_revenue_path=[float(edited.iloc[6][year_labels[i]]) for i in range(horizon)],
+                dio_days_path=[float(edited.iloc[7][year_labels[i]]) for i in range(horizon)],
+                dso_days_path=[float(edited.iloc[8][year_labels[i]]) for i in range(horizon)],
+                dpo_days_path=[float(edited.iloc[9][year_labels[i]]) for i in range(horizon)],
+                interest_rate_on_debt=0.10,
+                payout_ratio_path=[float(edited.iloc[10][year_labels[i]]) for i in range(horizon)],
+            )
+
+            # 5) Proyectar
+            result_fc = project_financials(base_fc, edited_drivers, horizon=horizon)
+
+            # 6) Display: 3 tablas
+            st.markdown("---")
+            st.markdown("##### 📊 Income Statement Proyectado")
+            st.dataframe(result_fc.income_statement_table(), use_container_width=True)
+
+            st.markdown("##### 💵 Cash Flow Proyectado")
+            st.dataframe(result_fc.cash_flow_table(), use_container_width=True)
+
+            if show_bs:
+                st.markdown("##### 💰 Balance Sheet Proyectado (simplificado)")
+                st.dataframe(result_fc.balance_sheet_table(), use_container_width=True)
+
+            # 7) Métricas resumen
+            st.markdown("---")
+            st.markdown("##### 🎯 Resumen")
+            mc1, mc2, mc3, mc4 = st.columns(4)
+            last_y = result_fc.years[-1]
+            with mc1:
+                cagr_rev = (last_y.revenue / base_fc.revenue) ** (1/horizon) - 1 if base_fc.revenue > 0 else 0
+                st.metric(f"Revenue CAGR {horizon}y", f"{cagr_rev*100:+.2f}%",
+                          f"{base_fc.revenue:,.0f} → {last_y.revenue:,.0f}")
+            with mc2:
+                avg_ebit_m = sum(y.op_margin for y in result_fc.years) / horizon
+                base_margin = base_fc.ebit / base_fc.revenue if base_fc.revenue > 0 else 0
+                st.metric(f"Avg EBIT Margin", f"{avg_ebit_m*100:.1f}%",
+                          f"vs base {base_margin*100:.1f}%")
+            with mc3:
+                total_fcff = sum(y.fcff for y in result_fc.years)
+                st.metric(f"Sum FCFF {horizon}y", f"{total_fcff:,.0f} MDP")
+            with mc4:
+                last_fcff = result_fc.years[-1].fcff
+                st.metric(f"FCFF Y{horizon}", f"{last_fcff:,.0f} MDP",
+                          f"vs hoy {(base_fc.cfo - base_fc.capex):,.0f}")
+
+            # 8) BACK-TEST
+            st.markdown("---")
+            st.markdown("##### 🧪 Back-test: ¿Cómo predeciría esta metodología si la hubiéramos aplicado en el pasado?")
+            available_anchors = [s.year for s in hs_fc.annual[:-1]]   # excluyendo el último
+            if len(available_anchors) >= 1:
+                anchor_pick = st.selectbox(
+                    "Año-ancla del back-test",
+                    options=available_anchors,
+                    index=len(available_anchors)-1,
+                    help="Selecciona un año del pasado. El modelo proyecta usando solo info ≤ ese año, "
+                         "y compara contra los valores reales observados después.",
+                    key=f"fc_anchor_{issuer.ticker}",
+                )
+                bt = run_backtest(hs_fc, anchor_year=anchor_pick, fx_mult=fx_fc, smoothing=smoothing)
+                if bt:
+                    bm1, bm2, bm3, bm4 = st.columns(4)
+                    with bm1:
+                        st.metric("Revenue MAPE",
+                                  f"{bt.mape_revenue*100:.1f}%",
+                                  "✅ excelente" if bt.mape_revenue < 0.05 else "🟡 aceptable" if bt.mape_revenue < 0.15 else "🔴 alto")
+                    with bm2:
+                        st.metric("EBIT MAPE",
+                                  f"{bt.mape_ebit*100:.1f}%",
+                                  "✅" if bt.mape_ebit < 0.10 else "🟡" if bt.mape_ebit < 0.30 else "🔴")
+                    with bm3:
+                        st.metric("Net Income MAPE",
+                                  f"{bt.mape_ni*100:.1f}%",
+                                  "✅" if bt.mape_ni < 0.15 else "🟡" if bt.mape_ni < 0.40 else "🔴")
+                    with bm4:
+                        st.metric("Direction Accuracy",
+                                  f"{bt.direction_accuracy_revenue*100:.0f}%",
+                                  "✅ predice tendencia" if bt.direction_accuracy_revenue >= 0.7 else "🔴 random")
+
+                    st.markdown("**Tabla detallada del back-test:**")
+                    st.dataframe(bt.to_table(), hide_index=True, use_container_width=True)
+                    st.caption(
+                        f"📌 **Interpretación:** Si Revenue MAPE < 5% y Direction Accuracy = 100%, "
+                        f"la metodología capta bien la tendencia para esta empresa. "
+                        f"EBIT y NI tienen MAPE más alto porque dependen de items volátiles "
+                        f"(FX, ventas extraordinarias, taxes). Es **normal y honesto**."
+                    )
+                else:
+                    st.info("No hay suficientes años posteriores al ancla para back-testar.")
+            else:
+                st.info("Necesitas al menos 3 años de histórico para back-test (1 ancla + 1+ futuros).")
+
+    except Exception as e_fc:
+        st.error(f"Error en Forecast: {e_fc}")
+        import traceback
+        st.code(traceback.format_exc())
+
+    tab_forecast.__exit__(None, None, None)
     tab_stories.__enter__()
 
     # ---- 2) Stories to Numbers ----
