@@ -585,7 +585,7 @@ if mode == "Single DCF":
     # Define tabs (each section becomes a tab via __enter__/__exit__ to avoid
     # massive re-indentation. This is equivalent to `with tab:` blocks).
     (tab_estados, tab_hist, tab_valid, tab_val, tab_stories, tab_pic,
-     tab_sens, tab_dupont, tab_diag, tab_dl) = st.tabs([
+     tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
         "📊 Estados Financieros",
         "📅 Historical",
         "🔍 Bloomberg Validation",
@@ -594,6 +594,7 @@ if mode == "Single DCF":
         "🎨 Valuation as Picture",
         "🎯 Sensitivity",
         "🔗 DuPont",
+        "📐 Ratios & Metrics",
         "✅ Diagnostics",
         "💾 Download Excel",
     ])
@@ -1751,8 +1752,150 @@ if mode == "Single DCF":
     except Exception as e:
         st.error(f"DuPont no disponible para esta emisora: {e}")
 
-    # ----- TAB 5 close, TAB 6 (Diagnostics) open -----
+    # ----- TAB 5 close, TAB Ratios open -----
     tab_dupont.__exit__(None, None, None)
+    tab_ratios.__enter__()
+
+    # ============================================================
+    # TAB Ratios & Metrics: ~80 ratios financieros con explicaciones
+    # ============================================================
+    st.subheader(f"Ratios & Metrics — {issuer.ticker}")
+    st.caption(
+        "Analisis financiero comprehensivo: 70+ ratios organizados en 10 categorias "
+        "(margenes, returns, DuPont, liquidez, apalancamiento, eficiencia, calidad de "
+        "flujo, per-share, multiplos, growth). Cada ratio incluye formula, descripcion "
+        "y guia de interpretacion."
+    )
+
+    try:
+        from src.dcf_mexico.analysis import compute_all_ratios, RATIO_CATEGORIES
+
+        # Selector de periodo
+        col_p1, col_p2, col_p3 = st.columns([2, 1, 1])
+        with col_p1:
+            snap_labels = [s.label for s in hs.snapshots]
+            sel_idx = st.selectbox(
+                "Periodo a analizar:",
+                options=range(len(snap_labels)),
+                index=len(snap_labels) - 1,
+                format_func=lambda i: snap_labels[i],
+                key="ratios_period_sel",
+            )
+        with col_p2:
+            mp_input = st.number_input(
+                "Market Price (pesos/accion):",
+                min_value=0.0, value=0.0, step=0.5,
+                help="Si > 0, calcula multiplos de valuacion (P/E, P/B, EV/EBITDA, etc.)",
+                key="ratios_market_price",
+            )
+        with col_p3:
+            cat_filter = st.multiselect(
+                "Filtrar categorias:",
+                options=RATIO_CATEGORIES,
+                default=RATIO_CATEGORIES,
+                key="ratios_cat_filter",
+            )
+
+        sel_snap = hs.snapshots[sel_idx]
+        prev_snap = hs.snapshots[sel_idx - 1] if sel_idx >= 1 else None
+        # Mismo Q año anterior para Growth YoY
+        by_yq = {(s.year, s.quarter): s for s in hs.snapshots}
+        prev_year_snap = by_yq.get((sel_snap.year - 1, sel_snap.quarter))
+
+        all_ratios = compute_all_ratios(
+            sel_snap,
+            prev_snap=prev_snap,
+            prev_year_snap=prev_year_snap,
+            market_price=mp_input if mp_input > 0 else None,
+        )
+
+        # Group by category
+        from collections import defaultdict
+        by_cat = defaultdict(list)
+        for r in all_ratios:
+            by_cat[r.category].append(r)
+
+        # Display
+        st.markdown(f"**{len(all_ratios)} ratios** computados para "
+                    f"`{sel_snap.label}` " +
+                    (f"• Market Price: ${mp_input:.2f}/accion" if mp_input > 0 else
+                     "• (sin precio: multiplos de valuacion no disponibles)"))
+        st.divider()
+
+        # Format unit-aware value display
+        def _fmt_val(r):
+            if r.value is None:
+                return "—"
+            v = r.value
+            u = r.unit
+            if u == "%":
+                return f"{v:>9,.4f}%"
+            elif u == "x":
+                return f"{v:>9,.4f}x"
+            elif u == "days":
+                return f"{v:>9,.1f} days"
+            elif u == "MDP":
+                return f"{v:>11,.1f} MDP"
+            elif u == "pesos":
+                return f"$ {v:>9,.4f}"
+            else:
+                return f"{v:>9,.4f}"
+
+        for cat in RATIO_CATEGORIES:
+            if cat not in cat_filter:
+                continue
+            items = by_cat.get(cat, [])
+            if not items:
+                continue
+
+            # Icono por categoria
+            icons = {
+                "Profitability Margins": "💰",
+                "Returns": "📈",
+                "DuPont Decomposition": "🔗",
+                "Liquidity": "💧",
+                "Leverage": "⚖️",
+                "Efficiency": "⚡",
+                "Cash Flow Quality": "💵",
+                "Per-Share": "📊",
+                "Valuation Multiples": "🏷️",
+                "Growth (YoY)": "🚀",
+            }
+            icon = icons.get(cat, "📐")
+
+            with st.expander(f"{icon} **{cat}** ({len(items)} ratios)", expanded=True):
+                import pandas as _pd
+                rows = []
+                for r in items:
+                    rows.append({
+                        "Ratio": r.name,
+                        "Valor": _fmt_val(r),
+                        "Formula": r.formula,
+                        "Descripcion": r.description,
+                        "Interpretacion": r.interpretation,
+                    })
+                df_cat = _pd.DataFrame(rows)
+                st.dataframe(
+                    df_cat,
+                    hide_index=True,
+                    use_container_width=True,
+                    height=min(700, 50 + 80 * len(items)),
+                    column_config={
+                        "Ratio": st.column_config.TextColumn(width=210),
+                        "Valor": st.column_config.TextColumn(width=120),
+                        "Formula": st.column_config.TextColumn(width=200),
+                        "Descripcion": st.column_config.TextColumn(width=380),
+                        "Interpretacion": st.column_config.TextColumn(width=380),
+                    },
+                )
+
+    except Exception as e:
+        st.error(f"Error calculando ratios: {e}")
+        import traceback
+        st.code(traceback.format_exc())
+
+    # ----- TAB Ratios close, TAB Diagnostics open -----
+    tab_ratios.__exit__(None, None, None)
     tab_diag.__enter__()
 
     # ---- 4) Diagnostics ----
