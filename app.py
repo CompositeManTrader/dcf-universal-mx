@@ -494,21 +494,130 @@ if mode == "Single DCF":
     # ----- NON-FINANCIAL: FCFF DCF -----
     base = CompanyBase.from_parser_dcf(res.dcf, include_leases_as_debt=True)
 
+    # ============================================================
+    # 💡 INPUTS SUGERIDOS desde histórico (Sales-to-Capital, growth, margin, etc)
+    # ============================================================
+    with st.expander("💡 **Inputs sugeridos desde el histórico** — entiende cada driver", expanded=True):
+        st.caption(
+            "Cada input del DCF se calcula automáticamente desde tus datos parseados. "
+            "Te explica qué significa, cómo se calcula y qué número usar."
+        )
+        try:
+            from src.dcf_mexico.analysis import compute_all_input_suggestions
+
+            # Calcular sugerencias del histórico anual
+            curr = (res.info.currency or "MXN").upper().strip()
+            fx_for_suggest = market.fx_rate_usdmxn if curr == "USD" else 1.0
+            suggestions = compute_all_input_suggestions(hs, fx_mult=fx_for_suggest)
+
+            # Inicializar session_state con sugerencias si NO existen ya
+            for key, sug in suggestions.items():
+                ss_key = f"sug_{issuer.ticker}_{key}"
+                if ss_key not in st.session_state:
+                    st.session_state[ss_key] = sug.value_suggested
+
+            # Boton global "Usar todas las sugerencias"
+            colb1, colb2 = st.columns([1, 3])
+            with colb1:
+                if st.button("⚡ Usar todas las sugerencias", key=f"apply_sug_all_{issuer.ticker}"):
+                    for key, sug in suggestions.items():
+                        ss_key = f"sug_{issuer.ticker}_{key}"
+                        st.session_state[ss_key] = sug.value_suggested
+                    st.success("Sugerencias aplicadas. Los sliders abajo ya están actualizados.")
+                    st.rerun()
+            with colb2:
+                st.caption("Setea TODOS los sliders del DCF al valor calculado del histórico.")
+
+            # Render cada sugerencia como card
+            cards_per_row = 2
+            sug_items = list(suggestions.items())
+            for i in range(0, len(sug_items), cards_per_row):
+                cols = st.columns(cards_per_row)
+                for j, col in enumerate(cols):
+                    if i + j >= len(sug_items):
+                        continue
+                    key, sug = sug_items[i + j]
+                    with col:
+                        # Card header con nombre + valor + warnings
+                        warn_badge = "⚠️" if sug.warnings else "✅"
+                        st.markdown(
+                            f"##### {warn_badge} {sug.name}  →  **{sug.value_suggested}{sug.unit}**"
+                        )
+                        st.caption(f"📐 *{sug.value_method}*")
+
+                        # Comparativos
+                        cmp_lines = []
+                        if sug.damodaran_default is not None:
+                            cmp_lines.append(
+                                f"• Damodaran default: **{sug.damodaran_default}{sug.unit}** ({sug.damodaran_default_note})"
+                            )
+                        if sug.sector_benchmark is not None:
+                            cmp_lines.append(
+                                f"• Sector benchmark: **{sug.sector_benchmark}{sug.unit}** ({sug.sector_note})"
+                            )
+                        if cmp_lines:
+                            st.markdown("\n".join(cmp_lines))
+
+                        # Warnings
+                        if sug.warnings:
+                            for w in sug.warnings:
+                                st.warning(f"⚠️ {w}")
+
+                        # Expander con detalle
+                        with st.expander("📚 Ver detalle (formula, breakdown, explicación)"):
+                            st.markdown(f"**Fórmula:**")
+                            st.code(sug.formula, language="text")
+                            st.markdown(f"**¿Qué significa?**")
+                            st.markdown(sug.explanation)
+                            st.markdown(f"**Interpretación:**")
+                            st.markdown(sug.interpretation)
+                            if sug.breakdown is not None and not sug.breakdown.empty:
+                                st.markdown(f"**Cálculo año a año:**")
+                                st.dataframe(sug.breakdown, hide_index=True, use_container_width=True)
+
+        except Exception as e:
+            st.error(f"Error calculando sugerencias: {e}")
+            import traceback
+            st.code(traceback.format_exc())
+
     st.subheader("Drivers DCF (editables)")
+    st.caption("⚡ Si tocaste *'Usar todas las sugerencias'* arriba, los sliders ya tienen el valor calculado del histórico.")
+
+    # Helpers para leer valores sugeridos del session_state (clamp a rango del slider)
+    def _sug_or_default(key: str, default: float, vmin: float, vmax: float, scale: float = 1.0) -> float:
+        """Lee la sugerencia desde session_state y clampea al rango [vmin, vmax].
+        scale convierte unidad: e.g. sugerencia viene en % (-1.99) y slider quiere decimal (-0.0199)."""
+        ss_key = f"sug_{issuer.ticker}_{key}"
+        v = st.session_state.get(ss_key)
+        if v is None:
+            return default
+        v_scaled = v * scale
+        return max(vmin, min(vmax, v_scaled))
+
+    # Default values: si hay sugerencia, usarla; si no, defaults market/sector
+    default_rev_growth = _sug_or_default("revenue_growth_y2y5", market.revenue_growth_high, 0.0, 0.20, scale=0.01)
+    default_op_margin  = _sug_or_default("op_margin_target", sector.target_op_margin, 0.0, 0.60, scale=0.01)
+    default_s2c        = _sug_or_default("sales_to_capital", sector.sales_to_capital, 0.1, 6.0)
+
     c1, c2, c3 = st.columns(3)
     with c1:
         rev_growth = st.slider("Revenue growth Y1-Y5", 0.0, 0.20,
-                                market.revenue_growth_high, 0.005, format="%.3f")
+                                default_rev_growth, 0.005, format="%.3f",
+                                help="Default sugerido = mediana YoY últimos 3-5 años (panel arriba)")
         terminal_g = st.slider("Terminal growth", 0.0, 0.06,
-                                market.terminal_growth, 0.005, format="%.3f")
+                                market.terminal_growth, 0.005, format="%.3f",
+                                help="Crecimiento perpetuo. Cap a inflación MX (~3.5%) o riskfree.")
     with c2:
         op_margin = st.slider("Target op margin", 0.0, 0.60,
-                               sector.target_op_margin, 0.005, format="%.3f")
+                               default_op_margin, 0.005, format="%.3f",
+                               help="Default sugerido = mediana margen histórico (panel arriba)")
         s2c = st.slider("Sales-to-Capital", 0.1, 6.0,
-                         sector.sales_to_capital, 0.05, format="%.2f")
+                         default_s2c, 0.05, format="%.2f",
+                         help="Default = histórico de la empresa o sector si no hay datos válidos")
     with c3:
         beta_unlev = st.slider("Beta unlevered (sector)", 0.1, 2.0,
-                                sector.beta_unlevered, 0.05, format="%.2f")
+                                sector.beta_unlevered, 0.05, format="%.2f",
+                                help="Beta de la industria sin apalancar (Damodaran tables)")
         market_price = st.number_input("Precio mercado (MXN)",
                                         value=float(issuer.market_price), step=0.5)
 

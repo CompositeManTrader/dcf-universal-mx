@@ -194,19 +194,31 @@ class DCFOutput:
     wacc_yearly: list = field(default_factory=list)
     discount_factor: list = field(default_factory=list)
     pv_fcff: list = field(default_factory=list)
+    # ===== NEW Hoja 2: Implied / tracked variables =====
+    nol_remaining: list = field(default_factory=list)        # NOL al CIERRE del año t
+    nol_used: list = field(default_factory=list)              # NOL aplicado en el año t
+    tax_shield: list = field(default_factory=list)            # Ahorro fiscal por NOL
+    sales_to_capital_yearly: list = field(default_factory=list)  # S2C usado en año t
+    invested_capital: list = field(default_factory=list)      # IC al CIERRE del año t
+    roic_yearly: list = field(default_factory=list)           # NOPAT_t / IC_{t-1}
     # Terminal
     terminal_fcff: float = 0.0
     terminal_value: float = 0.0
     pv_terminal: float = 0.0
     terminal_wacc: float = 0.0
+    terminal_roic: float = 0.0                                # NEW: ROIC terminal usado
+    terminal_reinv_rate: float = 0.0                          # NEW: g/ROIC terminal
     # Agregados
     sum_pv_fcff: float = 0.0
+    operating_value_dcf: float = 0.0                          # NEW: pre-failure adjustment
+    distress_proceeds: float = 0.0                            # NEW: bridge desglosado
     enterprise_value: float = 0.0
     equity_value: float = 0.0
     value_per_share: float = 0.0
     upside_pct: float = 0.0
 
     def projection_table(self) -> pd.DataFrame:
+        """Tabla principal Damodaran-style (12 columnas, año a año)."""
         df = pd.DataFrame({
             "Year":              self.years,
             "Revenue":           [round(x, 1) for x in self.revenue],
@@ -222,6 +234,77 @@ class DCFOutput:
             "PV FCFF":           [round(x, 1) for x in self.pv_fcff],
         })
         return df
+
+    def implied_table(self) -> pd.DataFrame:
+        """Implied variables Damodaran-style (Hoja 2):
+        Sales-to-capital, Invested Capital evolutivo, ROIC año a año + check vs WACC."""
+        rows = []
+        for i, t in enumerate(self.years):
+            ic_t = self.invested_capital[i]
+            roic_t = self.roic_yearly[i]
+            wacc_t = self.wacc_yearly[i]
+            spread = roic_t - wacc_t
+            rows.append({
+                "Year": t,
+                "Sales/Capital": round(self.sales_to_capital_yearly[i], 4),
+                "Invested Capital": round(ic_t, 1),
+                "ROIC": round(roic_t, 4),
+                "WACC": round(wacc_t, 4),
+                "ROIC - WACC (bps)": int(round(spread * 10000)),
+                "Value Creation": "✅ CREATES" if spread > 0 else ("➖ NEUTRAL" if abs(spread) < 0.005 else "❌ DESTROYS"),
+            })
+        # Terminal row
+        rows.append({
+            "Year": "Terminal",
+            "Sales/Capital": "—",
+            "Invested Capital": "—",
+            "ROIC": round(self.terminal_roic, 4),
+            "WACC": round(self.terminal_wacc, 4),
+            "ROIC - WACC (bps)": int(round((self.terminal_roic - self.terminal_wacc) * 10000)),
+            "Value Creation": "—" if abs(self.terminal_roic - self.terminal_wacc) < 0.0005
+                              else ("✅" if self.terminal_roic > self.terminal_wacc else "❌"),
+        })
+        return pd.DataFrame(rows)
+
+    def nol_table(self) -> pd.DataFrame:
+        """NOL tracking Damodaran-style (Hoja 2). Solo si NOL > 0."""
+        rows = []
+        nol_initial = self.assumptions.nol_carryforward
+        for i, t in enumerate(self.years):
+            rows.append({
+                "Year": t,
+                "EBIT": round(self.ebit[i], 1),
+                "NOL Used": round(self.nol_used[i], 1),
+                "Tax Shield": round(self.tax_shield[i], 1),
+                "NOL Remaining (EOY)": round(self.nol_remaining[i], 1),
+            })
+        return pd.DataFrame(rows)
+
+    def bridge_table(self) -> pd.DataFrame:
+        """Bridge desglosado EV → Equity Value (Damodaran-style)."""
+        a = self.assumptions
+        b = self.base
+        net_debt = b.financial_debt - b.cash
+        cash_haircut = a.trapped_cash * a.trapped_cash_tax_rate if a.trapped_cash > 0 else 0
+        rows = [
+            ("Sum PV FCFF (10y)",              self.sum_pv_fcff),
+            ("PV(Terminal Value)",             self.pv_terminal),
+            ("DCF Operating Value",            self.operating_value_dcf),
+            ("(× P_failure adj)",
+                f"  p={a.probability_of_failure:.2%}, distress={self.distress_proceeds:,.1f} MDP" if a.probability_of_failure > 0 else "n/a"),
+            ("Final Operating Value (EV)",     self.enterprise_value),
+            ("(-) Total Debt",                 -b.financial_debt),
+            ("(+) Cash",                        b.cash),
+            ("(-) Trapped Cash haircut",       -cash_haircut if cash_haircut > 0 else "n/a"),
+            ("(-) Minority Interest",          -b.minority_interest),
+            ("(+) Non-Operating Assets",        b.non_operating_assets),
+            ("Equity Value",                    self.equity_value),
+            ("÷ Shares (M)",                    b.shares_outstanding / 1e6),
+            ("Estimated Value/Share (MXN)",     self.value_per_share),
+            ("Market Price (MXN)",              a.market_price or 0),
+            ("Upside / (Downside)",             f"{self.upside_pct:.2%}"),
+        ]
+        return pd.DataFrame(rows, columns=["Concepto", "Valor"])
 
     def summary_table(self) -> pd.DataFrame:
         a = self.assumptions
@@ -380,6 +463,13 @@ def project_company(
             return a.sales_to_capital_y1_5 if a.sales_to_capital_y1_5 is not None else a.sales_to_capital
         return a.sales_to_capital_y6_10 if a.sales_to_capital_y6_10 is not None else a.sales_to_capital
 
+    # NOL tracking inicial
+    nol_remaining = a.nol_carryforward
+    # Invested Capital inicial (BS-based o derivado de S2C si no esta disponible)
+    ic_prev = base.invested_capital if base.invested_capital > 0 else (
+        base.revenue / a.sales_to_capital if a.sales_to_capital > 0 else 1.0
+    )
+
     prev_rev = base.revenue
     for t in range(1, n + 1):
         g = _g(t)
@@ -390,11 +480,30 @@ def project_company(
         ebit_t = rev_t * margin_t
 
         tax_t = _tx(t)
-        nopat_t = ebit_t * (1 - tax_t)
+
+        # ===== NOL Logic (Damodaran #6) =====
+        # NOL reduce taxable income; tax_shield = nol_used × tax_t
+        if nol_remaining > 0 and ebit_t > 0:
+            nol_used_t = min(nol_remaining, ebit_t)
+            taxable_inc = ebit_t - nol_used_t
+            nol_remaining -= nol_used_t
+            tax_paid_t = max(0, taxable_inc) * tax_t
+            tax_shield_t = nol_used_t * tax_t
+            nopat_t = ebit_t - tax_paid_t
+        else:
+            nol_used_t = 0
+            tax_shield_t = 0
+            nopat_t = ebit_t * (1 - tax_t)
 
         s2c_t = _s2c(t)
         reinvest_t = delta_rev / s2c_t if s2c_t > 0 else 0.0
         fcff_t = nopat_t - reinvest_t
+
+        # ===== Invested Capital evolutivo (Hoja 2 implied) =====
+        # IC_t = IC_{t-1} + Reinvestment_t
+        ic_t = ic_prev + reinvest_t
+        # ROIC_t = NOPAT_t / IC_{t-1} (capital al INICIO del año generado returns)
+        roic_t = nopat_t / ic_prev if ic_prev > 0 else 0.0
 
         wacc_t = _w(t)
 
@@ -418,8 +527,16 @@ def project_company(
         out.wacc_yearly.append(wacc_t)
         out.discount_factor.append(df)
         out.pv_fcff.append(pv)
+        # NEW Hoja 2 series
+        out.nol_remaining.append(nol_remaining)
+        out.nol_used.append(nol_used_t)
+        out.tax_shield.append(tax_shield_t)
+        out.sales_to_capital_yearly.append(s2c_t)
+        out.invested_capital.append(ic_t)
+        out.roic_yearly.append(roic_t)
 
         prev_rev = rev_t
+        ic_prev = ic_t
 
     # 3) Terminal Value (Gordon) — Damodaran-style
     rev_t11 = out.revenue[-1] * (1 + a.terminal_growth)
@@ -449,10 +566,13 @@ def project_company(
     out.terminal_fcff = fcff_t11
     out.terminal_value = tv
     out.pv_terminal = pv_tv
+    out.terminal_roic = terminal_roic
+    out.terminal_reinv_rate = (a.terminal_growth / terminal_roic) if terminal_roic > 0 else 0.0
 
     # 4) Sum PV (operating value pre-failure adjustment)
     out.sum_pv_fcff = sum(out.pv_fcff)
     operating_value_dcf = out.sum_pv_fcff + pv_tv
+    out.operating_value_dcf = operating_value_dcf
 
     # 5) Probability of failure adjustment (Damodaran)
     # Final = (1-p) × DCF_value + p × failure_proceeds
@@ -467,8 +587,10 @@ def project_company(
         operating_value_adj = (1 - a.probability_of_failure) * operating_value_dcf \
                             + a.probability_of_failure * distress_proceeds
     else:
+        distress_proceeds = 0.0
         operating_value_adj = operating_value_dcf
 
+    out.distress_proceeds = distress_proceeds
     out.enterprise_value = operating_value_adj
     net_debt = base.financial_debt - base.cash
     # Trapped cash: si lo hay, se descuenta el tax adicional sobre el cash repatriado
