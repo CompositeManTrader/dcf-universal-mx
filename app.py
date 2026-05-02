@@ -2344,8 +2344,15 @@ if mode == "Single DCF":
         .mark_bar(size=40)
         .encode(
             x=alt.X("step:N", sort=None, title=None,
-                    axis=alt.Axis(labelAngle=-30)),
-            y=alt.Y("start:Q", title="MDP"),
+                    axis=alt.Axis(
+                        labelAngle=-90,          # etiquetas verticales
+                        labelColor='black',       # texto negro
+                        labelFontSize=12,
+                        labelLimit=200,
+                    )),
+            y=alt.Y("start:Q", title="MDP",
+                    axis=alt.Axis(labelColor='black', titleColor='black',
+                                   labelFontSize=11, titleFontSize=12)),
             y2="end:Q",
             color=alt.Color("kind:N", scale=color_scale, legend=None),
             tooltip=[
@@ -2354,11 +2361,11 @@ if mode == "Single DCF":
                 alt.Tooltip("end:Q",   title="Cumulative MDP", format=",.0f"),
             ],
         )
-        .properties(height=400)
+        .properties(height=450)
     )
     label_chart = (
         alt.Chart(wf_df)
-        .mark_text(dy=-8, fontSize=11)
+        .mark_text(dy=-8, fontSize=11, color='black', fontWeight=600)
         .encode(x="step:N", y="end:Q",
                 text=alt.Text("delta:Q", format=",.0f"))
     )
