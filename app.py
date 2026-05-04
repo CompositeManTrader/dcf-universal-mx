@@ -1376,33 +1376,72 @@ if mode == "Single DCF":
                        expanded=True):
         c1, c2 = st.columns(2)
         with c1:
-            st.number_input("Revenue growth Y1 (%)",
-                            value=float(rev_growth * 100), step=0.25,
-                            format="%.2f",
-                            key=f"dam_in_g_y1_{issuer.ticker}")
-            st.number_input("Operating margin Y1 (%)",
-                            value=float((base.ebit / base.revenue * 100)
-                                          if base.revenue else 22.0),
-                            step=0.5, format="%.2f",
-                            key=f"dam_in_m_y1_{issuer.ticker}")
-            st.number_input("CAGR revenue Y2-Y5 (%)",
-                            value=float(rev_growth * 100), step=0.25,
-                            format="%.2f",
-                            key=f"dam_in_g_y2y5_{issuer.ticker}")
+            st.number_input(
+                "Revenue growth Y1 (%)",
+                value=float(rev_growth * 100), step=0.25, format="%.2f",
+                key=f"dam_in_g_y1_{issuer.ticker}",
+                help=("**B26 Damodaran:** *'For some companies you may be "
+                      "able to forecast revenues next year much better "
+                      "than revenues afterwards either because you have "
+                      "management guidance or tangible basis (contracts "
+                      "already in place).'* — Si no tienes guidance, deja "
+                      "igual al CAGR Y2-Y5."))
+            st.number_input(
+                "Operating margin Y1 (%)",
+                value=float((base.ebit / base.revenue * 100)
+                              if base.revenue else 22.0),
+                step=0.5, format="%.2f",
+                key=f"dam_in_m_y1_{issuer.ticker}",
+                help=("**B27 Damodaran:** *'I am separating out the "
+                      "operating margin for next year, to allow you to "
+                      "use the superior information you may have for the "
+                      "near term.'*"))
+            st.number_input(
+                "CAGR revenue Y2-Y5 (%)",
+                value=float(rev_growth * 100), step=0.25, format="%.2f",
+                key=f"dam_in_g_y2y5_{issuer.ticker}",
+                help=("**B28 Damodaran:** *'Look at: (a) Revenue growth in "
+                      "recent years; (b) Your company's revenues relative "
+                      "to overall market size and larger players. Check "
+                      "your revenues in year 10 against the overall market "
+                      "and see what market share you're giving your "
+                      "company.'* — Negativo es válido para firmas en "
+                      "declive."))
         with c2:
-            st.number_input("Target pre-tax operating margin (%)",
-                            value=float(op_margin * 100), step=0.5,
-                            format="%.2f",
-                            key=f"dam_in_m_target_{issuer.ticker}")
-            st.number_input("Year of convergence for margin",
-                            value=5, min_value=1, max_value=10, step=1,
-                            key=f"dam_in_yconv_{issuer.ticker}")
-            st.number_input("Sales-to-Capital Y1-Y5",
-                            value=float(s2c), step=0.05, format="%.2f",
-                            key=f"dam_in_s2c_15_{issuer.ticker}")
-            st.number_input("Sales-to-Capital Y6-Y10",
-                            value=float(s2c), step=0.05, format="%.2f",
-                            key=f"dam_in_s2c_610_{issuer.ticker}")
+            st.number_input(
+                "Target pre-tax operating margin (%)",
+                value=float(op_margin * 100), step=0.5, format="%.2f",
+                key=f"dam_in_m_target_{issuer.ticker}",
+                help=("**B29 Damodaran:** *'Margin que esperas que la "
+                      "empresa alcance over time. Para empresas maduras, "
+                      "puede ser cercano o igual al margen actual. Para "
+                      "growth companies (incl. money-losing), puede ser "
+                      "el promedio de la industria o uno que estimes según "
+                      "las características del negocio.'*"))
+            st.number_input(
+                "Year of convergence for margin",
+                value=5, min_value=1, max_value=10, step=1,
+                key=f"dam_in_yconv_{issuer.ticker}",
+                help=("**B30 Damodaran:** *'The forecast year in which "
+                      "your current margin will converge on target.'* "
+                      "Default Damodaran = 5."))
+            st.number_input(
+                "Sales-to-Capital Y1-Y5",
+                value=float(s2c), step=0.05, format="%.2f",
+                key=f"dam_in_s2c_15_{issuer.ticker}",
+                help=("**B31 Damodaran:** *'How I compute how much you are "
+                      "going to reinvest. The higher you set this number, "
+                      "the more efficiently you are growing and the higher "
+                      "the value of your growth.'* Compara contra el "
+                      "histórico (panel 'Inputs Sugeridos') y el sector."))
+            st.number_input(
+                "Sales-to-Capital Y6-Y10",
+                value=float(s2c), step=0.05, format="%.2f",
+                key=f"dam_in_s2c_610_{issuer.ticker}",
+                help=("**B32 Damodaran:** *'Second chance to input the "
+                      "sales to invested capital to allow for the fact "
+                      "that as companies scale up they might need to "
+                      "reinvest less (or more) to get the same growth.'*"))
 
     # ----- SECCION E: Market parameters + Risk inputs -----
     with st.expander("**🌎 E · Market parameters & Risk inputs**",
@@ -1488,7 +1527,12 @@ if mode == "Single DCF":
         "**⚙️ G · Default assumption overrides** (rows 42-71 del Excel)",
         expanded=False):
 
-        st.markdown("**Stable-growth cost of capital**")
+        st.markdown("**Stable-growth cost of capital** (B46)")
+        st.caption(
+            "💬 *'Tienes 3 opciones: (1) mover tu CoC al promedio del sector "
+            "over time, (2) ver la distribución del mercado en el cost of "
+            "capital worksheet, o (3) dejarlo igual al inicial.'*"
+        )
         oc1, oc2 = st.columns([1, 2])
         with oc1:
             ov_coc = st.selectbox("Override cost of capital después año 10?",
@@ -1501,7 +1545,13 @@ if mode == "Single DCF":
                             disabled=(ov_coc == "No"),
                             key=f"dam_in_coc10_{issuer.ticker}")
 
-        st.markdown("**Stable-growth ROIC**")
+        st.markdown("**Stable-growth ROIC** (B49)")
+        st.caption(
+            "💬 *'Even if you believe your firm has significant competitive "
+            "advantages, you should expect the return on capital to come "
+            "down over time, at least on new projects. If you don't see "
+            "long term competitive advantages, leave this at No.'*"
+        )
         or1, or2 = st.columns([1, 2])
         with or1:
             ov_roic = st.selectbox("Override ROIC después año 10?",
@@ -1513,7 +1563,16 @@ if mode == "Single DCF":
                             disabled=(ov_roic == "No"),
                             key=f"dam_in_roic10_{issuer.ticker}")
 
-        st.markdown("**Probability of failure**")
+        st.markdown("**Probability of failure** (B51-B54)")
+        st.caption(
+            "💬 *'If your company is money-losing or in decline, and you "
+            "believe there is a significant chance it will not survive, "
+            "enter Yes. Failure can also be caused by catastrophes or "
+            "government action. For young growth companies tie proceeds to "
+            "Value (V); for distressed firms with tangible assets, use "
+            "Book value (B). You will generally not get 100% of fair "
+            "value.'*"
+        )
         of1, of2, of3, of4 = st.columns(4)
         with of1:
             ov_fail = st.selectbox("Override probability of failure?",
@@ -1523,17 +1582,31 @@ if mode == "Single DCF":
             st.number_input("Probability of failure (%)",
                             value=12.0, step=1.0, format="%.2f",
                             disabled=(ov_fail == "No"),
-                            key=f"dam_in_pfail_{issuer.ticker}")
+                            key=f"dam_in_pfail_{issuer.ticker}",
+                            help="B52: usa el Failure Rate worksheet "
+                                 "(sub-tab 8) para estimar.")
         with of3:
             st.selectbox("Tie proceeds in failure to:",
                          ["V (fair value)", "B (book value of capital)"],
-                         index=0, key=f"dam_in_basis_{issuer.ticker}")
+                         index=0, key=f"dam_in_basis_{issuer.ticker}",
+                         help="B53: V para growth companies, B para "
+                              "distressed con activos tangibles.")
         with of4:
             st.number_input("Distress proceeds (% of book/value)",
                             value=50.0, step=5.0, format="%.1f",
-                            key=f"dam_in_proc_{issuer.ticker}")
+                            key=f"dam_in_proc_{issuer.ticker}",
+                            help="B54: 'You will generally not get 100% "
+                                 "of fair value. May be zero for young "
+                                 "growth companies with no tangible "
+                                 "assets.'")
 
-        st.markdown("**Reinvestment lag**")
+        st.markdown("**Reinvestment lag** (B56-B57)")
+        st.caption(
+            "💬 *'Default: reinvestment in a year creates growth in the "
+            "same year. That works for service businesses or growth via "
+            "acquisitions, but in some businesses there's a lag (factory, "
+            "R&D) between investment and revenue growth.'*"
+        )
         ol1, ol2 = st.columns([1, 2])
         with ol1:
             ov_lag = st.selectbox("Override reinvestment lag?",
@@ -1543,14 +1616,28 @@ if mode == "Single DCF":
             st.number_input("Reinvestment lag (años, 0-3)",
                             value=1, min_value=0, max_value=3, step=1,
                             disabled=(ov_lag == "No"),
-                            key=f"dam_in_lag_{issuer.ticker}")
+                            key=f"dam_in_lag_{issuer.ticker}",
+                            help="B57: lag máximo 3 años entre "
+                                 "investment y growth.")
 
-        st.markdown("**Effective vs marginal tax convergence**")
+        st.markdown("**Effective vs marginal tax convergence** (B59)")
+        st.caption(
+            "💬 *'In general, it is prudent to assume that your company, "
+            "no matter how capable on tax management, will eventually have "
+            "to pay its marginal tax rate. Some companies, where low "
+            "effective tax rate comes from structural factors (revenues "
+            "from low-tax locales), may keep effective unchanged.'*"
+        )
         ot = st.selectbox("Override effective→marginal tax convergence?",
                             ["No", "Yes"], index=0,
                             key=f"dam_in_ov_tax_{issuer.ticker}")
 
-        st.markdown("**NOL carryforward**")
+        st.markdown("**NOL carryforward** (B62)")
+        st.caption(
+            "💬 *'NOL from prior years carried forward into this year. "
+            "**Check the footnotes to your financial statements** to see "
+            "if there are any loss carry forwards.'*"
+        )
         on1, on2 = st.columns([1, 2])
         with on1:
             ov_nol = st.selectbox("Override NOL?",
@@ -1562,31 +1649,76 @@ if mode == "Single DCF":
                             disabled=(ov_nol == "No"),
                             key=f"dam_in_nol_{issuer.ticker}")
 
-        st.markdown("**Risk-free rate / terminal growth**")
+        st.markdown("**Risk-free rate / Terminal growth** (B64-B68)")
+        st.caption(
+            "💬 *Riskfree (B64): 'Mi consejo es dejarlo en No y mantener "
+            "el rf actual en perpetuidad. Si crees que las tasas cambiarán, "
+            "activa.' — Terminal g (B67): 'Déjalo en No salvo que veas la "
+            "firma declinando o creciendo mucho menos que la economía.'*"
+        )
         ot1, ot2 = st.columns([1, 2])
         with ot1:
-            ov_rf = st.selectbox("Override risk-free después año 10?",
-                                   ["No", "Yes"], index=1,
-                                   key=f"dam_in_ov_rf_{issuer.ticker}",
-                                   help="MX usualmente: Yes (rf actual ≈ 9% vs estable ≈ 6%)")
+            ov_rf = st.selectbox(
+                "Override risk-free después año 10?",
+                ["No", "Yes"], index=1,
+                key=f"dam_in_ov_rf_{issuer.ticker}",
+                help="MX recomendado: Yes. Bono M actual ≈ 9% incluye CRP "
+                     "alta; en steady state esperamos rf ≈ 6%.")
         with ot2:
-            st.number_input("Risk-free after year 10 (%)",
-                            value=6.0, step=0.25, format="%.4f",
-                            disabled=(ov_rf == "No"),
-                            key=f"dam_in_rf10_{issuer.ticker}")
+            st.number_input(
+                "Risk-free after year 10 (%)",
+                value=6.0, step=0.25, format="%.4f",
+                disabled=(ov_rf == "No"),
+                key=f"dam_in_rf10_{issuer.ticker}",
+                help="B65: forecast del rf en la moneda del modelo, 10y a "
+                     "futuro.")
         og1, og2 = st.columns([1, 2])
         with og1:
-            ov_g = st.selectbox("Override terminal growth?",
-                                  ["No", "Yes"], index=1,
-                                  key=f"dam_in_ov_g_{issuer.ticker}",
-                                  help="MX usualmente: Yes (g ≈ 3.5% inflación)")
+            ov_g = st.selectbox(
+                "Override terminal growth?",
+                ["No", "Yes"], index=1,
+                key=f"dam_in_ov_g_{issuer.ticker}",
+                help="MX recomendado: Yes (g ≈ 3-3.5% inflación largo plazo).")
         with og2:
-            st.number_input("Terminal growth (%)",
-                            value=float(terminal_g * 100), step=0.05,
-                            format="%.4f", disabled=(ov_g == "No"),
-                            key=f"dam_in_g_term_{issuer.ticker}")
+            st.number_input(
+                "Terminal growth (%)",
+                value=float(terminal_g * 100), step=0.05, format="%.4f",
+                disabled=(ov_g == "No"),
+                key=f"dam_in_g_term_{issuer.ticker}",
+                help="**B68 Damodaran (CRÍTICO):** *'Be VERY VERY careful. "
+                     "Entering numbers significantly (more than 1%) higher "
+                     "than the risk free rate will render your valuation "
+                     "close to useless.'*")
 
-        st.markdown("**Trapped cash (foreign markets)**")
+        # ====== Validator B68 ======
+        # terminal_growth NO debe ser > rf + 1% (Damodaran rule)
+        rf_for_check = (_ss_pct("rf10", 0.06)
+                          if _ss_yes("ov_rf") else market.risk_free)
+        g_for_check = (_ss_pct("g_term", market.terminal_growth)
+                         if _ss_yes("ov_g") else market.terminal_growth)
+        if g_for_check > rf_for_check + 0.01:
+            st.error(
+                f"🚨 **VIOLACIÓN regla Damodaran B68:** terminal growth "
+                f"({g_for_check:.2%}) > riskfree ({rf_for_check:.2%}) + 1%. "
+                f"Esto hace la valuación matemáticamente inválida en "
+                f"perpetuidad. Reduce el terminal growth a ≤ "
+                f"{rf_for_check + 0.01:.2%}."
+            )
+        elif g_for_check > rf_for_check:
+            st.warning(
+                f"⚠️ Terminal growth ({g_for_check:.2%}) > riskfree "
+                f"({rf_for_check:.2%}). Damodaran recomienda g ≤ rf en "
+                f"perpetuidad. Está dentro del margen de 1% pero ojo."
+            )
+
+        st.markdown("**Trapped cash (foreign markets)** (B70-B72)")
+        st.caption(
+            "💬 *'US tax law no longer has the global taxation feature "
+            "(post-2017). For most companies: No. Activa si te preocupa "
+            "cash trapped en jurisdicciones con tax adicional al "
+            "repatriar, o si crees que el mercado descuenta cash por "
+            "desconfianza en management.'*"
+        )
         oc1, oc2, oc3 = st.columns([1, 1, 1])
         with oc1:
             ov_tc = st.selectbox("Override trapped cash?",
@@ -1596,21 +1728,106 @@ if mode == "Single DCF":
             st.number_input("Trapped cash (MDP)",
                             value=0.0, step=100.0, format="%.1f",
                             disabled=(ov_tc == "No"),
-                            key=f"dam_in_tc_{issuer.ticker}")
+                            key=f"dam_in_tc_{issuer.ticker}",
+                            help="B71: balance trapped en foreign markets "
+                                 "(o entire cash si descuento por "
+                                 "mistrust).")
         with oc3:
             st.number_input("Avg foreign tax rate (%)",
                             value=15.0, step=1.0, format="%.2f",
                             disabled=(ov_tc == "No"),
-                            key=f"dam_in_tc_tax_{issuer.ticker}")
+                            key=f"dam_in_tc_tax_{issuer.ticker}",
+                            help="B72: tax adicional al repatriar (o "
+                                 "discount % a aplicar si por mistrust).")
 
     st.divider()
+
+    # ============================================================
+    # SECCIÓN H · COMPUTED NUMBERS (feedback Damodaran J34/J35/J36)
+    # Damodaran muestra estos a la DERECHA del Input Sheet como
+    # auto-checks. Corresponden a la columna J celdas 34-36 del Excel.
+    # ============================================================
+    with st.expander("**🔮 H · Computed Numbers · Valuation Output Feedback**",
+                       expanded=True):
+        st.caption(
+            "💬 Damodaran (J32): *'Valuation Output Feedback (for you to "
+            "use to fine tune your inputs, if you want).'* — Estos números "
+            "son auto-calculados desde tus inputs. Úsalos para sanity-check."
+        )
+
+        # Año 10 outputs (last item in projection arrays)
+        try:
+            rev_y10 = out.revenue[-1] if out.revenue else 0
+            ebit_y10 = out.ebit[-1] if out.ebit else 0
+            roic_y10 = (out.roic_yearly[-1] if out.roic_yearly
+                          else (ebit_y10 * (1 - 0.30)) /
+                                (out.invested_capital[-1]
+                                  if out.invested_capital else 1))
+        except Exception:
+            rev_y10, ebit_y10, roic_y10 = 0, 0, 0
+
+        cn1, cn2, cn3 = st.columns(3)
+        with cn1:
+            st.metric(
+                "Revenue Y10 (MDP)",
+                f"{rev_y10:,.0f}",
+                f"{(rev_y10 / base.revenue - 1) * 100:+.0f}% vs LTM"
+                  if base.revenue else "",
+                help=("**J34 Damodaran:** *'Compare to your total market "
+                      "and check your market share.'* — ¿Tu empresa está "
+                      "asumiendo un market share razonable en Y10?"))
+        with cn2:
+            st.metric(
+                "Pre-tax Op Income Y10 (MDP)",
+                f"{ebit_y10:,.0f}",
+                f"{ebit_y10 / rev_y10:.1%} margin"
+                  if rev_y10 else "",
+                help=("**J35 Damodaran:** *'Determined by your target "
+                      "margin.'* — Verifica que el EBIT terminal "
+                      "implícito sea coherente con tu target margin."))
+        with cn3:
+            roic_terminal_check = roic_y10
+            st.metric(
+                "ROIC Y10",
+                f"{roic_terminal_check:.2%}",
+                f"vs WACC {out.terminal_wacc:.2%}",
+                delta_color=("normal"
+                              if roic_terminal_check > out.terminal_wacc
+                              else "inverse"),
+                help=("**J36 Damodaran:** *'Function of both your target "
+                      "margin and your sales to capital ratio.'* — Si "
+                      "ROIC > WACC en Y10 → la empresa crea valor en "
+                      "perpetuidad. Si ROIC < WACC → destruye valor."))
+
+        # Damodaran extra: spread ROIC - WACC + Reinvestment rate terminal
+        if out.terminal_wacc > 0:
+            spread_bps = (roic_terminal_check - out.terminal_wacc) * 10000
+            reinv_rate = (out.terminal_reinv_rate
+                            if out.terminal_reinv_rate else 0)
+            st.markdown(
+                f"📐 **Excess return Y10:** {spread_bps:+.0f} bps "
+                f"(ROIC − WACC) · "
+                f"**Reinvestment rate terminal:** {reinv_rate:.2%} "
+                f"(g / ROIC)"
+            )
+            if spread_bps > 0:
+                st.success(
+                    f"✅ Tu empresa crea valor en estado estable (ROIC > WACC). "
+                    f"Considera si el spread {spread_bps:+.0f}bps es "
+                    f"sostenible — Damodaran prefiere asumir convergencia."
+                )
+            elif spread_bps < -50:
+                st.error(
+                    f"🚨 Tu empresa destruye valor en estado estable "
+                    f"(ROIC {-spread_bps:.0f}bps debajo de WACC). "
+                    f"Esto rara vez es sostenible — revisa target margin "
+                    f"o sales-to-capital terminal."
+                )
+
     st.success(
-        "✅ **Cómo se conecta este sheet con el modelo:** los inputs de las "
-        "secciones B, C, D y E ya están alimentando al motor de DCF "
-        "(`project_company`). Las secciones F y G capturan los overrides "
-        "avanzados que ya existen en *Drivers DCF → Damodaran Advanced*. "
-        "Esta vista es la **réplica visual del Excel** para validar campo "
-        "por campo contra `fcffsimpleginzu.xlsx`."
+        "✅ **Conexión con el modelo:** todos los inputs de secciones B-G "
+        "alimentan directamente al motor DCF (`project_company`). "
+        "Las celdas read-only en sec E vienen del Cost of Capital sheet."
     )
 
     tab_dam_input.__exit__(None, None, None)
