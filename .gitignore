@@ -49,8 +49,12 @@ tests/fixtures/CUERVO_WIP.xlsx
 # Streamlit
 .streamlit/secrets.toml
 
-# Claude Code local settings
-.claude/
+# Claude Code local settings (NO commitable)
+.claude/settings.local.json
+.claude/state/
+.claude/cache/
+.claude/projects/
+# .claude/commands/ SI se commitea (slash commands compartibles al equipo)
 
 # Jupyter
 .ipynb_checkpoints/

@@ -2544,13 +2544,155 @@ if mode == "Single DCF":
         st.markdown("### ➕ Cargar nuevo reporte")
         intel_mode = st.radio(
             "Método de extracción:",
-            options=["Upload PDF + Claude API", "Paste JSON manual",
-                      "Cargar demo CUERVO (4 PDFs conocidos)"],
-            horizontal=True,
+            options=[
+                "🆓 Wizard Claude.ai (gratis, 3 pasos)",
+                "💻 Slash command Claude Code",
+                "🤖 Upload PDF + Claude API ($)",
+                "📋 Paste JSON crudo",
+                "📊 Cargar demo CUERVO",
+            ],
+            horizontal=False,
             key=f"intel_mode_{issuer.ticker}",
         )
 
-        if intel_mode == "Upload PDF + Claude API":
+        if intel_mode == "🆓 Wizard Claude.ai (gratis, 3 pasos)":
+            st.success(
+                "💡 **No necesitas API key.** Claude.ai web (Claude Pro $20/mes "
+                "o trial gratis) te permite procesar PDFs ilimitados."
+            )
+
+            wizard_step = st.radio(
+                "Step:",
+                options=["1️⃣ Copiar prompt", "2️⃣ Procesar en Claude.ai", "3️⃣ Pegar JSON aquí"],
+                horizontal=True,
+                key=f"wizard_step_{issuer.ticker}",
+            )
+
+            if wizard_step == "1️⃣ Copiar prompt":
+                st.markdown("**Paso 1:** Copia este prompt completo (será tu instrucción a Claude)")
+                from src.dcf_mexico.investor_intel import EXTRACTION_PROMPT
+                # Pre-fill con ticker conocido
+                prompt_filled = EXTRACTION_PROMPT.format(
+                    ticker=issuer.ticker, filename="(reemplazar con nombre del PDF)"
+                )
+                st.code(prompt_filled, language="text")
+                st.caption(
+                    "💡 En Streamlit puedes seleccionar el código y Ctrl+C. "
+                    "El icono 📋 arriba a la derecha también lo copia entero."
+                )
+
+            elif wizard_step == "2️⃣ Procesar en Claude.ai":
+                st.markdown("**Paso 2:** En Claude.ai web:")
+                col_w1, col_w2 = st.columns([1, 2])
+                with col_w1:
+                    st.markdown("[🌐 Abrir Claude.ai](https://claude.ai/)")
+                with col_w2:
+                    st.markdown(
+                        "1. New chat → modelo Claude Sonnet 4.5\n"
+                        "2. Sube tu PDF (📎 paperclip icon)\n"
+                        "3. Pega el prompt del paso 1\n"
+                        "4. Espera ~10-30 segundos\n"
+                        "5. Copia el JSON de la respuesta"
+                    )
+                st.info(
+                    "📌 **Tip:** Claude responderá con JSON puro. "
+                    "Si lo envuelve en ```json ... ``` (markdown), "
+                    "no te preocupes, el sistema lo limpia automáticamente."
+                )
+
+            else:  # paso 3
+                st.markdown("**Paso 3:** Pega el JSON aquí")
+                json_text = st.text_area(
+                    "JSON desde Claude.ai",
+                    height=400,
+                    placeholder='{\n  "ticker": "CUERVO",\n  "report_date": "2026-02-27",\n  ...\n}',
+                    key=f"wizard_json_{issuer.ticker}",
+                )
+
+                colf1, colf2 = st.columns(2)
+                with colf1:
+                    fname = st.text_input(
+                        "Nombre del PDF original",
+                        value="report.pdf",
+                        key=f"wizard_fname_{issuer.ticker}",
+                    )
+                with colf2:
+                    do_commit = st.checkbox(
+                        "💾 Auto-commit a GitHub",
+                        value=True,
+                        key=f"wizard_commit_{issuer.ticker}",
+                    )
+
+                # Live JSON validator
+                if json_text:
+                    # Strip markdown fences si existen
+                    clean = json_text.strip()
+                    if clean.startswith("```"):
+                        lines = clean.split("\n")
+                        if lines[-1].strip().startswith("```"):
+                            clean = "\n".join(lines[1:-1])
+                        else:
+                            clean = "\n".join(lines[1:])
+                    try:
+                        import json as _json
+                        parsed = _json.loads(clean.strip())
+                        st.success(f"✅ JSON válido | Campos detectados: "
+                                    f"guidance={len(parsed.get('guidance', []))}, "
+                                    f"drivers={len(parsed.get('drivers', []))}, "
+                                    f"events={len(parsed.get('events', []))}")
+                    except Exception as e:
+                        st.error(f"❌ JSON inválido: {e}")
+
+                if json_text and st.button("📥 Guardar reporte",
+                                            key=f"wizard_save_{issuer.ticker}",
+                                            type="primary"):
+                    # Strip markdown si existe
+                    clean = json_text.strip()
+                    if clean.startswith("```"):
+                        lines = clean.split("\n")
+                        if lines[-1].strip().startswith("```"):
+                            clean = "\n".join(lines[1:-1])
+                        else:
+                            clean = "\n".join(lines[1:])
+                    report, err = extract_from_manual_json(
+                        clean.strip(), ticker=issuer.ticker, filename=fname,
+                    )
+                    if err:
+                        st.error(f"❌ {err}")
+                    elif report:
+                        if do_commit:
+                            fpath, gh_result = save_and_commit_to_github(report)
+                            st.success(f"✅ Guardado: {fpath.name}")
+                            if gh_result and gh_result.ok:
+                                st.success(f"📤 GitHub: {gh_result.commit_url}")
+                            elif gh_result:
+                                st.warning(f"⚠️ Commit GitHub falló: {gh_result.message}")
+                        else:
+                            fpath = save_report(report)
+                            st.success(f"✅ Guardado local: {fpath.name}")
+                        st.rerun()
+
+        elif intel_mode == "💻 Slash command Claude Code":
+            st.success(
+                "💡 **Si usas Claude Code**, hay un slash command listo. "
+                "No necesitas API key, no copy-paste, todo automático."
+            )
+            st.markdown("**Cómo usar:**")
+            st.code(
+                f"/extract-investor-report {issuer.ticker} ruta/al/archivo.pdf",
+                language="text",
+            )
+            st.markdown(
+                "Esto le dice a Claude Code que:\n"
+                "1. Lee el PDF\n"
+                "2. Extrae con el prompt estructurado\n"
+                "3. Genera el JSON\n"
+                f"4. Lo guarda en `data/investor_reports/{issuer.ticker}/`\n"
+                "5. (Opcional) Hace commit + push al repo automático\n\n"
+                "Ver `.claude/commands/extract-investor-report.md` para el prompt completo."
+            )
+
+        elif intel_mode == "🤖 Upload PDF + Claude API ($)":
             uploaded_pdf = st.file_uploader(
                 "Sube el PDF de IR",
                 type=["pdf"],
@@ -2591,7 +2733,7 @@ if mode == "Single DCF":
                                 st.success(f"📤 Commit a GitHub: {gh_result.commit_url}")
                             st.rerun()
 
-        elif intel_mode == "Paste JSON manual":
+        elif intel_mode == "📋 Paste JSON crudo":
             with st.expander("ℹ️ Cómo usar el modo manual"):
                 st.markdown(
                     "1. Abre [Claude.ai web](https://claude.ai/) (gratuito)\n"
