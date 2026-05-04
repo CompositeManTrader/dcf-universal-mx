@@ -1271,11 +1271,12 @@ if mode == "Single DCF":
 
             fx_rate = market.fx_rate_usdmxn
 
-            # Sub-tabs Income / Balance / CashFlow
-            sub_is, sub_bs, sub_cf = st.tabs([
+            # Sub-tabs Income / Balance / CashFlow / Vertical & Horizontal
+            sub_is, sub_bs, sub_cf, sub_vh = st.tabs([
                 "Income Statement",
                 "Balance Sheet",
                 "Cash Flow",
+                "📐 Vertical & Horizontal",
             ])
 
             def _render_panel(panel_df, kinds_list, title):
@@ -1423,6 +1424,170 @@ if mode == "Single DCF":
                 st.markdown(f"#### Cash Flow — Standardized (Bloomberg style) "
                              f"• {df_cf.shape[1]} periodos • {vista_cf} • In MDP")
                 _render_panel(df_cf, kinds_cf, "Cash Flow")
+
+            # ============================================================
+            # 📐 SUB-TAB: VERTICAL & HORIZONTAL ANALYSIS + RED FLAGS
+            # ============================================================
+            with sub_vh:
+                st.markdown("### 📐 Análisis Vertical & Horizontal")
+                st.caption(
+                    "**Análisis Vertical:** cada línea como % de un total (Revenue para IS, "
+                    "Total Assets para BS). **Análisis Horizontal:** cambios YoY entre 2 periodos. "
+                    "**Detección automática:** red flags (deteriorios) y mejoras (improvements)."
+                )
+
+                try:
+                    from src.dcf_mexico.analysis import (
+                        vertical_income, vertical_balance, vertical_cashflow,
+                        horizontal_income, horizontal_balance, horizontal_cashflow,
+                        detect_changes, categorize_changes, changes_to_table,
+                        Significance, Direction,
+                    )
+
+                    snaps_avail = hs_ef_view.snapshots
+                    if len(snaps_avail) < 2:
+                        st.warning("Necesitas al menos 2 periodos para análisis horizontal.")
+                    else:
+                        # Selectores de periodo
+                        sel_c1, sel_c2 = st.columns(2)
+                        with sel_c1:
+                            curr_idx = st.selectbox(
+                                "Periodo Actual",
+                                options=range(len(snaps_avail)),
+                                index=len(snaps_avail) - 1,
+                                format_func=lambda i: snaps_avail[i].label,
+                                key=f"vh_curr_{issuer.ticker}",
+                            )
+                        with sel_c2:
+                            # Default: mismo Q año anterior si existe, sino periodo prior
+                            curr_snap = snaps_avail[curr_idx]
+                            prior_default_idx = max(0, curr_idx - 1)
+                            # Buscar mismo Q año previo
+                            for i, s in enumerate(snaps_avail):
+                                if (s.year == curr_snap.year - 1 and
+                                    s.quarter == curr_snap.quarter):
+                                    prior_default_idx = i
+                                    break
+                            prior_idx = st.selectbox(
+                                "Periodo Comparación (Prior)",
+                                options=range(len(snaps_avail)),
+                                index=prior_default_idx,
+                                format_func=lambda i: snaps_avail[i].label,
+                                key=f"vh_prior_{issuer.ticker}",
+                            )
+
+                        curr_snap = snaps_avail[curr_idx]
+                        prior_snap = snaps_avail[prior_idx]
+
+                        st.markdown(f"**Comparando:** `{curr_snap.label}` vs `{prior_snap.label}`")
+
+                        # ============================================================
+                        # 🚨 RED FLAGS & IMPROVEMENTS (lo más importante - arriba)
+                        # ============================================================
+                        st.markdown("---")
+                        st.markdown("#### 🎯 Cambios Significativos Detectados (auto)")
+
+                        changes = detect_changes(curr_snap, prior_snap, fx_mult=fx_rate)
+                        cat = categorize_changes(changes)
+
+                        rf_col1, rf_col2, rf_col3 = st.columns(3)
+                        with rf_col1:
+                            st.metric("🔴 Red Flags",
+                                      len(cat["red_flags"]),
+                                      help="Deterioros importantes que requieren atención")
+                        with rf_col2:
+                            st.metric("🟢 Improvements",
+                                      len(cat["improvements"]),
+                                      help="Mejoras estructurales positivas")
+                        with rf_col3:
+                            st.metric("🔴 Alta significancia",
+                                      len(cat["all_high_sig"]),
+                                      help="Cambios > 25%")
+
+                        if cat["red_flags"]:
+                            st.markdown("##### 🔴 RED FLAGS")
+                            for c in cat["red_flags"]:
+                                st.error(
+                                    f"**{c.metric}** ({c.category}): {c.narrative}\n\n"
+                                    f"💡 *{c.interpretation}*"
+                                )
+
+                        if cat["improvements"]:
+                            st.markdown("##### 🟢 IMPROVEMENTS")
+                            for c in cat["improvements"]:
+                                st.success(
+                                    f"**{c.metric}** ({c.category}): {c.narrative}\n\n"
+                                    f"💡 *{c.interpretation}*"
+                                )
+
+                        # Tabla completa de cambios
+                        if changes:
+                            with st.expander(f"📋 Ver TODOS los {len(changes)} cambios detectados"):
+                                df_changes = changes_to_table(changes)
+                                st.dataframe(
+                                    df_changes, hide_index=True,
+                                    use_container_width=True,
+                                )
+
+                        # ============================================================
+                        # ANÁLISIS VERTICAL (3 columnas: IS / BS / CF)
+                        # ============================================================
+                        st.markdown("---")
+                        st.markdown(f"#### 📊 Análisis Vertical (`{curr_snap.label}`)")
+
+                        v_tab_is, v_tab_bs, v_tab_cf = st.tabs([
+                            "📈 Income Statement",
+                            "💰 Balance Sheet",
+                            "💵 Cash Flow",
+                        ])
+                        with v_tab_is:
+                            v_inc = vertical_income(curr_snap, fx_mult=fx_rate)
+                            if not v_inc.empty:
+                                st.caption("Cada línea como % de Revenue. Útil para detectar "
+                                           "expansión/contracción de márgenes y mix de costos.")
+                                st.dataframe(v_inc, hide_index=True, use_container_width=True)
+                        with v_tab_bs:
+                            v_bs = vertical_balance(curr_snap, fx_mult=fx_rate)
+                            if not v_bs.empty:
+                                st.caption("Cada línea como % de Total Assets. Útil para ver "
+                                           "estructura de capital, mix de activos.")
+                                st.dataframe(v_bs, hide_index=True, use_container_width=True)
+                        with v_tab_cf:
+                            v_cf = vertical_cashflow(curr_snap, fx_mult=fx_rate)
+                            if not v_cf.empty:
+                                st.caption("Cada línea como % de Revenue. Útil para ver "
+                                           "intensidad de CapEx, dividendos, financiamiento.")
+                                st.dataframe(v_cf, hide_index=True, use_container_width=True)
+
+                        # ============================================================
+                        # ANÁLISIS HORIZONTAL (3 columnas: IS / BS / CF)
+                        # ============================================================
+                        st.markdown("---")
+                        st.markdown(f"#### 🔄 Análisis Horizontal "
+                                    f"(`{curr_snap.label}` vs `{prior_snap.label}`)")
+
+                        h_tab_is, h_tab_bs, h_tab_cf = st.tabs([
+                            "📈 Income Statement",
+                            "💰 Balance Sheet",
+                            "💵 Cash Flow",
+                        ])
+                        with h_tab_is:
+                            h_inc = horizontal_income(curr_snap, prior_snap, fx_mult=fx_rate)
+                            if not h_inc.empty:
+                                st.dataframe(h_inc, hide_index=True, use_container_width=True)
+                        with h_tab_bs:
+                            h_bs = horizontal_balance(curr_snap, prior_snap, fx_mult=fx_rate)
+                            if not h_bs.empty:
+                                st.dataframe(h_bs, hide_index=True, use_container_width=True)
+                        with h_tab_cf:
+                            h_cf = horizontal_cashflow(curr_snap, prior_snap, fx_mult=fx_rate)
+                            if not h_cf.empty:
+                                st.dataframe(h_cf, hide_index=True, use_container_width=True)
+
+                except Exception as e_vh:
+                    st.error(f"Error en análisis vertical/horizontal: {e_vh}")
+                    import traceback
+                    st.code(traceback.format_exc())
 
     # ----- TAB Estados close, TAB Historical open -----
     tab_estados.__exit__(None, None, None)

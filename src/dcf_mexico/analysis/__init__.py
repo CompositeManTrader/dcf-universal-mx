@@ -25,6 +25,20 @@ from .dcf_input_validator import (
     validate_all_inputs,
     generate_scenarios,
 )
+from .vertical_horizontal import (
+    FinancialChange,
+    Significance,
+    Direction,
+    vertical_income,
+    vertical_balance,
+    vertical_cashflow,
+    horizontal_income,
+    horizontal_balance,
+    horizontal_cashflow,
+    detect_changes,
+    categorize_changes,
+    changes_to_table,
+)
 
 __all__ = [
     "compute_all_ratios", "RatioInfo", "RATIO_CATEGORIES",
@@ -37,4 +51,9 @@ __all__ = [
     "InputValidation", "QualityScore",
     "ScenarioOutput", "ScenarioSet",
     "validate_all_inputs", "generate_scenarios",
+    # Vertical & Horizontal
+    "FinancialChange", "Significance", "Direction",
+    "vertical_income", "vertical_balance", "vertical_cashflow",
+    "horizontal_income", "horizontal_balance", "horizontal_cashflow",
+    "detect_changes", "categorize_changes", "changes_to_table",
 ]
