@@ -1186,17 +1186,17 @@ if mode == "Single DCF":
         with c1:
             st.text_input("Date of valuation",
                           value=_date.today().isoformat(),
-                          key=f"dam_date_{issuer.ticker}")
+                          key=f"dam_in_date_{issuer.ticker}")
             st.text_input("Company name",
                           value=issuer.name,
-                          key=f"dam_name_{issuer.ticker}", disabled=True)
+                          key=f"dam_in_name_{issuer.ticker}", disabled=True)
         with c2:
             st.text_input("Country of incorporation",
                           value="Mexico",
-                          key=f"dam_country_{issuer.ticker}")
+                          key=f"dam_in_country_{issuer.ticker}")
             st.text_input("Industry (Global)",
                           value=getattr(issuer, "sector", "—"),
-                          key=f"dam_industry_{issuer.ticker}")
+                          key=f"dam_in_industry_{issuer.ticker}")
 
     # ----- SECCION B: Base year numbers -----
     with st.expander("**📊 B · Base year numbers** (units: MDP)",
@@ -1230,12 +1230,12 @@ if mode == "Single DCF":
         with c_rd:
             st.selectbox("R&D expenses to capitalize?",
                          ["No", "Yes"], index=0,
-                         key=f"dam_rd_{issuer.ticker}",
+                         key=f"dam_in_rd_{issuer.ticker}",
                          help="Para CUERVO/Beverages → siempre No")
         with c_ol:
             st.selectbox("Operating lease commitments?",
                          ["No (ya capitalizadas)", "Yes"], index=0,
-                         key=f"dam_ol_{issuer.ticker}",
+                         key=f"dam_in_ol_{issuer.ticker}",
                          help="MX-IFRS 16: ya están en total_debt_with_leases → No")
 
     # ----- SECCION C: Market data -----
@@ -1245,20 +1245,20 @@ if mode == "Single DCF":
             st.number_input("Number of shares outstanding (millones)",
                             value=float(shares_recent or 0.0),
                             step=1.0, format="%.2f",
-                            key=f"dam_shares_{issuer.ticker}")
+                            key=f"dam_in_shares_{issuer.ticker}")
             st.number_input("Current stock price (MXN)",
                             value=float(price_recent),
                             step=0.5, format="%.2f",
-                            key=f"dam_price_{issuer.ticker}")
+                            key=f"dam_in_price_{issuer.ticker}")
         with c2:
             st.number_input("Effective tax rate (%)",
                             value=float(eff_tax_recent * 100),
                             step=0.5, format="%.2f",
-                            key=f"dam_eff_tax_{issuer.ticker}",
+                            key=f"dam_in_eff_tax_{issuer.ticker}",
                             help="ISR pagado / EBT histórico. CUERVO ≈ 24-27%")
             st.number_input("Marginal tax rate (%)",
                             value=30.0, step=0.5, format="%.2f",
-                            key=f"dam_marg_tax_{issuer.ticker}",
+                            key=f"dam_in_marg_tax_{issuer.ticker}",
                             help="México ISR corporativo = 30%")
 
     # ----- SECCION D: Value drivers -----
@@ -1269,30 +1269,30 @@ if mode == "Single DCF":
             st.number_input("Revenue growth Y1 (%)",
                             value=float(rev_growth * 100), step=0.25,
                             format="%.2f",
-                            key=f"dam_g_y1_{issuer.ticker}")
+                            key=f"dam_in_g_y1_{issuer.ticker}")
             st.number_input("Operating margin Y1 (%)",
                             value=float((base.ebit / base.revenue * 100)
                                           if base.revenue else 22.0),
                             step=0.5, format="%.2f",
-                            key=f"dam_m_y1_{issuer.ticker}")
+                            key=f"dam_in_m_y1_{issuer.ticker}")
             st.number_input("CAGR revenue Y2-Y5 (%)",
                             value=float(rev_growth * 100), step=0.25,
                             format="%.2f",
-                            key=f"dam_g_y2y5_{issuer.ticker}")
+                            key=f"dam_in_g_y2y5_{issuer.ticker}")
         with c2:
             st.number_input("Target pre-tax operating margin (%)",
                             value=float(op_margin * 100), step=0.5,
                             format="%.2f",
-                            key=f"dam_m_target_{issuer.ticker}")
+                            key=f"dam_in_m_target_{issuer.ticker}")
             st.number_input("Year of convergence for margin",
                             value=5, min_value=1, max_value=10, step=1,
-                            key=f"dam_yconv_{issuer.ticker}")
+                            key=f"dam_in_yconv_{issuer.ticker}")
             st.number_input("Sales-to-Capital Y1-Y5",
                             value=float(s2c), step=0.05, format="%.2f",
-                            key=f"dam_s2c_15_{issuer.ticker}")
+                            key=f"dam_in_s2c_15_{issuer.ticker}")
             st.number_input("Sales-to-Capital Y6-Y10",
                             value=float(s2c), step=0.05, format="%.2f",
-                            key=f"dam_s2c_610_{issuer.ticker}")
+                            key=f"dam_in_s2c_610_{issuer.ticker}")
 
     # ----- SECCION E: Market parameters -----
     with st.expander("**🌎 E · Market parameters**", expanded=True):
@@ -1300,13 +1300,13 @@ if mode == "Single DCF":
         with c1:
             st.number_input("Risk-free rate MX (%)",
                             value=float(rf * 100), step=0.05, format="%.4f",
-                            key=f"dam_rf_{issuer.ticker}",
+                            key=f"dam_in_rf_{issuer.ticker}",
                             help="CETES 10Y o Bono M 10Y")
         with c2:
             st.number_input("Initial cost of capital (WACC) (%)",
                             value=float(out.wacc_result.wacc * 100),
                             step=0.10, format="%.4f", disabled=True,
-                            key=f"dam_wacc_init_{issuer.ticker}",
+                            key=f"dam_in_wacc_init_{issuer.ticker}",
                             help="Calculado en Cost of Capital sheet (WACC)")
 
     # ----- SECCION F: Other inputs (employee options) -----
@@ -1314,21 +1314,21 @@ if mode == "Single DCF":
                        expanded=False):
         opt_yn = st.selectbox("Employee options outstanding?",
                                 ["No", "Yes"], index=0,
-                                key=f"dam_opt_yn_{issuer.ticker}")
+                                key=f"dam_in_opt_yn_{issuer.ticker}")
         if opt_yn == "Yes":
             o1, o2, o3, o4 = st.columns(4)
             with o1:
                 st.number_input("# options (M)", value=0.0, step=0.1,
-                                key=f"dam_opt_n_{issuer.ticker}")
+                                key=f"dam_in_opt_n_{issuer.ticker}")
             with o2:
                 st.number_input("Avg strike (MXN)", value=0.0, step=0.5,
-                                key=f"dam_opt_strike_{issuer.ticker}")
+                                key=f"dam_in_opt_strike_{issuer.ticker}")
             with o3:
                 st.number_input("Avg maturity (yr)", value=7.0, step=0.5,
-                                key=f"dam_opt_mat_{issuer.ticker}")
+                                key=f"dam_in_opt_mat_{issuer.ticker}")
             with o4:
                 st.number_input("Stock stdev", value=0.45, step=0.05,
-                                key=f"dam_opt_std_{issuer.ticker}")
+                                key=f"dam_in_opt_std_{issuer.ticker}")
 
     # ----- SECCION G: Default-assumption overrides -----
     with st.expander(
@@ -1340,115 +1340,115 @@ if mode == "Single DCF":
         with oc1:
             ov_coc = st.selectbox("Override cost of capital después año 10?",
                                     ["No", "Yes"], index=0,
-                                    key=f"dam_ov_coc_{issuer.ticker}")
+                                    key=f"dam_in_ov_coc_{issuer.ticker}")
         with oc2:
             st.number_input("Cost of capital after year 10 (%)",
                             value=float(out.wacc_result.wacc * 100),
                             step=0.10, format="%.4f",
                             disabled=(ov_coc == "No"),
-                            key=f"dam_coc10_{issuer.ticker}")
+                            key=f"dam_in_coc10_{issuer.ticker}")
 
         st.markdown("**Stable-growth ROIC**")
         or1, or2 = st.columns([1, 2])
         with or1:
             ov_roic = st.selectbox("Override ROIC después año 10?",
                                      ["No", "Yes"], index=0,
-                                     key=f"dam_ov_roic_{issuer.ticker}")
+                                     key=f"dam_in_ov_roic_{issuer.ticker}")
         with or2:
             st.number_input("ROIC after year 10 (%)",
                             value=15.0, step=0.5, format="%.2f",
                             disabled=(ov_roic == "No"),
-                            key=f"dam_roic10_{issuer.ticker}")
+                            key=f"dam_in_roic10_{issuer.ticker}")
 
         st.markdown("**Probability of failure**")
         of1, of2, of3, of4 = st.columns(4)
         with of1:
             ov_fail = st.selectbox("Override probability of failure?",
                                      ["No", "Yes"], index=0,
-                                     key=f"dam_ov_fail_{issuer.ticker}")
+                                     key=f"dam_in_ov_fail_{issuer.ticker}")
         with of2:
             st.number_input("Probability of failure (%)",
                             value=12.0, step=1.0, format="%.2f",
                             disabled=(ov_fail == "No"),
-                            key=f"dam_pfail_{issuer.ticker}")
+                            key=f"dam_in_pfail_{issuer.ticker}")
         with of3:
             st.selectbox("Tie proceeds in failure to:",
                          ["V (fair value)", "B (book value of capital)"],
-                         index=0, key=f"dam_basis_{issuer.ticker}")
+                         index=0, key=f"dam_in_basis_{issuer.ticker}")
         with of4:
             st.number_input("Distress proceeds (% of book/value)",
                             value=50.0, step=5.0, format="%.1f",
-                            key=f"dam_proc_{issuer.ticker}")
+                            key=f"dam_in_proc_{issuer.ticker}")
 
         st.markdown("**Reinvestment lag**")
         ol1, ol2 = st.columns([1, 2])
         with ol1:
             ov_lag = st.selectbox("Override reinvestment lag?",
                                     ["No", "Yes"], index=0,
-                                    key=f"dam_ov_lag_{issuer.ticker}")
+                                    key=f"dam_in_ov_lag_{issuer.ticker}")
         with ol2:
             st.number_input("Reinvestment lag (años, 0-3)",
                             value=1, min_value=0, max_value=3, step=1,
                             disabled=(ov_lag == "No"),
-                            key=f"dam_lag_{issuer.ticker}")
+                            key=f"dam_in_lag_{issuer.ticker}")
 
         st.markdown("**Effective vs marginal tax convergence**")
         ot = st.selectbox("Override effective→marginal tax convergence?",
                             ["No", "Yes"], index=0,
-                            key=f"dam_ov_tax_{issuer.ticker}")
+                            key=f"dam_in_ov_tax_{issuer.ticker}")
 
         st.markdown("**NOL carryforward**")
         on1, on2 = st.columns([1, 2])
         with on1:
             ov_nol = st.selectbox("Override NOL?",
                                     ["No", "Yes"], index=0,
-                                    key=f"dam_ov_nol_{issuer.ticker}")
+                                    key=f"dam_in_ov_nol_{issuer.ticker}")
         with on2:
             st.number_input("NOL into year 1 (MDP)",
                             value=0.0, step=100.0, format="%.1f",
                             disabled=(ov_nol == "No"),
-                            key=f"dam_nol_{issuer.ticker}")
+                            key=f"dam_in_nol_{issuer.ticker}")
 
         st.markdown("**Risk-free rate / terminal growth**")
         ot1, ot2 = st.columns([1, 2])
         with ot1:
             ov_rf = st.selectbox("Override risk-free después año 10?",
                                    ["No", "Yes"], index=1,
-                                   key=f"dam_ov_rf_{issuer.ticker}",
+                                   key=f"dam_in_ov_rf_{issuer.ticker}",
                                    help="MX usualmente: Yes (rf actual ≈ 9% vs estable ≈ 6%)")
         with ot2:
             st.number_input("Risk-free after year 10 (%)",
                             value=6.0, step=0.25, format="%.4f",
                             disabled=(ov_rf == "No"),
-                            key=f"dam_rf10_{issuer.ticker}")
+                            key=f"dam_in_rf10_{issuer.ticker}")
         og1, og2 = st.columns([1, 2])
         with og1:
             ov_g = st.selectbox("Override terminal growth?",
                                   ["No", "Yes"], index=1,
-                                  key=f"dam_ov_g_{issuer.ticker}",
+                                  key=f"dam_in_ov_g_{issuer.ticker}",
                                   help="MX usualmente: Yes (g ≈ 3.5% inflación)")
         with og2:
             st.number_input("Terminal growth (%)",
                             value=float(terminal_g * 100), step=0.05,
                             format="%.4f", disabled=(ov_g == "No"),
-                            key=f"dam_g_term_{issuer.ticker}")
+                            key=f"dam_in_g_term_{issuer.ticker}")
 
         st.markdown("**Trapped cash (foreign markets)**")
         oc1, oc2, oc3 = st.columns([1, 1, 1])
         with oc1:
             ov_tc = st.selectbox("Override trapped cash?",
                                    ["No", "Yes"], index=0,
-                                   key=f"dam_ov_tc_{issuer.ticker}")
+                                   key=f"dam_in_ov_tc_{issuer.ticker}")
         with oc2:
             st.number_input("Trapped cash (MDP)",
                             value=0.0, step=100.0, format="%.1f",
                             disabled=(ov_tc == "No"),
-                            key=f"dam_tc_{issuer.ticker}")
+                            key=f"dam_in_tc_{issuer.ticker}")
         with oc3:
             st.number_input("Avg foreign tax rate (%)",
                             value=15.0, step=1.0, format="%.2f",
                             disabled=(ov_tc == "No"),
-                            key=f"dam_tc_tax_{issuer.ticker}")
+                            key=f"dam_in_tc_tax_{issuer.ticker}")
 
     st.divider()
     st.success(
