@@ -1,0 +1,40 @@
+{
+  "ticker": "CUERVO",
+  "report_date": "2026-04-25",
+  "period_covered": "1Q26",
+  "report_type": "earnings_release",
+  "title": "1T26 Reporte de Resultados",
+  "source_url": "",
+  "pdf_filename": "1T26 Reporte de Resultados - Final.pdf",
+  "guidance": [
+    {
+      "metric": "FY2026 Revenue (reaffirm)",
+      "period": "FY2026",
+      "value_low": -3.0,
+      "value_high": -1.0,
+      "value_point": null,
+      "unit": "%",
+      "direction": "decline",
+      "confidence": "medium",
+      "qualitative_text": "Reaffirms FY2026 guidance: low single digit decline",
+      "notes": ""
+    }
+  ],
+  "drivers": [],
+  "events": [],
+  "sentiment": {
+    "tone": "⚪ Neutral",
+    "score": -0.1,
+    "confidence": "low",
+    "rationale": "Placeholder demo - actual content needs PDF extraction"
+  },
+  "key_topics": [
+    "1Q26 results",
+    "FY2026 guidance reaffirmed"
+  ],
+  "summary_es": "[DEMO PLACEHOLDER] 1Q26 earnings - extraer PDF con Claude API para datos reales.",
+  "summary_en": "",
+  "extraction_method": "manual",
+  "extraction_date": "2026-05-04T02:01:39.704543",
+  "extraction_notes": ""
+}

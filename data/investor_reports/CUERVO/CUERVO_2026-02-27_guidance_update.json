@@ -1,0 +1,75 @@
+{
+  "ticker": "CUERVO",
+  "report_date": "2026-02-27",
+  "period_covered": "FY2026",
+  "report_type": "guidance_update",
+  "title": "Guía para el año completo 2026",
+  "source_url": "",
+  "pdf_filename": "Guia para el anio completo 2026.pdf",
+  "guidance": [
+    {
+      "metric": "Revenue Growth (Constant Currency)",
+      "period": "FY2026",
+      "value_low": -3.0,
+      "value_high": -1.0,
+      "value_point": null,
+      "unit": "%",
+      "direction": "decline",
+      "confidence": "medium",
+      "qualitative_text": "Caída en el rango bajo de un solo dígito, a tipo de cambio constante",
+      "notes": ""
+    },
+    {
+      "metric": "CapEx Consolidados",
+      "period": "FY2026",
+      "value_low": 90.0,
+      "value_high": 110.0,
+      "value_point": null,
+      "unit": "USD M",
+      "direction": "stable",
+      "confidence": "high",
+      "qualitative_text": "Área de US$90-110 millones",
+      "notes": "Expansion destilerias (tequila + spirits) + aging + storage"
+    },
+    {
+      "metric": "AMP (Advertising, Marketing, Promotion)",
+      "period": "FY2026",
+      "value_low": 19.0,
+      "value_high": 21.0,
+      "value_point": null,
+      "unit": "% Revenue",
+      "direction": "stable",
+      "confidence": "high",
+      "qualitative_text": "Rango de entre 19% y 21% de Ventas Netas",
+      "notes": ""
+    }
+  ],
+  "drivers": [],
+  "events": [
+    {
+      "event_type": "CapEx plan",
+      "title": "CapEx 2026 plan",
+      "description": "US$90-110M para expansion destilerias, aging y storage",
+      "event_date": null,
+      "financial_impact": "USD$90-110M",
+      "materiality": "high"
+    }
+  ],
+  "sentiment": {
+    "tone": "🟡 Cautious",
+    "score": -0.3,
+    "confidence": "high",
+    "rationale": "Management formalmente proyecta REVENUE DECLINE en 2026 (low single digit). Mantiene CapEx alto (~US$100M) lo cual indica confianza en demanda LP, pero short-term es defensivo."
+  },
+  "key_topics": [
+    "Revenue decline 2026 esperado",
+    "CapEx en aging tequila premium",
+    "Marketing investment sostenido (premiumization)",
+    "Constant currency basis (FX-neutral guidance)"
+  ],
+  "summary_es": "CUERVO formaliza guidance 2026 negativo: ventas netas caerán en rango bajo de single digit a tipo de cambio constante (-1% a -3%). CapEx se reduce ligeramente (~US$100M vs ~$120M en 2025) pero se mantiene robusto, enfocado en expansión de destilerías y aging de tequila premium. AMP se mantiene 19-21% de ventas (en línea histórico). Tono CAUTELOSO.",
+  "summary_en": "",
+  "extraction_method": "manual",
+  "extraction_date": "2026-05-04T02:01:39.641046",
+  "extraction_notes": ""
+}

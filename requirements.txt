@@ -9,3 +9,4 @@ streamlit>=1.32
 altair>=5.0
 pytest>=8.0
 requests>=2.31
+anthropic>=0.39

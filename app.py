@@ -1182,13 +1182,14 @@ if mode == "Single DCF":
 
     # Define tabs (each section becomes a tab via __enter__/__exit__ to avoid
     # massive re-indentation. This is equivalent to `with tab:` blocks).
-    (tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_stories, tab_pic,
-     tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
+    (tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_intel,
+     tab_stories, tab_pic, tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
         "📊 Estados Financieros",
         "📅 Historical",
         "🔍 Bloomberg Validation",
         "📈 Valuation Output",
         "🔮 Forecast EEFF",
+        "🎙️ Investor Intel",
         "📖 Stories to Numbers",
         "🎨 Valuation as Picture",
         "🎯 Sensitivity",
@@ -2509,6 +2510,334 @@ if mode == "Single DCF":
         st.code(traceback.format_exc())
 
     tab_forecast.__exit__(None, None, None)
+    tab_intel.__enter__()
+
+    # ============================================================
+    # 🎙️ INVESTOR INTEL — Timeline narrativo de management
+    # ============================================================
+    st.subheader(f"🎙️ Investor Intelligence — {issuer.ticker}")
+    st.caption(
+        "Timeline de lo que la administración ha dicho trimestre a trimestre: "
+        "guías, drivers, eventos estratégicos, sentimiento. Captura inteligencia "
+        "narrativa para complementar el análisis cuantitativo."
+    )
+
+    try:
+        from src.dcf_mexico.investor_intel import (
+            InvestorReport, get_cuervo_demo_reports,
+            save_report, save_and_commit_to_github,
+            load_all_reports_for_ticker, delete_report,
+            extract_with_claude_api, extract_from_manual_json,
+            sentiment_evolution, sentiment_to_table,
+            detect_material_changes,
+            extract_dcf_suggestions,
+            generate_alerts,
+            list_report_types, ReportType,
+        )
+
+        # Load existing reports
+        existing_reports = load_all_reports_for_ticker(issuer.ticker)
+
+        # ============================================================
+        # SECCION 1: UPLOAD / EXTRACT NEW REPORT
+        # ============================================================
+        st.markdown("### ➕ Cargar nuevo reporte")
+        intel_mode = st.radio(
+            "Método de extracción:",
+            options=["Upload PDF + Claude API", "Paste JSON manual",
+                      "Cargar demo CUERVO (4 PDFs conocidos)"],
+            horizontal=True,
+            key=f"intel_mode_{issuer.ticker}",
+        )
+
+        if intel_mode == "Upload PDF + Claude API":
+            uploaded_pdf = st.file_uploader(
+                "Sube el PDF de IR",
+                type=["pdf"],
+                key=f"intel_pdf_upload_{issuer.ticker}",
+            )
+
+            # Check if Anthropic API key configured
+            anthropic_ok = False
+            try:
+                if "anthropic" in st.secrets and "api_key" in st.secrets["anthropic"]:
+                    anthropic_ok = True
+            except Exception:
+                pass
+            import os
+            if not anthropic_ok and os.environ.get("ANTHROPIC_API_KEY"):
+                anthropic_ok = True
+
+            if not anthropic_ok:
+                st.warning(
+                    "⚠️ Claude API key NO configurada. Configura en "
+                    "Streamlit secrets:\n```toml\n[anthropic]\napi_key = \"sk-ant-...\"\n```"
+                )
+
+            if uploaded_pdf and anthropic_ok:
+                if st.button(f"🤖 Extraer con Claude API", key=f"extract_btn_{issuer.ticker}"):
+                    with st.spinner("Procesando con Claude API..."):
+                        report, err = extract_with_claude_api(
+                            uploaded_pdf.getvalue(),
+                            ticker=issuer.ticker,
+                            filename=uploaded_pdf.name,
+                        )
+                        if err:
+                            st.error(f"❌ Error: {err}")
+                        elif report:
+                            fpath, gh_result = save_and_commit_to_github(report)
+                            st.success(f"✅ Procesado y guardado: {fpath.name}")
+                            if gh_result and gh_result.ok:
+                                st.success(f"📤 Commit a GitHub: {gh_result.commit_url}")
+                            st.rerun()
+
+        elif intel_mode == "Paste JSON manual":
+            with st.expander("ℹ️ Cómo usar el modo manual"):
+                st.markdown(
+                    "1. Abre [Claude.ai web](https://claude.ai/) (gratuito)\n"
+                    "2. Sube el PDF\n"
+                    "3. Pega este prompt:\n"
+                )
+                from src.dcf_mexico.investor_intel import EXTRACTION_PROMPT
+                st.code(EXTRACTION_PROMPT[:1500] + "\n[...truncado, copia completo del modulo extractor.py]")
+                st.markdown("4. Copia el JSON resultante y pégalo abajo")
+
+            json_text = st.text_area(
+                "JSON extraído (con la estructura de InvestorReport)",
+                height=300,
+                key=f"intel_json_{issuer.ticker}",
+            )
+            fname = st.text_input(
+                "Nombre del PDF original (para registro)",
+                value="report.pdf",
+                key=f"intel_fname_{issuer.ticker}",
+            )
+            if json_text and st.button("📥 Guardar JSON", key=f"save_json_{issuer.ticker}"):
+                report, err = extract_from_manual_json(
+                    json_text, ticker=issuer.ticker, filename=fname,
+                )
+                if err:
+                    st.error(f"❌ {err}")
+                elif report:
+                    fpath, gh_result = save_and_commit_to_github(report)
+                    st.success(f"✅ Guardado: {fpath.name}")
+                    if gh_result and gh_result.ok:
+                        st.success(f"📤 GitHub: {gh_result.commit_url}")
+                    st.rerun()
+
+        else:  # demo
+            st.info(
+                "💡 Carga 4 reports DEMO de CUERVO basados en los PDFs reales "
+                "(Guía 2026, IR Presentation Marzo 2026, 1T26 Earnings, Conf Call). "
+                "Los IDs cualitativos están reales, datos numéricos son placeholders "
+                "donde el PDF no fue procesado."
+            )
+            if st.button("📊 Cargar demo CUERVO", key=f"load_demo_{issuer.ticker}"):
+                if issuer.ticker.upper() == "CUERVO":
+                    demo_reports = get_cuervo_demo_reports()
+                    for r in demo_reports:
+                        save_report(r)
+                    st.success(f"✅ {len(demo_reports)} demo reports cargados")
+                    st.rerun()
+                else:
+                    st.warning("Demo solo disponible para CUERVO actualmente")
+
+        # ============================================================
+        # SECCION 2: TIMELINE VISUAL
+        # ============================================================
+        if existing_reports:
+            st.markdown("---")
+            st.markdown(f"### 📅 Timeline ({len(existing_reports)} reports)")
+
+            # Altair timeline chart
+            sent = sentiment_evolution(existing_reports)
+            if sent:
+                timeline_data = []
+                for s in sent:
+                    timeline_data.append({
+                        "Fecha": s.report_date,
+                        "Tipo": s.report_type,
+                        "Tono": s.tone,
+                        "Score": s.score,
+                        "Periodo": s.period,
+                        "Title": s.title,
+                    })
+                tl_df = pd.DataFrame(timeline_data)
+                # Convert to date type
+                tl_df["Fecha"] = pd.to_datetime(tl_df["Fecha"])
+
+                # Color por sentiment score
+                color_scale = alt.Scale(
+                    domain=[-1.0, 0.0, 1.0],
+                    range=["#DA3633", "#999999", "#2EA043"],
+                )
+
+                timeline = (
+                    alt.Chart(tl_df)
+                    .mark_circle(size=200)
+                    .encode(
+                        x=alt.X("Fecha:T", title="Fecha", axis=alt.Axis(labelColor='black')),
+                        y=alt.Y("Tipo:N", title="Tipo de Report",
+                                axis=alt.Axis(labelColor='black')),
+                        color=alt.Color("Score:Q", scale=color_scale,
+                                         legend=alt.Legend(title="Sentiment Score",
+                                                            orient="bottom")),
+                        size=alt.Size("Score:Q", legend=None,
+                                       scale=alt.Scale(domain=[-1, 1], range=[100, 400])),
+                        tooltip=[
+                            alt.Tooltip("Fecha:T"),
+                            alt.Tooltip("Periodo:N"),
+                            alt.Tooltip("Tipo:N"),
+                            alt.Tooltip("Tono:N"),
+                            alt.Tooltip("Score:Q", format=".2f"),
+                            alt.Tooltip("Title:N"),
+                        ],
+                    )
+                    .properties(height=250)
+                )
+                st.altair_chart(timeline, use_container_width=True)
+
+            # ============================================================
+            # SECCION 3: REPORT CARDS (uno por uno con details)
+            # ============================================================
+            st.markdown("---")
+            st.markdown("### 📋 Reports detallados")
+
+            for r in existing_reports:
+                tone_emoji = (r.sentiment.tone[0] if r.sentiment else "⚪")
+                with st.expander(
+                    f"{tone_emoji} **{r.report_date}** | {r.report_type} | "
+                    f"{r.title[:60]} ({r.period_covered})",
+                    expanded=False,
+                ):
+                    col1, col2 = st.columns([2, 1])
+
+                    with col1:
+                        st.markdown(f"**📄 PDF:** `{r.pdf_filename}`")
+                        if r.summary_es:
+                            st.info(f"📝 **Resumen:** {r.summary_es}")
+
+                        if r.guidance:
+                            st.markdown("##### 🎯 Guidance")
+                            g_rows = []
+                            for g in r.guidance:
+                                g_rows.append({
+                                    "Métrica": g.metric,
+                                    "Periodo": g.period,
+                                    "Range": g.range_str(),
+                                    "Direction": g.direction,
+                                    "Confianza": g.confidence,
+                                    "Texto": g.qualitative_text[:80],
+                                })
+                            st.dataframe(pd.DataFrame(g_rows), hide_index=True,
+                                          use_container_width=True)
+
+                        if r.drivers:
+                            st.markdown("##### 🚀 Drivers")
+                            d_rows = []
+                            for d in r.drivers:
+                                d_rows.append({
+                                    "Categoría": d.category,
+                                    "Descripción": d.description,
+                                    "Impact": d.impact,
+                                    "Materialidad": d.materiality,
+                                })
+                            st.dataframe(pd.DataFrame(d_rows), hide_index=True,
+                                          use_container_width=True)
+
+                        if r.events:
+                            st.markdown("##### 📢 Eventos Materiales")
+                            for e in r.events:
+                                st.warning(
+                                    f"**{e.event_type}** | {e.title}\n\n"
+                                    f"{e.description}\n\n"
+                                    f"*Impact:* {e.financial_impact} • Materialidad: {e.materiality}"
+                                )
+
+                    with col2:
+                        if r.sentiment:
+                            st.metric("Sentiment Tone", r.sentiment.tone,
+                                       f"Score: {r.sentiment.score:+.2f}")
+                            st.caption(f"💡 {r.sentiment.rationale}")
+
+                        if r.key_topics:
+                            st.markdown("**🔑 Key Topics:**")
+                            for t in r.key_topics:
+                                st.caption(f"• {t}")
+
+                        st.caption(f"Extraído: {r.extraction_method} • {r.extraction_date[:10]}")
+
+                        # Delete button
+                        if st.button(f"🗑️ Eliminar", key=f"del_{r.report_id}"):
+                            delete_report(r.report_id, r.ticker)
+                            st.success(f"Eliminado: {r.report_id}")
+                            st.rerun()
+
+            # ============================================================
+            # SECCION 4: ALERTS (cambios entre reports)
+            # ============================================================
+            if len(existing_reports) >= 2:
+                st.markdown("---")
+                st.markdown("### 🚨 Cambios materiales entre reports recientes")
+                # Compara los 2 más recientes
+                curr = existing_reports[0]
+                prior = existing_reports[1]
+                alerts_list = generate_alerts(curr, prior)
+                if alerts_list:
+                    st.caption(f"Comparando `{curr.report_date}` vs `{prior.report_date}`")
+                    for alert in alerts_list:
+                        sev_func = {"high": st.error, "medium": st.warning,
+                                     "low": st.info}.get(alert.severity, st.info)
+                        sev_func(
+                            f"**{alert.title}** ({alert.category})\n\n"
+                            f"{alert.description}\n\n"
+                            f"💡 **Acción:** {alert.action_recommended}"
+                        )
+                else:
+                    st.success("✅ Sin cambios materiales detectados.")
+
+            # ============================================================
+            # SECCION 5: DCF DRIVER SUGGESTIONS
+            # ============================================================
+            st.markdown("---")
+            st.markdown("### 🔄 Sugerencias para DCF (auto-fill desde guidance)")
+            try:
+                # Use revenue del DCF actual como base para CapEx %
+                rev_for_capex = base.revenue if base else None
+                dcf_sugs = extract_dcf_suggestions(
+                    existing_reports,
+                    revenue_for_capex_pct=rev_for_capex,
+                )
+                if dcf_sugs:
+                    st.caption(
+                        "Estos drivers vienen DIRECTO de la guidance más reciente "
+                        "de management. Puedes copiarlos al tab Valuation Output."
+                    )
+                    for sug in dcf_sugs:
+                        st.info(
+                            f"**{sug.driver_name}** = `{sug.suggested_value:.4f}` "
+                            f"({sug.confidence} confidence)\n\n"
+                            f"📌 *{sug.note}*\n\n"
+                            f"📅 Source: {sug.source_metric} ({sug.source_period}) "
+                            f"emitida {sug.source_date}"
+                        )
+                else:
+                    st.info("No hay guidance numérica reciente para sugerir drivers.")
+            except Exception as e_dcf:
+                st.caption(f"DCF integration: {e_dcf}")
+
+        else:
+            st.info(
+                "📭 Sin reports cargados todavía. Usa el panel arriba para "
+                "subir PDFs (con Claude API) o cargar demo CUERVO."
+            )
+
+    except Exception as e_intel:
+        st.error(f"Error en Investor Intel: {e_intel}")
+        import traceback
+        st.code(traceback.format_exc())
+
+    tab_intel.__exit__(None, None, None)
     tab_stories.__enter__()
 
     # ---- 2) Stories to Numbers ----
