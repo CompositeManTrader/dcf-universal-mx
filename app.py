@@ -513,14 +513,13 @@ if mode == "Single DCF":
     # ========================================================================
     # TABS DEFINITION (movida desde abajo - ahora la pagina arranca con tabs)
     # ========================================================================
-    (tab_snapshot, tab_inputs_sug, tab_quality, tab_drivers, tab_dam_input,
+    (tab_snapshot, tab_inputs_sug, tab_quality, tab_dam_input,
      tab_proj, tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_intel,
      tab_stories, tab_pic, tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
         # NUEVAS TABS (Resumen rapido) - movidas desde pagina principal:
         "📷 Snapshot",
         "💡 Inputs Sugeridos",
         "🎯 Quality Audit + Scenarios",
-        "🎛️ Drivers DCF",
         "📋 Input Sheet (Damodaran)",
         "📈 Proyección FCFF",
         # TABS existentes (Bloomberg + Damodaran + utility):
@@ -890,16 +889,15 @@ if mode == "Single DCF":
     tab_quality.__exit__(None, None, None)
 
     # ============================================================
-    # TAB 4: 🎛️ DRIVERS DCF (editables)
+    # DCF INPUTS (auto desde Input Sheet · session_state)
+    #
+    # El antiguo tab "Drivers DCF" fue eliminado. Ahora todos los inputs
+    # del modelo se leen desde el Input Sheet (Damodaran) — claves
+    # `dam_in_*` que las widgets del tab escriben automáticamente.
+    # En el primer render, session_state aún no tiene esas claves, así
+    # que usamos defaults (market / sector / suggestions del histórico).
     # ============================================================
-    tab_drivers.__enter__()
-    st.subheader("Drivers DCF (editables)")
-    st.caption("⚡ Si tocaste *'Usar todas las sugerencias'* arriba, los sliders ya tienen el valor calculado del histórico.")
-
-    # Helpers para leer valores sugeridos del session_state (clamp a rango del slider)
-    def _sug_or_default(key: str, default: float, vmin: float, vmax: float, scale: float = 1.0) -> float:
-        """Lee la sugerencia desde session_state y clampea al rango [vmin, vmax].
-        scale convierte unidad: e.g. sugerencia viene en % (-1.99) y slider quiere decimal (-0.0199)."""
+    def _sug_or_default(key, default, vmin, vmax, scale=1.0):
         ss_key = f"sug_{issuer.ticker}_{key}"
         v = st.session_state.get(ss_key)
         if v is None:
@@ -907,173 +905,83 @@ if mode == "Single DCF":
         v_scaled = v * scale
         return max(vmin, min(vmax, v_scaled))
 
-    # Default values: si hay sugerencia, usarla; si no, defaults market/sector
-    default_rev_growth = _sug_or_default("revenue_growth_y2y5", market.revenue_growth_high, 0.0, 0.20, scale=0.01)
-    default_op_margin  = _sug_or_default("op_margin_target", sector.target_op_margin, 0.0, 0.60, scale=0.01)
-    default_s2c        = _sug_or_default("sales_to_capital", sector.sales_to_capital, 0.1, 6.0)
+    _default_rev_growth = _sug_or_default(
+        "revenue_growth_y2y5", market.revenue_growth_high,
+        0.0, 0.20, scale=0.01)
+    _default_op_margin = _sug_or_default(
+        "op_margin_target", sector.target_op_margin,
+        0.0, 0.60, scale=0.01)
+    _default_s2c = _sug_or_default(
+        "sales_to_capital", sector.sales_to_capital, 0.1, 6.0)
 
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        rev_growth = st.slider("Revenue growth Y1-Y5", 0.0, 0.20,
-                                default_rev_growth, 0.005, format="%.3f",
-                                help="Default sugerido = mediana YoY últimos 3-5 años (panel arriba)")
-        terminal_g = st.slider("Terminal growth", 0.0, 0.06,
-                                market.terminal_growth, 0.005, format="%.3f",
-                                help="Crecimiento perpetuo. Cap a inflación MX (~3.5%) o riskfree.")
-    with c2:
-        op_margin = st.slider("Target op margin", 0.0, 0.60,
-                               default_op_margin, 0.005, format="%.3f",
-                               help="Default sugerido = mediana margen histórico (panel arriba)")
-        s2c = st.slider("Sales-to-Capital", 0.1, 6.0,
-                         default_s2c, 0.05, format="%.2f",
-                         help="Default = histórico de la empresa o sector si no hay datos válidos")
-    with c3:
-        beta_unlev = st.slider("Beta unlevered (sector)", 0.1, 2.0,
-                                sector.beta_unlevered, 0.05, format="%.2f",
-                                help="Beta de la industria sin apalancar (Damodaran tables)")
-        market_price = st.number_input("Precio mercado (MXN)",
-                                        value=float(issuer.market_price), step=0.5)
+    def _ss_pct(key_suffix, default):
+        """Lee key 'dam_in_<key>_<ticker>' (UI guarda en %) → decimal."""
+        v = st.session_state.get(f"dam_in_{key_suffix}_{issuer.ticker}",
+                                  default * 100)
+        return float(v) / 100.0
 
-    c4, c5, c6 = st.columns(3)
-    with c4:
-        rf = st.number_input("Risk-free MX", value=market.risk_free,
-                              step=0.0025, format="%.4f")
-    with c5:
-        erp = st.number_input("ERP MX", value=market.erp, step=0.0025, format="%.4f")
-    with c6:
-        terminal_wacc = st.number_input(
-            "Terminal WACC override",
-            value=market.terminal_wacc_override or 0.085,
-            step=0.0025, format="%.4f",
-        )
+    def _ss_num(key_suffix, default):
+        return st.session_state.get(
+            f"dam_in_{key_suffix}_{issuer.ticker}", default)
 
-    # ============================================================
-    # 🎯 DAMODARAN ADVANCED (Hoja 1 fcffsimpleginzu)
-    # Inputs avanzados estilo Damodaran. Defaults = comportamiento basico.
-    # ============================================================
-    with st.expander("🎯 Damodaran Advanced (Hoja 1) — controles finos", expanded=False):
-        st.caption(
-            "Inputs estilo Damodaran fcffsimpleginzu. Si dejas defaults, el modelo "
-            "se comporta como antes. Activa cada toggle para personalizar."
-        )
+    def _ss_yes(key_suffix):
+        return st.session_state.get(
+            f"dam_in_{key_suffix}_{issuer.ticker}", "No") == "Yes"
 
-        # --- Bloque Y1 separado ---
-        st.markdown("**1️⃣ Year 1 separado de Y2-Y5** (Damodaran permite Y1 distinto)")
-        d1, d2, d3 = st.columns(3)
-        with d1:
-            use_y1_growth = st.checkbox(
-                "Override Y1 growth", value=False,
-                key=f"dam_use_y1_g_{issuer.ticker}",
-                help="Si activas: Y1 usa este growth, Y2-Y5 sigue usando el del slider arriba",
-            )
-            rev_growth_y1 = st.number_input(
-                "Revenue growth Y1", value=float(rev_growth),
-                step=0.005, format="%.4f", disabled=not use_y1_growth,
-                key=f"dam_y1_g_{issuer.ticker}",
-            )
-        with d2:
-            use_y1_margin = st.checkbox(
-                "Override Y1 margin", value=False,
-                key=f"dam_use_y1_m_{issuer.ticker}",
-            )
-            op_margin_y1 = st.number_input(
-                "Op margin Y1", value=float(base.ebit / base.revenue if base.revenue else 0.20),
-                step=0.005, format="%.4f", disabled=not use_y1_margin,
-                key=f"dam_y1_m_{issuer.ticker}",
-            )
-        with d3:
-            year_conv = st.slider(
-                "Margin convergence year", 1, 10, 5,
-                key=f"dam_yconv_{issuer.ticker}",
-                help="Año en que el margen llega al target. Damodaran default = 5",
-            )
+    # === Inputs básicos (Input Sheet sec C/D/E) ===
+    rev_growth   = _ss_pct("g_y2y5", _default_rev_growth)
+    op_margin    = _ss_pct("m_target", _default_op_margin)
+    s2c          = float(_ss_num("s2c_15", _default_s2c))
+    market_price = float(_ss_num("price", float(issuer.market_price or 0.0)))
+    rf           = _ss_pct("rf", market.risk_free)
 
-        # --- Bloque S2C diferenciado ---
-        st.markdown("**2️⃣ Sales-to-Capital diferenciado Y1-5 vs Y6-10**")
-        s2c_col1, s2c_col2, s2c_col3 = st.columns(3)
-        with s2c_col1:
-            use_s2c_split = st.checkbox(
-                "Diferenciar Y1-5 / Y6-10", value=False,
-                key=f"dam_s2c_split_{issuer.ticker}",
-            )
-        with s2c_col2:
-            s2c_y1_5 = st.number_input(
-                "S2C Y1-5", value=float(s2c), step=0.05, format="%.2f",
-                disabled=not use_s2c_split, key=f"dam_s2c_y1_5_{issuer.ticker}",
-            )
-        with s2c_col3:
-            s2c_y6_10 = st.number_input(
-                "S2C Y6-10", value=float(s2c), step=0.05, format="%.2f",
-                disabled=not use_s2c_split, key=f"dam_s2c_y6_10_{issuer.ticker}",
-            )
+    # No editables desde Input Sheet (defaults sector/market)
+    beta_unlev    = sector.beta_unlevered
+    erp           = market.erp
+    terminal_wacc = market.terminal_wacc_override or 0.085
 
-        # --- Bloque Terminal ROIC ---
-        st.markdown("**3️⃣ Terminal ROIC** (Damodaran default: ROIC = WACC, no value creation)")
-        roic_col1, roic_col2 = st.columns(2)
-        with roic_col1:
-            override_term_roic = st.checkbox(
-                "Override Terminal ROIC", value=False,
-                key=f"dam_roic_ovr_{issuer.ticker}",
-                help="Por default ROIC_terminal = WACC_terminal (no value creation). "
-                     "Activa para empresas con moat duradero.",
-            )
-        with roic_col2:
-            terminal_roic_val = st.number_input(
-                "ROIC terminal", value=0.15, step=0.005, format="%.4f",
-                disabled=not override_term_roic, key=f"dam_roic_val_{issuer.ticker}",
-            )
+    # === Y1 separado de Y2-Y5 (Input Sheet sec D) ===
+    rev_growth_y1 = _ss_pct("g_y1", rev_growth)
+    op_margin_y1  = _ss_pct(
+        "m_y1",
+        base.ebit / base.revenue if base.revenue else op_margin)
+    year_conv     = int(_ss_num("yconv", 5))
+    use_y1_growth = abs(rev_growth_y1 - rev_growth) > 1e-6
+    use_y1_margin = abs(op_margin_y1 - op_margin) > 1e-6
 
-        # --- Bloque Probability of Failure ---
-        st.markdown("**4️⃣ Probability of Failure** (Damodaran #3 default = 0%)")
-        pf_col1, pf_col2, pf_col3 = st.columns(3)
-        with pf_col1:
-            prob_failure = st.slider(
-                "Prob. failure", 0.0, 0.50, 0.0, 0.01, format="%.2f",
-                key=f"dam_pf_{issuer.ticker}",
-            )
-        with pf_col2:
-            failure_proceeds_basis = st.selectbox(
-                "Proceeds basis", ["V", "B"],
-                key=f"dam_pf_basis_{issuer.ticker}",
-                help="V = % del DCF fair value, B = % del Book Capital",
-            )
-        with pf_col3:
-            failure_proceeds_pct = st.slider(
-                "Recovery %", 0.0, 1.0, 0.5, 0.05, format="%.2f",
-                key=f"dam_pf_pct_{issuer.ticker}",
-            )
+    # === S2C split Y1-5 vs Y6-10 (Input Sheet sec D) ===
+    s2c_y1_5      = float(_ss_num("s2c_15", s2c))
+    s2c_y6_10     = float(_ss_num("s2c_610", s2c))
+    use_s2c_split = abs(s2c_y1_5 - s2c_y6_10) > 1e-6
 
-        # --- Bloque Other Damodaran defaults ---
-        st.markdown("**5️⃣ Otros defaults Damodaran (overrideables)**")
-        oth_col1, oth_col2, oth_col3 = st.columns(3)
-        with oth_col1:
-            nol_cf = st.number_input(
-                "NOL Carryforward (MDP)", value=0.0, step=10.0, format="%.1f",
-                key=f"dam_nol_{issuer.ticker}",
-                help="Tax loss carryforward al inicio Y1 (escudo fiscal)",
-            )
-        with oth_col2:
-            reinvest_lag = st.slider(
-                "Reinvestment lag (años)", 0, 3, 0,
-                key=f"dam_lag_{issuer.ticker}",
-                help="ΔRev_t = f(Reinvest_t-lag). Damodaran default = 1.",
-            )
-        with oth_col3:
-            trapped = st.number_input(
-                "Trapped Cash (MDP)", value=0.0, step=100.0, format="%.1f",
-                key=f"dam_trapped_{issuer.ticker}",
-                help="Cash en jurisdicciones con tax adicional al repatriar",
-            )
-        if trapped > 0:
-            trapped_tax = st.slider(
-                "Tax adicional sobre trapped cash", 0.0, 0.5, 0.10, 0.01, format="%.2f",
-                key=f"dam_trapped_tax_{issuer.ticker}",
-            )
-        else:
-            trapped_tax = 0.0
+    # === Sec G overrides (Yes/No selectboxes) ===
+    override_term_roic = _ss_yes("ov_roic")
+    terminal_roic_val  = _ss_pct("roic10", 0.15)
+
+    override_pf            = _ss_yes("ov_fail")
+    prob_failure           = _ss_pct("pfail", 0.0) if override_pf else 0.0
+    _basis_str             = st.session_state.get(
+        f"dam_in_basis_{issuer.ticker}", "V")
+    failure_proceeds_basis = "B" if str(_basis_str).startswith("B") else "V"
+    failure_proceeds_pct   = float(_ss_num("proc", 50.0)) / 100.0
+
+    override_nol = _ss_yes("ov_nol")
+    nol_cf       = float(_ss_num("nol", 0.0)) if override_nol else 0.0
+
+    override_lag = _ss_yes("ov_lag")
+    reinvest_lag = int(_ss_num("lag", 1)) if override_lag else 0
+
+    override_tc  = _ss_yes("ov_tc")
+    trapped      = float(_ss_num("tc", 0.0)) if override_tc else 0.0
+    trapped_tax  = (_ss_pct("tc_tax", 0.15)
+                     if (override_tc and trapped > 0) else 0.0)
+
+    override_g = _ss_yes("ov_g")
+    terminal_g = (_ss_pct("g_term", market.terminal_growth)
+                   if override_g else market.terminal_growth)
 
     a = DCFAssumptions(
-        # ===== Inputs basicos (sliders arriba) =====
+        # ===== Inputs basicos =====
         revenue_growth_high=rev_growth,
         terminal_growth=terminal_g,
         target_op_margin=op_margin,
@@ -1102,8 +1010,6 @@ if mode == "Single DCF":
         trapped_cash_tax_rate=trapped_tax,
     )
     out = project_company(base, a)
-
-    tab_drivers.__exit__(None, None, None)
 
     # ============================================================
     # TAB 4-bis: 📋 DAMODARAN INPUT SHEET (replica exacta del Excel)
