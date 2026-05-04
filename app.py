@@ -3106,9 +3106,72 @@ elif mode == "Upload XBRL":
         "Naming convention: `ifrsxbrl_<TICKER>_<YYYY>-<Q>.xls`"
     )
 
-    # ----- PERSISTENCIA (Streamlit Cloud filesystem es efímero) -----
-    # Guardamos los bytes uploaded en st.session_state y los re-escribimos a disco
-    # al inicio si no existen. Persiste durante la sesión del navegador.
+    # ----- GITHUB AUTO-COMMIT (persistencia permanente) -----
+    from dcf_mexico.github_storage import (
+        GitHubConfig, commit_file_to_github, test_github_connection,
+    )
+    gh_cfg = GitHubConfig.from_streamlit_secrets()
+    gh_available = gh_cfg is not None
+
+    with st.expander(
+        "🔐 **GitHub Auto-Commit** "
+        + ("✅ CONFIGURADO (persistencia permanente)" if gh_available
+           else "❌ NO configurado (solo persistencia en sesión)"),
+        expanded=not gh_available,
+    ):
+        if gh_available:
+            st.success(f"📦 Repo: `{gh_cfg.repo}` • Branch: `{gh_cfg.branch}`")
+            colt1, colt2 = st.columns([1, 3])
+            with colt1:
+                if st.button("🧪 Test conexión", key="test_gh"):
+                    ok, msg = test_github_connection(gh_cfg)
+                    if ok:
+                        st.success(msg)
+                    else:
+                        st.error(msg)
+            with colt2:
+                st.caption(
+                    "Cuando subas un XBRL, se hará **commit automático** al repo. "
+                    "Sobrevivirá restarts de Streamlit Cloud y nuevos deploys."
+                )
+        else:
+            st.warning(
+                "⚠️ Auto-commit a GitHub NO configurado. Los XBRLs solo "
+                "persistirán durante la sesión del navegador."
+            )
+            st.markdown("""
+**Para activar persistencia permanente:**
+
+1. **Crear GitHub Personal Access Token** (PAT):
+   - Ir a https://github.com/settings/tokens
+   - "Generate new token" → "Fine-grained tokens"
+   - Resource owner: tu usuario
+   - Repository access: Solo este repo (`dcf-universal-mx`)
+   - Permissions: **Contents → Read and Write**
+   - Copiar el token (`ghp_xxx...`)
+
+2. **Configurar en Streamlit:**
+
+   **Streamlit Cloud:** App settings → Secrets → pegar:
+   ```toml
+   [github]
+   token  = "ghp_xxxxxxxxxxxx"
+   repo   = "CompositeManTrader/dcf-universal-mx"
+   branch = "main"
+   ```
+
+   **Local:** crear archivo `.streamlit/secrets.toml` (NO commitearlo):
+   ```toml
+   [github]
+   token  = "ghp_xxxxxxxxxxxx"
+   repo   = "CompositeManTrader/dcf-universal-mx"
+   branch = "main"
+   ```
+
+3. **Recargar la app** — el auto-commit estará disponible.
+            """)
+
+    # ----- PERSISTENCIA SESSION_STATE (fallback / capa intermedia) -----
     if "uploaded_xbrls" not in st.session_state:
         st.session_state["uploaded_xbrls"] = {}   # filename -> bytes
 
@@ -3169,14 +3232,28 @@ elif mode == "Upload XBRL":
             )
         st.stop()
 
-    summaries = []
+    # Toggle GitHub auto-commit (solo si configurado)
+    do_github_commit = False
+    if gh_available:
+        do_github_commit = st.checkbox(
+            "💾 **Auto-commit a GitHub** (persistencia PERMANENTE)",
+            value=True,
+            help="Hace commit + push automático del archivo al repo. "
+                 "Sobrevive restarts de Streamlit Cloud y nuevos deploys.",
+        )
 
-    for u in uploaded:
+    summaries = []
+    github_results = []
+
+    progress = st.progress(0, text="Procesando archivos...")
+
+    for idx, u in enumerate(uploaded):
         # 1) Guardar bytes en session_state (persistencia entre reruns)
         st.session_state["uploaded_xbrls"][u.name] = u.getvalue()
         # 2) Escribir a disco para parser
         path = raw / u.name
         path.write_bytes(u.getvalue())
+        # 3) Parsear
         try:
             res = parse_xbrl(path)
             summaries.append({
@@ -3194,19 +3271,65 @@ elif mode == "Upload XBRL":
                 "Validacion": f"ERROR: {e}",
             })
 
+        # 4) GitHub auto-commit (si aplica)
+        if do_github_commit and gh_cfg:
+            progress.progress(
+                (idx + 0.5) / len(uploaded),
+                text=f"📤 Commiteando {u.name} a GitHub..."
+            )
+            commit_res = commit_file_to_github(u.name, u.getvalue(), gh_cfg)
+            github_results.append({
+                "Archivo": u.name,
+                "Status": "✅ OK" if commit_res.ok else "❌ Error",
+                "Mensaje": commit_res.message,
+                "Commit URL": commit_res.commit_url or "-",
+                "Error": commit_res.error_detail or "-",
+            })
+
+        progress.progress(
+            (idx + 1) / len(uploaded),
+            text=f"Procesados {idx+1}/{len(uploaded)}"
+        )
+
+    progress.empty()
     _list_local_xbrl_names.clear()
     _parse_cached.clear()
+
     st.success(
         f"✅ Procesados {len(summaries)} archivos. "
         f"Persistidos en session_state ({len(st.session_state['uploaded_xbrls'])} totales)."
     )
     st.dataframe(pd.DataFrame(summaries), hide_index=True, use_container_width=True)
-    st.info(
-        "ℹ️ **Persistencia:** Los archivos sobrevivirán reruns de Streamlit "
-        "**durante esta sesión del navegador**. Si cierras la pestaña, se pierden.\n\n"
-        "**Para persistencia permanente:** descarga los archivos y haz commit "
-        "manualmente a `data/raw_xbrl/` en el repo GitHub."
-    )
+
+    # Mostrar resultados GitHub si aplica
+    if github_results:
+        st.markdown("### 📦 GitHub Auto-Commit Results")
+        gh_ok_count = sum(1 for r in github_results if "OK" in r["Status"])
+        gh_err_count = len(github_results) - gh_ok_count
+        if gh_err_count == 0:
+            st.success(
+                f"🎉 **{gh_ok_count}/{len(github_results)} archivos commiteados al repo.** "
+                f"Persistencia permanente activa."
+            )
+        else:
+            st.warning(
+                f"⚠️ {gh_ok_count}/{len(github_results)} OK, "
+                f"{gh_err_count} errores. Ver detalle abajo."
+            )
+        st.dataframe(
+            pd.DataFrame(github_results),
+            hide_index=True, use_container_width=True,
+            column_config={
+                "Commit URL": st.column_config.LinkColumn("Commit", display_text="🔗 Ver"),
+            },
+        )
+
+    if not gh_available:
+        st.info(
+            "ℹ️ **Persistencia:** Los archivos sobrevivirán reruns de Streamlit "
+            "**durante esta sesión del navegador**. Si cierras la pestaña, se pierden.\n\n"
+            "**Para persistencia permanente:** Configura GitHub auto-commit (panel arriba)."
+        )
 
 
 # ===========================================================================
