@@ -513,30 +513,67 @@ if mode == "Single DCF":
     # ========================================================================
     # TABS DEFINITION (movida desde abajo - ahora la pagina arranca con tabs)
     # ========================================================================
-    (tab_snapshot, tab_inputs_sug, tab_quality, tab_dam_input,
-     tab_proj, tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_intel,
-     tab_stories, tab_pic, tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
-        # NUEVAS TABS (Resumen rapido) - movidas desde pagina principal:
+    # ============================================================
+    # ESTRUCTURA DE TABS:
+    #   - 1 tab padre "💎 DCF Damodaran" agrupa 7 sub-tabs (Input Sheet,
+    #     Cost of Capital, Proyección FCFF, Valuation Output, Stories,
+    #     Valuation as Picture, Sensitivity)
+    #   - El resto de tabs (Estados, Historical, Bloomberg, etc.) viven
+    #     al nivel principal sin cambios
+    # ============================================================
+    (tab_snapshot, tab_inputs_sug, tab_quality, tab_dcf,
+     tab_estados, tab_hist, tab_valid, tab_forecast, tab_intel,
+     tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
         "📷 Snapshot",
         "💡 Inputs Sugeridos",
         "🎯 Quality Audit + Scenarios",
-        "📋 Input Sheet (Damodaran)",
-        "📈 Proyección FCFF",
-        # TABS existentes (Bloomberg + Damodaran + utility):
+        "💎 DCF Damodaran",            # ← TAB PADRE consolidado
+        # Otros tabs:
         "📊 Estados Financieros",
         "📅 Historical",
         "🔍 Bloomberg Validation",
-        "📈 Valuation Output",
         "🔮 Forecast EEFF",
         "🎙️ Investor Intel",
-        "📖 Stories to Numbers",
-        "🎨 Valuation as Picture",
-        "🎯 Sensitivity",
         "🔗 DuPont",
         "📐 Ratios & Metrics",
         "✅ Diagnostics",
         "💾 Download Excel",
     ])
+
+    # Sub-tabs dentro de DCF Damodaran (orden estilo Damodaran fcffsimpleginzu)
+    with tab_dcf:
+        (sub_input, sub_coc, sub_proj, sub_val,
+         sub_stories, sub_pic, sub_sens) = st.tabs([
+            "📋 1. Input Sheet",
+            "💰 2. Cost of Capital",
+            "📈 3. Proyección FCFF",
+            "🎯 4. Valuation Output",
+            "📖 5. Stories to Numbers",
+            "🎨 6. Valuation as Picture",
+            "📊 7. Sensitivity",
+        ])
+
+    # Helper: wraps un sub-tab con su parent para que el patrón
+    # __enter__()/__exit__() existente siga funcionando sin cambios.
+    class _SubTab:
+        def __init__(self, parent, child):
+            self.parent = parent
+            self.child = child
+        def __enter__(self):
+            self.parent.__enter__()
+            self.child.__enter__()
+            return self.child
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            self.child.__exit__(exc_type, exc_val, exc_tb)
+            self.parent.__exit__(exc_type, exc_val, exc_tb)
+
+    tab_dam_input = _SubTab(tab_dcf, sub_input)
+    tab_coc       = _SubTab(tab_dcf, sub_coc)
+    tab_proj      = _SubTab(tab_dcf, sub_proj)
+    tab_val       = _SubTab(tab_dcf, sub_val)
+    tab_stories   = _SubTab(tab_dcf, sub_stories)
+    tab_pic       = _SubTab(tab_dcf, sub_pic)
+    tab_sens      = _SubTab(tab_dcf, sub_sens)
 
     # ============================================================
     # TAB 1: 📷 SNAPSHOT (movido desde header de pagina)
@@ -1418,7 +1455,143 @@ if mode == "Single DCF":
     tab_dam_input.__exit__(None, None, None)
 
     # ============================================================
-    # TAB 5: 📈 PROYECCIÓN FCFF (Resultado + Damodaran outputs + Chart)
+    # SUB-TAB 2: 💰 COST OF CAPITAL (réplica hoja COC de Damodaran)
+    # ============================================================
+    tab_coc.__enter__()
+    st.subheader(f"💰 Cost of Capital — {issuer.ticker}")
+    st.caption(
+        "Réplica de la hoja **Cost of Capital** del modelo "
+        "`fcffsimpleginzu.xlsx`. Construye paso a paso: "
+        "**β unlevered → β levered → Ke (CAPM) + Kd after-tax → WACC**."
+    )
+
+    wr = out.wacc_result
+
+    # ---- Resumen ejecutivo ----
+    k1, k2, k3, k4 = st.columns(4)
+    k1.metric("WACC", f"{wr.wacc:.2%}",
+              f"βL = {wr.levered_beta:.2f}")
+    k2.metric("Cost of Equity", f"{wr.cost_equity:.2%}",
+              f"Weight {wr.weight_equity:.0%}")
+    k3.metric("After-tax Cost of Debt", f"{wr.aftertax_cost_debt:.2%}",
+              f"Weight {wr.weight_debt:.0%}")
+    k4.metric("Synthetic Rating", wr.rating,
+              f"Spread {wr.default_spread:.2%}")
+
+    st.divider()
+
+    # ---- Bloque A: Cost of Equity (CAPM) ----
+    with st.expander("**🟦 A · Cost of Equity (CAPM)**", expanded=True):
+        st.markdown(
+            f"""
+            **CAPM:** `Ke = Rf + βL × ERP`
+
+            | Componente | Valor | Notas |
+            |---|---:|---|
+            | Risk-free rate (México) | **{wr.risk_free:.4%}** | CETES 10Y o Bono M 10Y |
+            | Equity Risk Premium (ERP) | **{wr.erp:.4%}** | Damodaran ERP MX (mature + country risk) |
+            | Beta unlevered (sector) | **{wr.unlevered_beta:.3f}** | Promedio sector Damodaran (sin apalancar) |
+            | Debt-to-Equity ratio (D/E) | **{wr.debt_to_equity:.3f}x** | Total Debt ÷ Market Cap |
+            | Tax rate | **{market.marginal_tax:.2%}** | ISR corporativo MX |
+            | **Beta levered (Hamada)** | **{wr.levered_beta:.3f}** | `βU × (1 + (1-T) × D/E)` |
+            | **Cost of Equity** | **{wr.cost_equity:.4%}** | `Rf + βL × ERP` |
+            """
+        )
+        # Verificación numérica
+        ke_check = wr.risk_free + wr.levered_beta * wr.erp
+        if abs(ke_check - wr.cost_equity) > 0.0001:
+            st.warning(f"⚠️ Verificación CAPM: {ke_check:.4%} vs {wr.cost_equity:.4%}")
+        else:
+            st.success(
+                f"✅ CAPM check: {wr.risk_free:.4%} + "
+                f"{wr.levered_beta:.3f} × {wr.erp:.4%} = "
+                f"**{wr.cost_equity:.4%}**"
+            )
+
+    # ---- Bloque B: Cost of Debt (Synthetic Rating) ----
+    with st.expander("**🟥 B · Cost of Debt (Synthetic Rating)**",
+                       expanded=True):
+        st.markdown(
+            f"""
+            **Método Damodaran:** rating sintético basado en Interest Coverage Ratio
+            (EBIT / Interest Expense), luego rating → default spread → Kd.
+
+            | Componente | Valor | Notas |
+            |---|---:|---|
+            | Interest Coverage Ratio | **{wr.interest_coverage:.2f}x** | EBIT ÷ Interest Expense |
+            | Synthetic Rating | **{wr.rating}** | Mapeo Damodaran (tabla) |
+            | Default Spread | **{wr.default_spread:.4%}** | Premium sobre risk-free por riesgo crediticio |
+            | Risk-free rate | **{wr.risk_free:.4%}** | Misma base que Ke |
+            | **Pre-tax Cost of Debt** | **{wr.pretax_cost_debt:.4%}** | `Rf + Default Spread` |
+            | Tax rate | **{market.marginal_tax:.2%}** | ISR corporativo MX |
+            | **After-tax Cost of Debt** | **{wr.aftertax_cost_debt:.4%}** | `Kd × (1 - T)` — escudo fiscal |
+            """
+        )
+
+    # ---- Bloque C: WACC weighted ----
+    with st.expander("**🟩 C · WACC weighted**", expanded=True):
+        # Tabla pesos
+        import pandas as _pd
+        weights_df = _pd.DataFrame([
+            {"Source": "Equity", "Weight": wr.weight_equity,
+             "Cost (after-tax)": wr.cost_equity,
+             "Contribution": wr.weight_equity * wr.cost_equity},
+            {"Source": "Debt", "Weight": wr.weight_debt,
+             "Cost (after-tax)": wr.aftertax_cost_debt,
+             "Contribution": wr.weight_debt * wr.aftertax_cost_debt},
+            {"Source": "TOTAL (WACC)",
+             "Weight": wr.weight_equity + wr.weight_debt,
+             "Cost (after-tax)": float("nan"),
+             "Contribution": wr.wacc},
+        ])
+        st.dataframe(
+            weights_df.style.format({
+                "Weight": "{:.2%}",
+                "Cost (after-tax)": "{:.4%}",
+                "Contribution": "{:.4%}",
+            }, na_rep="—"),
+            hide_index=True, use_container_width=True,
+        )
+        st.markdown(
+            f"""
+            **Fórmula:** `WACC = Wₑ × Ke + Wd × Kd(after-tax)`
+            = {wr.weight_equity:.2%} × {wr.cost_equity:.4%}
+            + {wr.weight_debt:.2%} × {wr.aftertax_cost_debt:.4%}
+            = **{wr.wacc:.4%}**
+            """
+        )
+
+    # ---- Bloque D: WACC en estado estable (Damodaran terminal) ----
+    with st.expander("**🟪 D · Terminal Cost of Capital (año 10+)**",
+                       expanded=False):
+        st.markdown(
+            f"""
+            En estado estable (después del año 10), Damodaran asume que la
+            empresa converge a un perfil de riesgo más promedio. Por defecto:
+
+            - **Cost of Capital terminal** = max(WACC inicial, riskfree + ERP × 1.0)
+            - Si activaste *override* en Input Sheet sec G, se usa ese valor.
+
+            | Concepto | Valor |
+            |---|---:|
+            | WACC inicial (Y1) | **{wr.wacc:.4%}** |
+            | WACC terminal usado | **{out.terminal_wacc:.4%}** |
+            | Terminal growth (g) | **{a.terminal_growth:.4%}** |
+            | β terminal (asume → 1.0) | 1.000 |
+            """
+        )
+
+    st.info(
+        "📐 **Cómo se conecta:** este WACC alimenta el descuento de los "
+        "FCFF anuales en *Proyección FCFF* y la perpetuidad terminal. "
+        "Inputs editables (riskfree) están en *Input Sheet → sec E*; "
+        "los demás (β, ERP, terminal) heredan defaults sector/market."
+    )
+
+    tab_coc.__exit__(None, None, None)
+
+    # ============================================================
+    # SUB-TAB 3: 📈 PROYECCIÓN FCFF (Resultado + Damodaran outputs + Chart)
     # ============================================================
     tab_proj.__enter__()
 
