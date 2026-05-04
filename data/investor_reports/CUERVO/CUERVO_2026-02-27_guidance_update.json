@@ -3,12 +3,12 @@
   "report_date": "2026-02-27",
   "period_covered": "FY2026",
   "report_type": "guidance_update",
-  "title": "Guía para el año completo 2026",
+  "title": "Guia para el ano completo 2026",
   "source_url": "",
   "pdf_filename": "Guia para el anio completo 2026.pdf",
   "guidance": [
     {
-      "metric": "Revenue Growth (Constant Currency)",
+      "metric": "Ventas Netas Consolidadas (Constant Currency)",
       "period": "FY2026",
       "value_low": -3.0,
       "value_high": -1.0,
@@ -16,11 +16,11 @@
       "unit": "%",
       "direction": "decline",
       "confidence": "medium",
-      "qualitative_text": "Caída en el rango bajo de un solo dígito, a tipo de cambio constante",
-      "notes": ""
+      "qualitative_text": "Caida en el rango bajo de un solo digito, a tipo de cambio constante",
+      "notes": "Constant currency basis = excluye efectos FX peso-dolar"
     },
     {
-      "metric": "CapEx Consolidados",
+      "metric": "Gastos de Capital Consolidados",
       "period": "FY2026",
       "value_low": 90.0,
       "value_high": 110.0,
@@ -28,16 +28,16 @@
       "unit": "USD M",
       "direction": "stable",
       "confidence": "high",
-      "qualitative_text": "Área de US$90-110 millones",
-      "notes": "Expansion destilerias (tequila + spirits) + aging + storage"
+      "qualitative_text": "Area de US$90-110 millones",
+      "notes": "Para expansion destilerias (Tequila + Spirits) + anejamiento + almacenamiento"
     },
     {
-      "metric": "AMP (Advertising, Marketing, Promotion)",
+      "metric": "Publicidad, Marketing y Promocion (AMP)",
       "period": "FY2026",
       "value_low": 19.0,
       "value_high": 21.0,
       "value_point": null,
-      "unit": "% Revenue",
+      "unit": "% Ventas Netas",
       "direction": "stable",
       "confidence": "high",
       "qualitative_text": "Rango de entre 19% y 21% de Ventas Netas",
@@ -48,28 +48,29 @@
   "events": [
     {
       "event_type": "CapEx plan",
-      "title": "CapEx 2026 plan",
-      "description": "US$90-110M para expansion destilerias, aging y storage",
-      "event_date": null,
+      "title": "Plan CapEx FY2026: US$90-110M",
+      "description": "Inversion 2026 enfocada en: (1) expansion capacidad destilerias (Tequila + Otras Bebidas Espirituosas), (2) anejamiento, (3) almacenamiento. Respalda plan de crecimiento LP.",
+      "event_date": "2026-02-27",
       "financial_impact": "USD$90-110M",
       "materiality": "high"
     }
   ],
   "sentiment": {
     "tone": "🟡 Cautious",
-    "score": -0.3,
+    "score": -0.35,
     "confidence": "high",
-    "rationale": "Management formalmente proyecta REVENUE DECLINE en 2026 (low single digit). Mantiene CapEx alto (~US$100M) lo cual indica confianza en demanda LP, pero short-term es defensivo."
+    "rationale": "Management formaliza guia REVENUE DECLINE 2026 (low single digit). Mantiene CapEx alto (~US$100M) lo cual senala confianza en demanda LP, pero short-term es defensivo."
   },
   "key_topics": [
-    "Revenue decline 2026 esperado",
-    "CapEx en aging tequila premium",
+    "Revenue decline 2026 esperado (low single digit, FX-neutral)",
+    "CapEx estable ~US$100M (vs ~$120M en 2025)",
     "Marketing investment sostenido (premiumization)",
-    "Constant currency basis (FX-neutral guidance)"
+    "Constant currency basis (FX-neutral guidance)",
+    "Aging tequila premium (capital intensive)"
   ],
-  "summary_es": "CUERVO formaliza guidance 2026 negativo: ventas netas caerán en rango bajo de single digit a tipo de cambio constante (-1% a -3%). CapEx se reduce ligeramente (~US$100M vs ~$120M en 2025) pero se mantiene robusto, enfocado en expansión de destilerías y aging de tequila premium. AMP se mantiene 19-21% de ventas (en línea histórico). Tono CAUTELOSO.",
+  "summary_es": "CUERVO formaliza guia 2026 NEGATIVA: Ventas Netas Consolidadas caeran en rango bajo de single digit (-1% a -3%) a tipo de cambio constante. CapEx se reduce ligeramente a US$90-110M (vs ~$120M en 2025) pero se mantiene robusto, enfocado en expansion de destilerias y anejamiento de tequila premium. AMP se mantiene 19-21% de ventas (en linea historico). Tono CAUTELOSO.",
   "summary_en": "",
-  "extraction_method": "manual",
-  "extraction_date": "2026-05-04T02:01:39.641046",
+  "extraction_method": "claude_code_slash",
+  "extraction_date": "2026-05-04T02:17:55.977583",
   "extraction_notes": ""
 }

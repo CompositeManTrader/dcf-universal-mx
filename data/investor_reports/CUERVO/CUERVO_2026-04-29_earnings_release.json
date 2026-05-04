@@ -1,0 +1,129 @@
+{
+  "ticker": "CUERVO",
+  "report_date": "2026-04-29",
+  "period_covered": "1T26",
+  "report_type": "earnings_release",
+  "title": "Becle, S.A.B. de C.V. Reporta Resultados Financieros No Auditados del 1T26",
+  "source_url": "",
+  "pdf_filename": "1T26 Reporte de Resultados - Final.pdf",
+  "guidance": [
+    {
+      "metric": "AMP % Ventas Netas (FY2026 reaffirm)",
+      "period": "FY2026",
+      "value_low": 19.0,
+      "value_high": 21.0,
+      "value_point": null,
+      "unit": "% Ventas Netas",
+      "direction": "stable",
+      "confidence": "high",
+      "qualitative_text": "manteniendose en linea con el rango de guia anual de la Compania de 19% a 21%",
+      "notes": "1T26 actual: 20.4% AMP, dentro del rango"
+    }
+  ],
+  "drivers": [
+    {
+      "category": "Volume",
+      "description": "Transicion de distribuidores en EE.UU. - reduccion de inventarios en sistema",
+      "impact": "🔴 Negative",
+      "materiality": "high",
+      "quote": "afectado por la transicion de distribuidores en EE. UU."
+    },
+    {
+      "category": "FX",
+      "description": "Apreciacion peso mexicano vs USD - headwind material en revenue reportado (vs constant currency)",
+      "impact": "🔴 Negative",
+      "materiality": "high",
+      "quote": "efectos negativos de la conversion de divisas"
+    },
+    {
+      "category": "Mix",
+      "description": "Mezcla geografica desfavorable (caida US/Canada vs RoW crece)",
+      "impact": "🔴 Negative",
+      "materiality": "high",
+      "quote": ""
+    },
+    {
+      "category": "Volume",
+      "description": "Resto del Mundo crecio +20.1% YoY en volumen (compensacion parcial)",
+      "impact": "🟢 Positive",
+      "materiality": "medium",
+      "quote": ""
+    },
+    {
+      "category": "Mix",
+      "description": "Mezcla de producto favorable (premium gana share)",
+      "impact": "🟢 Positive",
+      "materiality": "medium",
+      "quote": "parcialmente compensado por una mezcla de producto favorable"
+    },
+    {
+      "category": "Cost",
+      "description": "Costos de insumos (agave) estables - normalizacion post 2018-2022",
+      "impact": "🟢 Positive",
+      "materiality": "medium",
+      "quote": "costos de insumos estables"
+    },
+    {
+      "category": "Cost",
+      "description": "SG&A +440bps a 17.5% por desapalancamiento operativo (revenue cae 23%)",
+      "impact": "🔴 Negative",
+      "materiality": "high",
+      "quote": ""
+    },
+    {
+      "category": "Cost",
+      "description": "AMP -50bps a 20.4% (disciplina marketing, dentro del rango de guia)",
+      "impact": "🟢 Positive",
+      "materiality": "low",
+      "quote": ""
+    },
+    {
+      "category": "Volume",
+      "description": "Mexico volumen organico +6.1% (excluyendo b:oost divestiture)",
+      "impact": "🟢 Positive",
+      "materiality": "medium",
+      "quote": "Mexico incremento su volumen 6.1% en comparacion con el ano anterior, por encima del desempeno de la industria"
+    }
+  ],
+  "events": [
+    {
+      "event_type": "M&A (acquisition / divestiture)",
+      "title": "Divestidura marca b:oost (Mexico)",
+      "description": "Vendida la marca b:oost (bebidas no-alcoholicas Mexico). Impacto: volumen total reportado -13.4% pero -10.9% excluyendo b:oost. Volumen Mexico -6.9% reportado pero +6.1% organico.",
+      "event_date": "1Q26",
+      "financial_impact": "No disclosed",
+      "materiality": "medium"
+    },
+    {
+      "event_type": "Other material event",
+      "title": "Deleveraging continuo: Net Debt/UAFIDA = 1.0x (vs 1.9x en 1T25)",
+      "description": "Empresa redujo apalancamiento neto ajustado por arrendamientos a 1.0x (vs 1.9x en 1T25). Reduccion significativa de deuda.",
+      "event_date": "2026-03-31",
+      "financial_impact": "Net Debt/UAFIDA mejora 90bps YoY",
+      "materiality": "high"
+    }
+  ],
+  "sentiment": {
+    "tone": "🟠 Defensive",
+    "score": -0.55,
+    "confidence": "high",
+    "rationale": "Trimestre brutalmente debil: Revenue -23%, UAFIDA -52%, NI -67%. Management acepta entorno 'desafiante y de contraccion para la industria'. Lenguaje DEFENSIVO: 'fortalecer el negocio mediante ejecucion disciplinada' + 'reposicionamiento'. Unico positivo: deleveraging completado (1.0x ND/UAFIDA). AMP guidance reafirmado pero NO actualizo guia de revenue."
+  },
+  "key_topics": [
+    "Revenue -23.1% (-13.5% en moneda constante)",
+    "UAFIDA Margin contraction 580bps a 13.9%",
+    "Volume -13.4% (excluyendo b:oost: -10.9%)",
+    "US distribution transition (drag mayor)",
+    "FX headwind (apreciacion peso vs USD)",
+    "Mexico organico +6.1% (positivo)",
+    "RoW volume +20.1% (positivo)",
+    "Deleveraging completo: Net Debt/UAFIDA 1.0x",
+    "AMP discipline 20.4% (dentro de guia)",
+    "Divestidura b:oost"
+  ],
+  "summary_es": "CUERVO reporto 1T26 BRUTALMENTE DEBIL: Ventas -23.1% YoY (-13.5% en moneda constante), UAFIDA -52.5%, Utilidad Neta -66.5%. Margen UAFIDA cayo 860bps a 13.9% (16.7% ajustado por FX). Drivers principales: (1) transicion de distribuidores en EE.UU. con destocking del sistema, (2) apreciacion peso vs USD, (3) mezcla geografica desfavorable. POSITIVOS: Mexico organico +6.1%, RoW volume +20.1%, costos agave estables, AMP discipline 20.4% (dentro de guia 19-21%). Empresa completo deleveraging: Net Debt/UAFIDA 1.0x (vs 1.9x). Management RE-AFFIRMA solo guia AMP, NO actualiza revenue. Tono DEFENSIVO.",
+  "summary_en": "",
+  "extraction_method": "claude_code_slash",
+  "extraction_date": "2026-05-04T02:17:56.014860",
+  "extraction_notes": ""
+}
