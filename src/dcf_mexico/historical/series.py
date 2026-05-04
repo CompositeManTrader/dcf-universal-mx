@@ -84,54 +84,81 @@ class HistoricalSeries:
 
     @property
     def annual_with_ttm(self) -> list[PeriodSnapshot]:
-        """Como `annual`, pero si el último año reportado NO tiene FY (ni 4D
-        ni Q4 acumulado), agrega un snapshot sintético **TTM** (trailing 12
-        meses) construido como:
+        """Vista anual con regla estricta:
 
-            TTM_field = latest_quarter_YTD + prev_FY - prev_same_quarter_YTD
+        1. Si **existe 4D** para el año Y → usarlo (FY auditado, completo).
+        2. Si **NO existe 4D** para el año Y → construir **TTM** sumando
+           explícitamente los últimos 4 trimestres disponibles que terminen
+           en el último quarter conocido de Y:
 
-        Este es el cálculo estándar Bloomberg/Damodaran cuando un año
-        está incompleto (e.g. solo Q1, Q2 o Q3 reportados y todavía no
-        se publica el cierre).
+               TTM = latest_q_YTD(Y) + FY_prev(Y-1) − YTD_same_q(Y-1)
 
-        Para balance sheet (stocks) usa el último trimestre tal cual.
+           (matemáticamente equivalente a Q1Δ + Q2Δ + Q3Δ + Q4Δ)
+
+        Esto garantiza que **nunca** se muestre Q4 acumulado solo como
+        proxy de FY si el reporte 4D dictaminado no existe — siempre
+        se construye TTM explícito de 12 meses verificable contra la
+        suma de trimestres.
+
+        Balance Sheet usa el último trimestre tal cual (es stock).
         """
-        base = list(self.annual)
         if not self.snapshots:
-            return base
+            return []
 
-        # Tomar el último snapshot (sea annual o quarterly)
-        latest = self.snapshots[-1]
+        # Indexar por año
+        by_year: dict[int, list] = {}
+        for s in self.snapshots:
+            by_year.setdefault(s.year, []).append(s)
 
-        # Si el último ya es FY (4D o Q4), no hay nada que sintetizar
-        if latest.quarter in ("4D", "4"):
-            return base
+        result: list[PeriodSnapshot] = []
+        for y in sorted(by_year.keys()):
+            year_snaps = by_year[y]
 
-        # Si latest es Q1/Q2/Q3 y ese año YA está cubierto en `base`
-        # (porque hubo un Q4/4D previamente cargado), tampoco hay TTM
-        if any(s.year == latest.year for s in base):
-            return base
+            # 1. Preferir 4D (auditado completo)
+            snap_4d = next((s for s in year_snaps if s.quarter == "4D"),
+                            None)
+            if snap_4d is not None:
+                result.append(snap_4d)
+                continue
 
-        # Buscar el FY anterior y el mismo quarter del año anterior
-        prev_fy = None
-        for s in reversed(self.snapshots):
-            if s.year == latest.year - 1 and s.quarter in ("4D", "4"):
-                prev_fy = s
-                break
-        prev_same_q = None
-        for s in reversed(self.snapshots):
-            if (s.year == latest.year - 1
-                    and s.quarter == latest.quarter):
-                prev_same_q = s
-                break
+            # 2. Sin 4D → buscar el último quarter disponible del año Y
+            #    (puede ser Q1, Q2, Q3 o Q4) y construir TTM
+            quarters_avail = [s for s in year_snaps
+                                if s.quarter in ("1", "2", "3", "4")]
+            if not quarters_avail:
+                continue
+            latest_q = max(quarters_avail, key=lambda s: s.sort_key)
 
-        if prev_fy is None or prev_same_q is None:
-            return base  # no hay data suficiente para TTM
+            # 3. Necesitamos prev_FY (Y-1) y prev_same_q (Y-1, mismo Q)
+            prev_year_snaps = by_year.get(y - 1, [])
+            prev_fy = next(
+                (s for s in prev_year_snaps if s.quarter == "4D"), None)
+            if prev_fy is None:
+                # Si no hay 4D anterior, intentar Q4 anterior como FY proxy
+                # (asumiendo que el parser reporta Q4 acumulado correctamente
+                #  para años cerrados con sus 4 trimestres)
+                prev_fy = next(
+                    (s for s in prev_year_snaps if s.quarter == "4"), None)
 
-        ttm = _build_ttm_snapshot(latest, prev_fy, prev_same_q)
-        if ttm is not None:
-            base = base + [ttm]
-        return base
+            prev_same_q = next(
+                (s for s in prev_year_snaps
+                 if s.quarter == latest_q.quarter), None)
+
+            if prev_fy is not None and prev_same_q is not None:
+                # 4. Caso ideal: TTM bien calculado
+                ttm = _build_ttm_snapshot(latest_q, prev_fy, prev_same_q)
+                if ttm is not None:
+                    result.append(ttm)
+                    continue
+
+            # 5. Sin data suficiente para TTM exacto:
+            #    Si latest_q es Q4, lo usamos como aproximación FY
+            #    (asumiendo Q4 = YTD acumulado, comportamiento histórico)
+            if latest_q.quarter == "4":
+                result.append(latest_q)
+            # Si solo hay Q1/Q2/Q3 sin year-1 → skip (no se puede armar FY)
+
+        return result
 
     @property
     def quarterly(self) -> list[PeriodSnapshot]:

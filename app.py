@@ -1660,17 +1660,16 @@ if mode == "Single DCF":
                         ticker=hs_ef.ticker,
                         snapshots=ttm_snaps,
                     )
-                    has_ttm = any(
-                        isinstance(s.quarter, str) and s.quarter.startswith("TTM")
-                        for s in ttm_snaps
-                    )
-                    if has_ttm:
-                        ttm_snap = next(s for s in ttm_snaps
-                                          if str(s.quarter).startswith("TTM"))
+                    ttm_years = [s.year for s in ttm_snaps
+                                   if isinstance(s.quarter, str)
+                                   and s.quarter.startswith("TTM")]
+                    if ttm_years:
+                        years_str = ", ".join(str(y) for y in ttm_years)
                         st.info(
-                            f"📅 Año {ttm_snap.year} aún incompleto — "
-                            f"se construyó **TTM** sumando los últimos 4 trimestres "
-                            f"(YTD + FY anterior − YTD anterior). "
+                            f"📅 Sin reporte 4D auditado para: **{years_str}** — "
+                            f"se construyó **TTM** sumando los últimos 4 "
+                            f"trimestres (YTD actual + FY anterior − YTD "
+                            f"mismo Q anterior). "
                             f"Balance Sheet usa el último trimestre tal cual."
                         )
                 use_annual_flag = False  # ya filtramos manualmente
