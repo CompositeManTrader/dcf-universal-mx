@@ -46,6 +46,7 @@ class MarketDefaults:
     forecast_years: int
     high_growth_years: int
     fx_rate_usdmxn: float = 19.50
+    country_default_spread_mx: float = 0.025  # Damodaran B34: clean Rf = bond - CDS
 
 
 @lru_cache(maxsize=1)
@@ -81,6 +82,8 @@ def load_issuers(path: Optional[Path] = None) -> tuple[MarketDefaults, dict[str,
         forecast_years=int(md.get("forecast_years", 10)),
         high_growth_years=int(md.get("high_growth_years", 5)),
         fx_rate_usdmxn=float(md.get("fx_rate_usdmxn", 19.50)),
+        country_default_spread_mx=float(
+            md.get("country_default_spread_mx", 0.025)),
     )
     issuers = {}
     for tkr, v in raw.get("issuers", {}).items():

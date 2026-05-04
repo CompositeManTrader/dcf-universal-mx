@@ -1081,6 +1081,8 @@ if mode == "Single DCF":
     last_10k = {}
     years_since_10k = None
     prev_snap = None
+    eff_tax_history_years = []   # tuples (year, eff_tax) últimos 3-5 anuales
+    eff_tax_avg = None
     try:
         from src.dcf_mexico.historical.series import load_historical
         _hs = load_historical(issuer.ticker,
@@ -1098,17 +1100,23 @@ if mode == "Single DCF":
         if prev_snap is not None:
             ppd = prev_snap.parsed.dcf
             ppi = prev_snap.parsed.informative
+            # B14 Damodaran: BV equity = total (controlling + minority)
+            _equity_total_prior = (
+                (getattr(ppd, "equity_bv", 0) or 0) +
+                (getattr(ppd, "minority_interest", 0) or 0)
+            )
             last_10k = {
-                "revenue":   getattr(ppd, "revenue", None),
-                "ebit":      getattr(ppd, "ebit", None),
-                "intexp":    getattr(ppd, "interest_expense", None),
-                "equity_bv": getattr(ppd, "equity_bv", None),
-                "debt":      getattr(ppd, "total_debt", None),
-                "cash":      getattr(ppd, "cash", None),
-                "minority":  getattr(ppd, "minority_interest", None),
-                "nonop":     getattr(ppd, "non_operating_assets", None),
-                "shares":    getattr(ppi, "shares_outstanding", None),
-                "eff_tax":   getattr(ppd, "effective_tax_rate", None),
+                "revenue":         getattr(ppd, "revenue", None),
+                "ebit":            getattr(ppd, "ebit", None),
+                "intexp":          getattr(ppd, "interest_expense", None),
+                "equity_bv":       getattr(ppd, "equity_bv", None),         # controladora
+                "equity_bv_total": _equity_total_prior,                       # ← Damodaran (incl minority)
+                "debt":            getattr(ppd, "total_debt", None),
+                "cash":            getattr(ppd, "cash", None),
+                "minority":        getattr(ppd, "minority_interest", None),
+                "nonop":           getattr(ppd, "non_operating_assets", None),
+                "shares":          getattr(ppi, "shares_outstanding", None),
+                "eff_tax":         getattr(ppd, "effective_tax_rate", None),
             }
             try:
                 d_prev = _datetime.strptime(prev_snap.period_end, "%Y-%m-%d")
@@ -1116,8 +1124,30 @@ if mode == "Single DCF":
                     (d_recent - d_prev).days / 365.25, 2)
             except Exception:
                 years_since_10k = None
+
+        # B23 Damodaran: effective tax rate puede usarse promedio multi-año
+        # Tomamos los últimos 5 anuales (excluyendo años con tasas anómalas <0 o >50%)
+        for snap in _hs.annual[-5:]:
+            try:
+                rate = getattr(snap.parsed.dcf, "effective_tax_rate", None)
+                if rate is not None and 0.0 < rate < 0.50:
+                    eff_tax_history_years.append((snap.year, rate))
+            except Exception:
+                continue
+        if eff_tax_history_years:
+            eff_tax_avg = sum(r for _, r in eff_tax_history_years) / len(eff_tax_history_years)
     except Exception:
         pass
+
+    # ==== Equity total — Damodaran B14 ====
+    # base.equity_book ya viene como TOTAL (controladora + minority) desde
+    # CompanyBase.from_parser_dcf (fix Nov 2025).
+    equity_bv_total_recent = base.equity_book
+
+    # ==== Risk-free clean — Damodaran B34 ====
+    # Clean Rf = local bond yield − country default spread
+    cds_mx = getattr(market, "country_default_spread_mx", 0.025)
+    rf_clean = max(0.0, market.risk_free - cds_mx)
 
     # Caption + 3 KPIs explicativos arriba del Input Sheet
     _last10k_label = (
@@ -1259,9 +1289,9 @@ if mode == "Single DCF":
         _ds_row5("Interest expense", intexp_recent, last_10k.get("intexp"),
                    None,
                    "Auto desde income.interest_expense")
-        _ds_row5("Book value of equity", equity_bv_recent,
-                   last_10k.get("equity_bv"), None,
-                   "Equity controladora (sin minority)")
+        _ds_row5("Book value of equity", equity_bv_total_recent,
+                   last_10k.get("equity_bv_total"), None,
+                   "TOTAL = controladora + minority (B14 Damodaran)")
         _ds_row5("Book value of debt", debt_recent, last_10k.get("debt"),
                    None,
                    "total_debt = financial + lease (IFRS 16)")
@@ -1294,21 +1324,52 @@ if mode == "Single DCF":
             st.number_input("Number of shares outstanding (millones)",
                             value=float(shares_recent or 0.0),
                             step=1.0, format="%.2f",
-                            key=f"dam_in_shares_{issuer.ticker}")
+                            key=f"dam_in_shares_{issuer.ticker}",
+                            help="B21 Damodaran: agregar todas las series. "
+                                 "Incluir RSUs, NO incluir shares underlying "
+                                 "employee options.")
             st.number_input("Current stock price (MXN)",
                             value=float(price_recent),
                             step=0.5, format="%.2f",
-                            key=f"dam_in_price_{issuer.ticker}")
+                            key=f"dam_in_price_{issuer.ticker}",
+                            help="B22 Damodaran: precio de hoy.")
+
+        # Effective tax rate: ahora ofrecemos 1Y vs avg multi-año (B23 Damodaran)
         with c2:
+            # Construir opciones del selectbox según haya history
+            tax_method_opts = ["Current year (LTM)"]
+            if eff_tax_avg is not None and len(eff_tax_history_years) >= 2:
+                yrs = ", ".join(str(y) for y, _ in eff_tax_history_years)
+                tax_method_opts.append(
+                    f"Avg {len(eff_tax_history_years)}y ({yrs})")
+            tax_method = st.radio(
+                "Effective tax rate · método",
+                tax_method_opts, horizontal=True,
+                key=f"dam_in_tax_method_{issuer.ticker}",
+                help="B23 Damodaran: 'If your effective tax rate varies "
+                     "across years, you can use an average.'")
+            if tax_method.startswith("Avg") and eff_tax_avg is not None:
+                _eff_tax_default = eff_tax_avg * 100
+                _eff_tax_help = (
+                    f"Promedio multi-año: "
+                    + " · ".join(f"{y}={r*100:.2f}%"
+                                   for y, r in eff_tax_history_years)
+                    + f" → avg = {eff_tax_avg*100:.2f}%"
+                )
+            else:
+                _eff_tax_default = eff_tax_recent * 100
+                _eff_tax_help = ("Tax expense / Pretax income del LTM "
+                                 "actual. CUERVO LTM ≈ 24-27%.")
             st.number_input("Effective tax rate (%)",
-                            value=float(eff_tax_recent * 100),
+                            value=float(_eff_tax_default),
                             step=0.5, format="%.2f",
                             key=f"dam_in_eff_tax_{issuer.ticker}",
-                            help="ISR pagado / EBT histórico. CUERVO ≈ 24-27%")
+                            help=_eff_tax_help)
             st.number_input("Marginal tax rate (%)",
                             value=30.0, step=0.5, format="%.2f",
                             key=f"dam_in_marg_tax_{issuer.ticker}",
-                            help="México ISR corporativo = 30%")
+                            help="B24 Damodaran: statutory tax rate del país. "
+                                 "México ISR corporativo = 30%.")
 
     # ----- SECCION D: Value drivers -----
     with st.expander("**🚀 D · Value drivers** (Damodaran growth/margin levers)",
@@ -1346,16 +1407,35 @@ if mode == "Single DCF":
     # ----- SECCION E: Market parameters + Risk inputs -----
     with st.expander("**🌎 E · Market parameters & Risk inputs**",
                        expanded=True):
+        st.caption(
+            "💬 **Damodaran B34:** *'If you are working with a currency "
+            "where the government has default risk, **clean up the bond "
+            "rate by subtracting the country default spread**.'* "
+            f"MX bono M 10Y ≈ {market.risk_free*100:.2f}% − "
+            f"CDS MX ({cds_mx*100:.2f}%) = "
+            f"**{rf_clean*100:.2f}%** (clean Rf)"
+        )
         c1, c2, c3 = st.columns(3)
         with c1:
             st.number_input("Risk-free rate MX (%)",
                             value=float(rf * 100), step=0.05, format="%.4f",
                             key=f"dam_in_rf_{issuer.ticker}",
-                            help="CETES 10Y o Bono M 10Y")
+                            help=(f"Tasa que entra al CAPM. Default: bono M "
+                                  f"10Y RAW ({market.risk_free*100:.2f}%). "
+                                  f"Damodaran sugiere usar CLEAN "
+                                  f"({rf_clean*100:.2f}%) cuando el ERP ya "
+                                  f"incluye CRP MX (caso actual)."))
+            st.number_input("MX Country Default Spread (%)",
+                            value=float(cds_mx * 100), step=0.05,
+                            format="%.4f",
+                            key=f"dam_in_cds_{issuer.ticker}",
+                            help="Default spread del soberano MX. "
+                                 "Damodaran tablas: MX rated BBB ≈ 2-3%.")
             st.number_input("Equity Risk Premium MX (%)",
                             value=float(erp * 100), step=0.05, format="%.4f",
                             key=f"dam_in_erp_{issuer.ticker}",
-                            help="Mature ERP (US ≈ 4.6%) + Country Risk Premium MX")
+                            help="Mature ERP (US ≈ 4.6%) + Country Risk "
+                                 "Premium MX")
         with c2:
             st.number_input("β unlevered (sector Damodaran)",
                             value=float(beta_unlev), step=0.05, format="%.3f",

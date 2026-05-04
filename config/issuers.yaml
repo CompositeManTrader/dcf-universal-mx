@@ -4,7 +4,9 @@
 # El sector debe coincidir con keys de sectors.yaml.
 
 market_defaults:
-  risk_free: 0.0921           # M-BONO 10Y nominal (calibrado vs analista WIP)
+  risk_free: 0.0921           # M-BONO 10Y nominal (raw, sin clean). Damodaran B34
+                              # sugiere clean Rf = bond - country default spread
+  country_default_spread_mx: 0.025   # MX rated BBB (Damodaran tablas)
   erp: 0.0610                 # ERP MX = ERP US + CRP MX (calibrado)
   marginal_tax: 0.30
   terminal_growth: 0.03       # ~ inflacion MX largo plazo

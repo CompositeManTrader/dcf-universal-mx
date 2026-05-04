@@ -154,10 +154,15 @@ class CompanyBase:
         """currency_multiplier: aplicar a TODOS los flujos monetarios.
         Para empresas que reportan en USD, pasar fx_rate_usdmxn (~19.5) para
         que la valuacion final quede en MXN (compatible con precios BMV).
-        Las acciones (shares) y tasas (%) NO se multiplican."""
+        Las acciones (shares) y tasas (%) NO se multiplican.
+
+        ⚠️ Damodaran B14: BV equity = total (controladora + minority).
+        Esto afecta Invested Capital y por ende ROIC. Antes usábamos
+        sólo controladora — fix Nov 2025."""
         debt = dcf.total_debt if include_leases_as_debt else dcf.financial_debt
         m = currency_multiplier
-        equity_bv = dcf.equity_bv * m
+        # B14: BV equity TOTAL (controladora + minority) por convención Damodaran
+        equity_bv = (dcf.equity_bv + (dcf.minority_interest or 0)) * m
         ic = (equity_bv + debt * m - dcf.cash * m)
         return cls(
             ticker=dcf.ticker,
@@ -170,7 +175,7 @@ class CompanyBase:
             non_operating_assets=dcf.non_operating_assets * m,
             shares_outstanding=dcf.shares_outstanding,    # NO multiplicar (es count)
             effective_tax_rate=dcf.effective_tax_rate,    # NO multiplicar (ratio)
-            equity_book=equity_bv,
+            equity_book=equity_bv,                          # = total equity (Damodaran B14)
             invested_capital=ic,
         )
 
