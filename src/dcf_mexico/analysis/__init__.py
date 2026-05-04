@@ -39,6 +39,14 @@ from .vertical_horizontal import (
     categorize_changes,
     changes_to_table,
 )
+from .trends import (
+    MetricTrend,
+    TrendClassification,
+    TrendStrength,
+    compute_all_trends,
+    trends_to_table,
+    categorize_trends,
+)
 
 __all__ = [
     "compute_all_ratios", "RatioInfo", "RATIO_CATEGORIES",
@@ -56,4 +64,7 @@ __all__ = [
     "vertical_income", "vertical_balance", "vertical_cashflow",
     "horizontal_income", "horizontal_balance", "horizontal_cashflow",
     "detect_changes", "categorize_changes", "changes_to_table",
+    # Trends
+    "MetricTrend", "TrendClassification", "TrendStrength",
+    "compute_all_trends", "trends_to_table", "categorize_trends",
 ]

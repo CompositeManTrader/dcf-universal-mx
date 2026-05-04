@@ -1584,6 +1584,175 @@ if mode == "Single DCF":
                             if not h_cf.empty:
                                 st.dataframe(h_cf, hide_index=True, use_container_width=True)
 
+                        # ============================================================
+                        # 📈 MULTI-PERIOD TRENDS (CAGR 3y / 5y / all + classification)
+                        # ============================================================
+                        st.markdown("---")
+                        st.markdown("#### 📈 Análisis Multi-Period (Tendencias seculares)")
+                        st.caption(
+                            "Más allá del simple YoY: detecta CAGR de 3y/5y/all, "
+                            "aceleración o desaceleración, reversiones de tendencia, "
+                            "persistencia (años consecutivos), y clasifica cada métrica "
+                            "como secular_growth/decline/cyclical/recovery/etc."
+                        )
+
+                        try:
+                            from src.dcf_mexico.analysis import (
+                                compute_all_trends, trends_to_table, categorize_trends,
+                                TrendClassification,
+                            )
+                            trends_all = compute_all_trends(hs_ef_view, fx_mult=fx_rate)
+
+                            if not trends_all:
+                                st.warning("Necesitas al menos 2 años anuales para calcular trends.")
+                            else:
+                                trend_cat = categorize_trends(trends_all)
+
+                                # Resumen de classifications
+                                tc1, tc2, tc3, tc4, tc5 = st.columns(5)
+                                with tc1:
+                                    st.metric("🚀 Secular Growth",
+                                              len(trend_cat["secular_growth"]),
+                                              help="Crecimiento sostenido + persistente")
+                                with tc2:
+                                    st.metric("📉 Secular Decline",
+                                              len(trend_cat["secular_decline"]),
+                                              help="Caída sostenida")
+                                with tc3:
+                                    st.metric("⚠️ Deterioration",
+                                              len(trend_cat["deterioration"]),
+                                              help="Empeorando 3+ años consecutivos")
+                                with tc4:
+                                    st.metric("🔄🟢 Reversión Positiva",
+                                              len(trend_cat["reversal_positive"]),
+                                              help="Cambió de baja a alta")
+                                with tc5:
+                                    st.metric("🔄🔴 Reversión Negativa",
+                                              len(trend_cat["reversal_negative"]),
+                                              help="Cambió de alta a baja")
+
+                                # Highlights por categoria (los mas importantes)
+                                if trend_cat["deterioration"]:
+                                    st.markdown("##### ⚠️ DETERIORATION — RED FLAGS de tendencia")
+                                    for t in trend_cat["deterioration"]:
+                                        st.error(
+                                            f"**{t.metric}** ({t.category}): {t.narrative}\n\n"
+                                            f"💡 *{t.interpretation}*"
+                                        )
+
+                                if trend_cat["secular_growth"]:
+                                    st.markdown("##### 🚀 SECULAR GROWTH — Tendencias positivas")
+                                    for t in trend_cat["secular_growth"]:
+                                        st.success(
+                                            f"**{t.metric}** ({t.category}): {t.narrative}\n\n"
+                                            f"💡 *{t.interpretation}*"
+                                        )
+
+                                if trend_cat["secular_decline"]:
+                                    st.markdown("##### 📉 SECULAR DECLINE — caída persistente")
+                                    st.caption(
+                                        "Nota: para algunas métricas (DIO, DSO, CCC, "
+                                        "Inventories, Debt) bajar es **POSITIVO** — no "
+                                        "siempre red flag."
+                                    )
+                                    for t in trend_cat["secular_decline"]:
+                                        # Métricas donde "decline" es bueno
+                                        good_decline_metrics = (
+                                            "DIO", "DSO", "DPO", "Cash Conversion",
+                                            "Inventories", "Total Debt", "Net Debt"
+                                        )
+                                        is_good = any(m in t.metric for m in good_decline_metrics)
+                                        if is_good:
+                                            st.success(
+                                                f"**{t.metric}** ({t.category}): {t.narrative}\n\n"
+                                                f"💡 *Bajada es POSITIVA en esta métrica.*"
+                                            )
+                                        else:
+                                            st.warning(
+                                                f"**{t.metric}** ({t.category}): {t.narrative}\n\n"
+                                                f"💡 *{t.interpretation}*"
+                                            )
+
+                                # Reversiones (importantes pq son cambios de regimen)
+                                if trend_cat["reversal_positive"]:
+                                    with st.expander(
+                                        f"🔄🟢 Reversiones POSITIVAS ({len(trend_cat['reversal_positive'])})",
+                                        expanded=False,
+                                    ):
+                                        for t in trend_cat["reversal_positive"]:
+                                            st.info(
+                                                f"**{t.metric}** ({t.category}): {t.narrative}"
+                                            )
+                                if trend_cat["reversal_negative"]:
+                                    with st.expander(
+                                        f"🔄🔴 Reversiones NEGATIVAS ({len(trend_cat['reversal_negative'])})",
+                                        expanded=False,
+                                    ):
+                                        for t in trend_cat["reversal_negative"]:
+                                            st.info(
+                                                f"**{t.metric}** ({t.category}): {t.narrative}"
+                                            )
+
+                                # Tabla completa
+                                with st.expander(
+                                    f"📋 Ver tabla completa de los {len(trends_all)} trends",
+                                    expanded=False,
+                                ):
+                                    df_trends = trends_to_table(trends_all)
+                                    st.dataframe(
+                                        df_trends, hide_index=True,
+                                        use_container_width=True,
+                                        height=min(700, 50 + 35 * len(df_trends)),
+                                    )
+
+                                # Visualización: serie temporal de métricas seleccionadas
+                                with st.expander(
+                                    "📊 Ver gráficas de evolución (selecciona métricas)",
+                                    expanded=False,
+                                ):
+                                    metric_names = [t.metric for t in trends_all]
+                                    selected_metrics = st.multiselect(
+                                        "Métricas a graficar",
+                                        options=metric_names,
+                                        default=["Revenue", "EBIT", "Net Income", "Free Cash Flow"]
+                                                if all(m in metric_names for m in
+                                                       ["Revenue", "EBIT", "Net Income", "Free Cash Flow"])
+                                                else metric_names[:3],
+                                        key=f"vh_trend_select_{issuer.ticker}",
+                                    )
+                                    if selected_metrics:
+                                        chart_data = []
+                                        for t in trends_all:
+                                            if t.metric not in selected_metrics:
+                                                continue
+                                            for year, val in t.values:
+                                                chart_data.append({
+                                                    "Year": year,
+                                                    "Métrica": t.metric,
+                                                    "Valor": val,
+                                                })
+                                        if chart_data:
+                                            chart_df = pd.DataFrame(chart_data)
+                                            line_chart = (
+                                                alt.Chart(chart_df)
+                                                .mark_line(point=True, strokeWidth=2)
+                                                .encode(
+                                                    x=alt.X("Year:O", title="Año",
+                                                            axis=alt.Axis(labelColor='black')),
+                                                    y=alt.Y("Valor:Q", title="Valor",
+                                                            axis=alt.Axis(labelColor='black')),
+                                                    color=alt.Color("Métrica:N", legend=alt.Legend(orient="bottom")),
+                                                    tooltip=["Year:O", "Métrica:N", "Valor:Q"],
+                                                )
+                                                .properties(height=350)
+                                            )
+                                            st.altair_chart(line_chart, use_container_width=True)
+
+                        except Exception as e_t:
+                            st.error(f"Error en multi-period trends: {e_t}")
+                            import traceback
+                            st.code(traceback.format_exc())
+
                 except Exception as e_vh:
                     st.error(f"Error en análisis vertical/horizontal: {e_vh}")
                     import traceback
