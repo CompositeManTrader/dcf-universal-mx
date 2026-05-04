@@ -451,12 +451,9 @@ if mode == "Single DCF":
 
     res = _parse_cached(str(fp))
 
-    # Snapshot
-    with st.expander("Snapshot financiero", expanded=False):
-        st.dataframe(res.summary(), hide_index=True, use_container_width=True)
-
     period_label = f"FY {res.info.fiscal_year}" if res.info.fiscal_year else "Period"
-    # Bloomberg single-period sheets: ahora viven dentro del tab "Estados Financieros".
+    # NOTA: Snapshot financiero ahora vive dentro del tab '📷 Snapshot'
+    # NOTA: Bloomberg single-period sheets viven dentro del tab "Estados Financieros".
 
     # ----- FINANCIAL ISSUER (DDM/Excess Returns) -----
     if sector.is_financial:
@@ -513,9 +510,47 @@ if mode == "Single DCF":
     # ----- NON-FINANCIAL: FCFF DCF -----
     base = CompanyBase.from_parser_dcf(res.dcf, include_leases_as_debt=True)
 
+    # ========================================================================
+    # TABS DEFINITION (movida desde abajo - ahora la pagina arranca con tabs)
+    # ========================================================================
+    (tab_snapshot, tab_inputs_sug, tab_quality, tab_drivers, tab_proj,
+     tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_intel,
+     tab_stories, tab_pic, tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
+        # NUEVAS TABS (Resumen rapido) - movidas desde pagina principal:
+        "📷 Snapshot",
+        "💡 Inputs Sugeridos",
+        "🎯 Quality Audit + Scenarios",
+        "🎛️ Drivers DCF",
+        "📈 Proyección FCFF",
+        # TABS existentes (Bloomberg + Damodaran + utility):
+        "📊 Estados Financieros",
+        "📅 Historical",
+        "🔍 Bloomberg Validation",
+        "📈 Valuation Output",
+        "🔮 Forecast EEFF",
+        "🎙️ Investor Intel",
+        "📖 Stories to Numbers",
+        "🎨 Valuation as Picture",
+        "🎯 Sensitivity",
+        "🔗 DuPont",
+        "📐 Ratios & Metrics",
+        "✅ Diagnostics",
+        "💾 Download Excel",
+    ])
+
     # ============================================================
-    # 💡 INPUTS SUGERIDOS desde histórico (Sales-to-Capital, growth, margin, etc)
+    # TAB 1: 📷 SNAPSHOT (movido desde header de pagina)
     # ============================================================
+    tab_snapshot.__enter__()
+    st.subheader(f"📷 Snapshot Financiero — {issuer.ticker}")
+    st.caption(f"Resumen de las metricas clave de {issuer.name} al cierre del ultimo periodo reportado.")
+    st.dataframe(res.summary(), hide_index=True, use_container_width=True)
+    tab_snapshot.__exit__(None, None, None)
+
+    # ============================================================
+    # TAB 2: 💡 INPUTS SUGERIDOS desde histórico
+    # ============================================================
+    tab_inputs_sug.__enter__()
     with st.expander("💡 **Inputs sugeridos desde el histórico** — entiende cada driver", expanded=True):
         st.caption(
             "Cada input del DCF se calcula automáticamente desde tus datos parseados. "
@@ -610,10 +645,13 @@ if mode == "Single DCF":
             import traceback
             st.code(traceback.format_exc())
 
+    tab_inputs_sug.__exit__(None, None, None)
+
     # ============================================================
-    # 🎯 QUALITY AUDIT + 3 ESCENARIOS Bear/Base/Bull
+    # TAB 3: 🎯 QUALITY AUDIT + 3 ESCENARIOS Bear/Base/Bull
     # (la "lección Damodaran" automatizada)
     # ============================================================
+    tab_quality.__enter__()
     with st.expander("🎯 **Quality Audit + 3 Escenarios** — auditoria automática Damodaran-style",
                      expanded=True):
         st.caption(
@@ -848,6 +886,12 @@ if mode == "Single DCF":
             import traceback
             st.code(traceback.format_exc())
 
+    tab_quality.__exit__(None, None, None)
+
+    # ============================================================
+    # TAB 4: 🎛️ DRIVERS DCF (editables)
+    # ============================================================
+    tab_drivers.__enter__()
     st.subheader("Drivers DCF (editables)")
     st.caption("⚡ Si tocaste *'Usar todas las sugerencias'* arriba, los sliders ya tienen el valor calculado del histórico.")
 
@@ -1058,6 +1102,13 @@ if mode == "Single DCF":
     )
     out = project_company(base, a)
 
+    tab_drivers.__exit__(None, None, None)
+
+    # ============================================================
+    # TAB 5: 📈 PROYECCIÓN FCFF (Resultado + Damodaran outputs + Chart)
+    # ============================================================
+    tab_proj.__enter__()
+
     st.subheader("Resultado")
     k1, k2, k3, k4 = st.columns(4)
     k1.metric("Value/share", f"{out.value_per_share:,.2f} MXN",
@@ -1154,19 +1205,15 @@ if mode == "Single DCF":
     with st.expander("Tabla de proyeccion 10y"):
         st.dataframe(out.projection_table(), hide_index=True, use_container_width=True)
 
-    # Tornado
-    st.subheader("Tornado de sensibilidad")
-    torn = tornado(base, a)
-    st.altair_chart(_tornado_chart(torn), use_container_width=True)
-    with st.expander("Tabla tornado"):
-        st.dataframe(torn, hide_index=True, use_container_width=True)
+    # NOTA: Tornado de sensibilidad eliminado de pagina principal.
+    # Sigue disponible en tab '🎯 Sensitivity'.
+
+    tab_proj.__exit__(None, None, None)
 
     # ========================================================================
-    # TABS (Damodaran-style + Bloomberg + DuPont + Download)
-    # ========================================================================
-    st.divider()
-
     # Helper: invested capital y ROIC implicitos (usando S2C constante)
+    # Necesario para tabs subsiguientes (Estados, Bloomberg Validation, etc.)
+    # ========================================================================
     def _compute_ic_roic(out, base, a):
         """IC_0 = Revenue_0 / S2C; IC_t = IC_{t-1} + Reinv_t; ROIC_t = NOPAT_t / IC_{t-1}."""
         ic0 = base.revenue / a.sales_to_capital if a.sales_to_capital > 0 else 1.0
@@ -1180,27 +1227,8 @@ if mode == "Single DCF":
 
     ic_series, roic_series = _compute_ic_roic(out, base, a)
 
-    # Define tabs (each section becomes a tab via __enter__/__exit__ to avoid
-    # massive re-indentation. This is equivalent to `with tab:` blocks).
-    (tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_intel,
-     tab_stories, tab_pic, tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
-        "📊 Estados Financieros",
-        "📅 Historical",
-        "🔍 Bloomberg Validation",
-        "📈 Valuation Output",
-        "🔮 Forecast EEFF",
-        "🎙️ Investor Intel",
-        "📖 Stories to Numbers",
-        "🎨 Valuation as Picture",
-        "🎯 Sensitivity",
-        "🔗 DuPont",
-        "📐 Ratios & Metrics",
-        "✅ Diagnostics",
-        "💾 Download Excel",
-    ])
-
     # ============================================================
-    # TAB 0: ESTADOS FINANCIEROS (Income + BS + CF historicos, estilo Bloomberg)
+    # TAB 6: ESTADOS FINANCIEROS (Income + BS + CF historicos, estilo Bloomberg)
     # ============================================================
     tab_estados.__enter__()
 
