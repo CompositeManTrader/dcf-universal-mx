@@ -1860,6 +1860,11 @@ if mode == "Single DCF":
 
     # ---- Bloque A: Cost of Equity (CAPM) ----
     with st.expander("**🟦 A · Cost of Equity (CAPM)**", expanded=True):
+        st.caption(
+            "💬 **Damodaran B23:** *'If you input a beta directly, I will "
+            "unlever that beta using the current debt to equity ratio.'* "
+            "— Mi modelo usa el β unlevered del sector y aplica Hamada."
+        )
         st.markdown(
             f"""
             **CAPM:** `Ke = Rf + βL × ERP`
@@ -1867,13 +1872,20 @@ if mode == "Single DCF":
             | Componente | Valor | Notas |
             |---|---:|---|
             | Risk-free rate (México) | **{wr.risk_free:.4%}** | CETES 10Y o Bono M 10Y |
-            | Equity Risk Premium (ERP) | **{wr.erp:.4%}** | Damodaran ERP MX (mature + country risk) |
+            | Equity Risk Premium (ERP) | **{wr.erp:.4%}** | Damodaran ERP MX (mature + country risk — B27) |
             | Beta unlevered (sector) | **{wr.unlevered_beta:.3f}** | Promedio sector Damodaran (sin apalancar) |
             | Debt-to-Equity ratio (D/E) | **{wr.debt_to_equity:.3f}x** | Total Debt ÷ Market Cap |
             | Tax rate | **{market.marginal_tax:.2%}** | ISR corporativo MX |
             | **Beta levered (Hamada)** | **{wr.levered_beta:.3f}** | `βU × (1 + (1-T) × D/E)` |
             | **Cost of Equity** | **{wr.cost_equity:.4%}** | `Rf + βL × ERP` |
             """
+        )
+        st.info(
+            "📌 **B27 Damodaran:** *'If your company has risk exposure in "
+            "emerging markets, incorporate that risk premium here. See the "
+            "country risk premium worksheet.'* — En MX, el ERP que usamos "
+            "(6.10%) ya incluye el Country Risk Premium MX (~2-2.5% sobre "
+            "el US ERP base de ~4.6%)."
         )
         # Verificación numérica
         ke_check = wr.risk_free + wr.levered_beta * wr.erp
@@ -1889,6 +1901,14 @@ if mode == "Single DCF":
     # ---- Bloque B: Cost of Debt (Synthetic Rating) ----
     with st.expander("**🟥 B · Cost of Debt (Synthetic Rating)**",
                        expanded=True):
+        st.caption(
+            "💬 **Damodaran B33:** *'Check if your company has a bond "
+            "rating from S&P or Moodys and pick the actual rating. "
+            "Otherwise, use a rating based upon the interest coverage ratio. "
+            "You can also override and directly input the pre-tax cost of "
+            "debt by adding a default spread to your riskfree rate.'* "
+            "— Mi modelo usa el rating sintético (interest coverage)."
+        )
         st.markdown(
             f"""
             **Método Damodaran:** rating sintético basado en Interest Coverage Ratio
@@ -1896,14 +1916,23 @@ if mode == "Single DCF":
 
             | Componente | Valor | Notas |
             |---|---:|---|
+            | Interest expense (B31) | — | *"From most recent financial statement"* |
             | Interest Coverage Ratio | **{wr.interest_coverage:.2f}x** | EBIT ÷ Interest Expense |
-            | Synthetic Rating | **{wr.rating}** | Mapeo Damodaran (tabla) |
+            | Synthetic Rating (B35) | **{wr.rating}** | *"Pick the closest rating you can find"* |
             | Default Spread | **{wr.default_spread:.4%}** | Premium sobre risk-free por riesgo crediticio |
             | Risk-free rate | **{wr.risk_free:.4%}** | Misma base que Ke |
-            | **Pre-tax Cost of Debt** | **{wr.pretax_cost_debt:.4%}** | `Rf + Default Spread` |
+            | **Pre-tax Cost of Debt (B37)** | **{wr.pretax_cost_debt:.4%}** | `Rf + Default Spread` |
             | Tax rate | **{market.marginal_tax:.2%}** | ISR corporativo MX |
             | **After-tax Cost of Debt** | **{wr.aftertax_cost_debt:.4%}** | `Kd × (1 - T)` — escudo fiscal |
             """
+        )
+        st.info(
+            "📌 **B36 Damodaran (tabla coverage):** *'1: Large market cap "
+            "(>$5B) and safe. 2: Small market cap (<$5B) or risky. If "
+            "company has volatile earnings or is in risky business, use "
+            "2 even if large market cap.'* — Para CUERVO (mid-cap MX, "
+            "earnings estables) → tabla **1 (large/safe)**. Para "
+            "small-caps mexicanos → tabla **2 (small/risky)**."
         )
 
     # ---- Bloque C: WACC weighted ----
