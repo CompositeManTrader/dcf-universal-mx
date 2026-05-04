@@ -237,6 +237,42 @@ def _list_local_xbrl_names() -> list[str]:
     return sorted(p.name for p in raw.glob("ifrsxbrl_*.xls*"))
 
 
+@st.cache_data(ttl=600, show_spinner=False)
+def _fetch_live_price(yahoo_symbol: str) -> tuple[float | None, str]:
+    """Fetch último cierre desde Yahoo Finance. Cache 10 min.
+
+    Returns (price, source_label). source_label es 'live' si vino de Yahoo,
+    'fallback' si falló y debe usarse el yaml.
+    """
+    if not yahoo_symbol:
+        return None, "no-yahoo-ticker"
+    try:
+        import yfinance as yf
+        t = yf.Ticker(yahoo_symbol)
+        # Path rápido: fast_info
+        try:
+            fast = t.fast_info
+            lp = fast.get("lastPrice") if isinstance(fast, dict) else getattr(fast, "last_price", None)
+            if lp and lp > 0:
+                return float(lp), "live"
+        except Exception:
+            pass
+        # Fallback: history últimos 5 días
+        try:
+            hist = t.history(period="5d", interval="1d")
+            if not hist.empty and "Close" in hist.columns:
+                last = hist["Close"].dropna()
+                if not last.empty:
+                    return float(last.iloc[-1]), "live (history)"
+        except Exception:
+            pass
+    except ImportError:
+        return None, "yfinance-not-installed"
+    except Exception as e:
+        return None, f"error: {type(e).__name__}"
+    return None, "no-data"
+
+
 def _ticker_from_filename(name: str) -> str:
     parts = Path(name).stem.split("_")
     return parts[1] if len(parts) >= 2 else Path(name).stem
@@ -440,9 +476,28 @@ if mode == "Single DCF":
         st.error(f"Sector '{issuer.sector}' no esta en config/sectors.yaml")
         st.stop()
 
+    # ─── Live price desde Yahoo Finance (cache 10 min) ────────────────
+    # Sobrescribe issuer.market_price con el live price para que TODO el
+    # downstream (DCF, ratios, validation, etc.) use el precio actualizado.
+    _live_price, _price_src = _fetch_live_price(issuer.yahoo)
+    _yaml_price = float(issuer.market_price or 0.0)
+    if _live_price and _live_price > 0:
+        issuer.market_price = _live_price
+        _price_label = (f"$ {_live_price:,.2f} MXN "
+                          f"(Yahoo {issuer.yahoo}, live)")
+        _price_emoji = "🟢"
+    else:
+        _price_label = (f"$ {_yaml_price:,.2f} MXN "
+                          f"(yaml fallback · {_price_src})")
+        _price_emoji = "🟡"
+
     with col2:
         st.markdown(f"### {issuer.name}  `{ticker}`")
-        st.caption(f"Sector: **{sector.name}**  •  Yahoo: `{issuer.yahoo or '-'}`")
+        st.caption(
+            f"Sector: **{sector.name}**  •  "
+            f"Yahoo: `{issuer.yahoo or '-'}`  •  "
+            f"{_price_emoji} **Price:** {_price_label}"
+        )
 
     fp = find_xbrl(ticker)
     if fp is None:
@@ -1332,7 +1387,11 @@ if mode == "Single DCF":
                             value=float(price_recent),
                             step=0.5, format="%.2f",
                             key=f"dam_in_price_{issuer.ticker}",
-                            help="B22 Damodaran: precio de hoy.")
+                            help=("**B22 Damodaran:** *'Enter the most recent "
+                                  "stock price (how about today's?)'* — "
+                                  f"Auto-cargado desde Yahoo "
+                                  f"({issuer.yahoo or 'sin ticker'}, "
+                                  f"cache 10 min). Edita aquí para override."))
 
         # Effective tax rate: ahora ofrecemos 1Y vs avg multi-año (B23 Damodaran)
         with c2:
