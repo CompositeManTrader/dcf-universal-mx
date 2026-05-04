@@ -543,7 +543,7 @@ if mode == "Single DCF":
     # Sub-tabs dentro de DCF Damodaran (orden estilo Damodaran fcffsimpleginzu)
     with tab_dcf:
         (sub_input, sub_coc, sub_proj, sub_val,
-         sub_stories, sub_pic, sub_sens) = st.tabs([
+         sub_stories, sub_pic, sub_sens, sub_worksheets) = st.tabs([
             "📋 1. Input Sheet",
             "💰 2. Cost of Capital",
             "📈 3. Proyección FCFF",
@@ -551,6 +551,7 @@ if mode == "Single DCF":
             "📖 5. Stories to Numbers",
             "🎨 6. Valuation as Picture",
             "📊 7. Sensitivity",
+            "🔧 8. Supporting Worksheets",
         ])
 
     # Helper: wraps un sub-tab con su parent para que el patrón
@@ -567,13 +568,14 @@ if mode == "Single DCF":
             self.child.__exit__(exc_type, exc_val, exc_tb)
             self.parent.__exit__(exc_type, exc_val, exc_tb)
 
-    tab_dam_input = _SubTab(tab_dcf, sub_input)
-    tab_coc       = _SubTab(tab_dcf, sub_coc)
-    tab_proj      = _SubTab(tab_dcf, sub_proj)
-    tab_val       = _SubTab(tab_dcf, sub_val)
-    tab_stories   = _SubTab(tab_dcf, sub_stories)
-    tab_pic       = _SubTab(tab_dcf, sub_pic)
-    tab_sens      = _SubTab(tab_dcf, sub_sens)
+    tab_dam_input  = _SubTab(tab_dcf, sub_input)
+    tab_coc        = _SubTab(tab_dcf, sub_coc)
+    tab_proj       = _SubTab(tab_dcf, sub_proj)
+    tab_val        = _SubTab(tab_dcf, sub_val)
+    tab_stories    = _SubTab(tab_dcf, sub_stories)
+    tab_pic        = _SubTab(tab_dcf, sub_pic)
+    tab_sens       = _SubTab(tab_dcf, sub_sens)
+    tab_worksheets = _SubTab(tab_dcf, sub_worksheets)
 
     # ============================================================
     # TAB 1: 📷 SNAPSHOT (movido desde header de pagina)
@@ -972,10 +974,11 @@ if mode == "Single DCF":
     market_price = float(_ss_num("price", float(issuer.market_price or 0.0)))
     rf           = _ss_pct("rf", market.risk_free)
 
-    # No editables desde Input Sheet (defaults sector/market)
-    beta_unlev    = sector.beta_unlevered
-    erp           = market.erp
-    terminal_wacc = market.terminal_wacc_override or 0.085
+    # Risk inputs ahora editables en Input Sheet sec E
+    beta_unlev    = float(_ss_num("beta_u", sector.beta_unlevered))
+    erp           = _ss_pct("erp", market.erp)
+    terminal_wacc = _ss_pct("term_wacc",
+                              market.terminal_wacc_override or 0.085)
 
     # === Y1 separado de Y2-Y5 (Input Sheet sec D) ===
     rev_growth_y1 = _ss_pct("g_y1", rev_growth)
@@ -1286,20 +1289,44 @@ if mode == "Single DCF":
                             value=float(s2c), step=0.05, format="%.2f",
                             key=f"dam_in_s2c_610_{issuer.ticker}")
 
-    # ----- SECCION E: Market parameters -----
-    with st.expander("**🌎 E · Market parameters**", expanded=True):
-        c1, c2 = st.columns(2)
+    # ----- SECCION E: Market parameters + Risk inputs -----
+    with st.expander("**🌎 E · Market parameters & Risk inputs**",
+                       expanded=True):
+        c1, c2, c3 = st.columns(3)
         with c1:
             st.number_input("Risk-free rate MX (%)",
                             value=float(rf * 100), step=0.05, format="%.4f",
                             key=f"dam_in_rf_{issuer.ticker}",
                             help="CETES 10Y o Bono M 10Y")
+            st.number_input("Equity Risk Premium MX (%)",
+                            value=float(erp * 100), step=0.05, format="%.4f",
+                            key=f"dam_in_erp_{issuer.ticker}",
+                            help="Mature ERP (US ≈ 4.6%) + Country Risk Premium MX")
         with c2:
+            st.number_input("β unlevered (sector Damodaran)",
+                            value=float(beta_unlev), step=0.05, format="%.3f",
+                            key=f"dam_in_beta_u_{issuer.ticker}",
+                            help="Beta de la industria sin apalancar. "
+                                 "Damodaran tables → buscar tu sector global")
+            st.number_input("Terminal WACC override (%)",
+                            value=float(terminal_wacc * 100), step=0.05,
+                            format="%.4f",
+                            key=f"dam_in_term_wacc_{issuer.ticker}",
+                            help="WACC en estado estable (año 10+). "
+                                 "Default = max(WACC inicial, riskfree + ERP)")
+        with c3:
             st.number_input("Initial cost of capital (WACC) (%)",
                             value=float(out.wacc_result.wacc * 100),
                             step=0.10, format="%.4f", disabled=True,
                             key=f"dam_in_wacc_init_{issuer.ticker}",
                             help="Calculado en Cost of Capital sheet (WACC)")
+            st.number_input("Synthetic Rating · Default Spread (%)",
+                            value=float(out.wacc_result.default_spread * 100),
+                            step=0.05, format="%.4f", disabled=True,
+                            key=f"dam_in_def_spread_{issuer.ticker}",
+                            help=f"Auto desde rating sintético "
+                                 f"({out.wacc_result.rating}) "
+                                 f"basado en interest coverage")
 
     # ----- SECCION F: Other inputs (employee options) -----
     with st.expander("**🎫 F · Other inputs** (employee options)",
@@ -3964,8 +3991,209 @@ if mode == "Single DCF":
         st.dataframe(sens_torn, hide_index=True, use_container_width=True)
     st.divider()
 
-    # ----- TAB 4 close, TAB 5 (DuPont) open -----
+    # ----- TAB 4 close, SUPPORTING WORKSHEETS open -----
     tab_sens.__exit__(None, None, None)
+
+    # ============================================================
+    # SUB-TAB 8: 🔧 SUPPORTING WORKSHEETS (R&D, Op Lease, NOL, Failure)
+    # Réplica de las hojas auxiliares del fcffsimpleginzu.xlsx
+    # ============================================================
+    tab_worksheets.__enter__()
+    st.subheader(f"🔧 Supporting Worksheets — {issuer.ticker}")
+    st.caption(
+        "Hojas auxiliares del modelo Damodaran. Cada worksheet hace una "
+        "transformación específica antes de alimentar al Input Sheet."
+    )
+
+    # ---- A. R&D Capitalization Worksheet ----
+    with st.expander(
+        "**🧪 A · R&D Capitalization Worksheet**",
+        expanded=False,
+    ):
+        st.markdown(
+            """
+            **Lógica Damodaran:** convertir R&D de gasto operativo a activo
+            capitalizado. Esto sube el EBIT (porque ya no se gasta R&D
+            corriente) y crea un **Research Asset** en el balance.
+
+            **Pasos:**
+            1. Ingresa R&D de los últimos 3-5 años
+            2. Define vida útil (3-10 años para tech, default 5)
+            3. Cómputo: Research Asset = Σ R&D no amortizado
+            4. Adjusted EBIT = EBIT + R&D corriente − Amortización R&D
+            5. Adjusted Equity = Equity + Research Asset
+            6. Adjusted CapEx = CapEx + R&D corriente
+
+            **CUERVO / Beverages → R&D ≈ 0 → este worksheet no aplica.**
+            Para emisoras tech (ej. SOFTTEK si entrara al IPC), sí aplica.
+            """
+        )
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            rd_active = st.checkbox("Activar R&D capitalization",
+                                     value=False,
+                                     key=f"dam_in_rd_active_{issuer.ticker}")
+        with c2:
+            rd_life = st.number_input("Vida útil R&D (años)",
+                                       value=5, min_value=2, max_value=15,
+                                       step=1,
+                                       disabled=not rd_active,
+                                       key=f"dam_in_rd_life_{issuer.ticker}")
+        with c3:
+            rd_current = st.number_input("R&D corriente (MDP)",
+                                          value=0.0, step=10.0, format="%.1f",
+                                          disabled=not rd_active,
+                                          key=f"dam_in_rd_curr_{issuer.ticker}")
+        if rd_active and rd_current > 0:
+            import pandas as _pd
+            rd_table = _pd.DataFrame({
+                "Year": [f"-{i}" for i in range(int(rd_life), 0, -1)] + ["Current"],
+                "R&D ($)": [rd_current * (0.9 ** i) for i in range(int(rd_life), 0, -1)] + [rd_current],
+                "Amort. lineal": [rd_current * (0.9 ** i) / rd_life for i in range(int(rd_life), 0, -1)] + [rd_current / rd_life],
+                "Unamortized portion": [rd_current * (0.9 ** i) * (i / rd_life) for i in range(int(rd_life), 0, -1)] + [rd_current],
+            })
+            st.dataframe(rd_table.style.format({
+                "R&D ($)": "{:,.1f}",
+                "Amort. lineal": "{:,.1f}",
+                "Unamortized portion": "{:,.1f}",
+            }), hide_index=True, use_container_width=True)
+            res_asset = rd_table["Unamortized portion"].sum()
+            st.success(
+                f"📦 **Research Asset implícito:** {res_asset:,.1f} MDP "
+                f"(suma de la columna *Unamortized portion*)"
+            )
+        elif rd_active:
+            st.info("Ingresa R&D corriente > 0 para ver la tabla.")
+
+    # ---- B. Operating Lease Converter ----
+    with st.expander(
+        "**🏢 B · Operating Lease Converter**",
+        expanded=False,
+    ):
+        try:
+            ol_st = res.dcf.lease_debt or 0.0
+        except Exception:
+            ol_st = 0.0
+        ol_total = base.financial_debt - (base.financial_debt - ol_st) if ol_st else 0.0
+        st.markdown(
+            f"""
+            **Lógica Damodaran:** convertir compromisos de leasing operativo
+            (off-balance) en deuda + activo de derecho de uso. Capitaliza al
+            **pre-tax cost of debt** ({out.wacc_result.pretax_cost_debt:.4%}).
+
+            **México post-IFRS 16 (2019+):**
+            Los leases ya están en el balance como `right_of_use_assets`
+            (activo) y `short_term_lease + long_term_lease` (deuda). El
+            modelo ya los incluye automáticamente en `total_debt_with_leases`.
+
+            | Concepto | Valor (MDP) |
+            |---|---:|
+            | Lease debt (ya capitalizado IFRS 16) | **{ol_st:,.1f}** |
+            | Financial debt (préstamos puros) | {base.financial_debt - ol_st:,.1f} |
+            | **Total debt with leases (usado en DCF)** | **{base.financial_debt:,.1f}** |
+            | Pre-tax Kd usado para capitalizar | {out.wacc_result.pretax_cost_debt:.4%} |
+
+            ✅ **No requiere conversión adicional** — IFRS 16 ya hace el trabajo.
+            Si reportas en US-GAAP (ej. KOF.A en SEC), entonces sí requeriría
+            convertir las commitments del 10-K.
+            """
+        )
+
+    # ---- C. NOL Worksheet (Tax shield year-by-year) ----
+    with st.expander(
+        "**💸 C · NOL Worksheet (Tax shield año a año)**",
+        expanded=False,
+    ):
+        st.markdown(
+            """
+            **Lógica Damodaran:** los NOL (Net Operating Losses) actúan
+            como escudo fiscal en los años futuros. Cada año, parte del
+            EBIT se exenta de impuestos hasta agotar el NOL.
+
+            **Tracking del modelo:**
+            """
+        )
+        if out.nol_remaining and out.nol_used and out.tax_shield:
+            import pandas as _pd
+            nol_df = _pd.DataFrame({
+                "Year":              out.years,
+                "EBIT (MDP)":        [round(x, 1) for x in out.ebit],
+                "NOL used (MDP)":    [round(x, 1) for x in out.nol_used],
+                "NOL remaining (MDP)": [round(x, 1) for x in out.nol_remaining],
+                "Tax shield (MDP)":  [round(x, 1) for x in out.tax_shield],
+            })
+            st.dataframe(nol_df.style.format({
+                "EBIT (MDP)": "{:,.1f}",
+                "NOL used (MDP)": "{:,.1f}",
+                "NOL remaining (MDP)": "{:,.1f}",
+                "Tax shield (MDP)": "{:,.1f}",
+            }), hide_index=True, use_container_width=True,
+            height=min(600, 50 + 32 * len(out.years)))
+
+            total_shield = sum(out.tax_shield)
+            if total_shield > 0:
+                st.success(
+                    f"📊 **Tax shield acumulado por NOL:** "
+                    f"{total_shield:,.1f} MDP a lo largo del forecast. "
+                    f"Esto reduce el tax expense efectivo y eleva el FCFF."
+                )
+            else:
+                st.info(
+                    "🟢 NOL = 0 (CUERVO no tiene pérdidas acumuladas). "
+                    "Para activar: Input Sheet → sec G → 'Override NOL' = Yes."
+                )
+        else:
+            st.warning("Sin data de NOL en el output del modelo.")
+
+    # ---- D. Failure Rate / Distress Worksheet ----
+    with st.expander(
+        "**⚠️ D · Failure Rate & Distress Worksheet**",
+        expanded=False,
+    ):
+        st.markdown(
+            f"""
+            **Lógica Damodaran:** ajusta el equity value por la probabilidad
+            de fracaso de la empresa. Si la empresa quiebra, los proceeds
+            distress se basan en book value o fair value.
+
+            **Tabla de orientación (Damodaran):**
+
+            | Etapa | Probabilidad de failure típica |
+            |---|---|
+            | Idea / Pre-revenue | 60-80% |
+            | Early stage | 30-50% |
+            | Growth (rentable) | 10-20% |
+            | Mature / Established | 0-5% |
+            | Blue chip / IG rating | 0-1% |
+
+            **Configuración actual del modelo:**
+
+            | Concepto | Valor |
+            |---|---:|
+            | Probability of failure | **{a.probability_of_failure:.2%}** |
+            | Failure proceeds basis | **{a.failure_proceeds_basis}** ({"Fair value" if a.failure_proceeds_basis == "V" else "Book value"}) |
+            | Recovery % | **{a.failure_proceeds_pct:.0%}** |
+            | Distress proceeds (MDP) | **{out.distress_proceeds:,.1f}** |
+            | Operating value DCF (pre-failure) | **{out.operating_value_dcf:,.1f}** |
+            | Equity value (post-failure adj) | **{out.equity_value:,.1f}** |
+
+            Para CUERVO (mature, IG rating) → P(failure) ≈ 0% es razonable.
+            Para emisoras small-cap o cíclicas distress, considera 5-15%.
+
+            **Para editar:** Input Sheet → sec G → "Override probability of failure?"
+            """
+        )
+
+    st.info(
+        "📚 **Referencia Damodaran:** estos worksheets son las hojas "
+        "auxiliares del modelo `fcffsimpleginzu.xlsx`. Su rol es transformar "
+        "data raw del 10-K (R&D, lease commitments, NOL, prob failure) "
+        "en inputs limpios que alimentan al Input Sheet principal."
+    )
+
+    tab_worksheets.__exit__(None, None, None)
+
+    # ----- DuPont open -----
     tab_dupont.__enter__()
 
     st.subheader("DuPont Analysis")
