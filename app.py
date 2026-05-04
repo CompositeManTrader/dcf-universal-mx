@@ -3608,24 +3608,24 @@ if mode == "Single DCF":
                      "• (sin precio: multiplos de valuacion no disponibles)"))
         st.divider()
 
-        # Format unit-aware value display
+        # Format unit-aware value display (2 decimales standard)
         def _fmt_val(r):
             if r.value is None:
                 return "—"
             v = r.value
             u = r.unit
             if u == "%":
-                return f"{v:>9,.4f}%"
+                return f"{v:>9,.2f}%"
             elif u == "x":
-                return f"{v:>9,.4f}x"
+                return f"{v:>9,.2f}x"
             elif u == "days":
-                return f"{v:>9,.1f} days"
+                return f"{v:>9,.2f} days"
             elif u == "MDP":
-                return f"{v:>11,.1f} MDP"
+                return f"{v:>11,.2f} MDP"
             elif u == "pesos":
-                return f"$ {v:>9,.4f}"
+                return f"$ {v:>9,.2f}"
             else:
-                return f"{v:>9,.4f}"
+                return f"{v:>9,.2f}"
 
         for cat in RATIO_CATEGORIES:
             if cat not in cat_filter:
