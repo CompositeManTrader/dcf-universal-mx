@@ -1633,49 +1633,28 @@ if mode == "Single DCF":
             annual_only_ef = view_mode.startswith("Anual")
             max_n = None if max_periods_pick == "Todos" else int(max_periods_pick)
 
-            # ANUAL: usa annual_with_ttm que agrega TTM si el último año
-            # está incompleto (Q1/Q2/Q3 reportados pero sin Q4 ni 4D).
-            # TRIMESTRAL: usa snapshots tal cual.
-            if annual_only_ef:
-                ttm_snaps = hs_ef.annual_with_ttm
-                if not ttm_snaps:
-                    # Ningún año cerrable: fallback a Q4 preliminares
-                    hs_ef_view = type(hs_ef)(
-                        ticker=hs_ef.ticker,
-                        snapshots=[s for s in hs_ef.snapshots if s.quarter == "4"],
+            # Si se pide Anual pero no hay 4D, fallback automatico a "solo Q4 preliminares"
+            if annual_only_ef and hs_ef.n_annual == 0:
+                # Filtrar a Q4 preliminares como aproximacion anual
+                hs_ef_view = type(hs_ef)(
+                    ticker=hs_ef.ticker,
+                    snapshots=[s for s in hs_ef.snapshots if s.quarter == "4"],
+                )
+                if hs_ef_view.n_periods == 0:
+                    st.warning(
+                        "No hay XBRLs anuales (4D) ni Q4 preliminares. "
+                        "Usa vista trimestral o descarga los 4D."
                     )
-                    if hs_ef_view.n_periods == 0:
-                        st.warning(
-                            "No hay XBRLs anuales ni TTM construible. "
-                            "Usa vista trimestral o descarga 4D / Q4."
-                        )
-                        hs_ef_view = hs_ef
-                    else:
-                        st.info(
-                            f"No hay 4D — usando {hs_ef_view.n_periods} Q4 preliminares."
-                        )
+                    hs_ef_view = hs_ef
                 else:
-                    # Vista anual: meter los TTM/4D/Q4 en `snapshots` directo
-                    hs_ef_view = type(hs_ef)(
-                        ticker=hs_ef.ticker,
-                        snapshots=ttm_snaps,
+                    st.info(
+                        f"No hay 4D (anuales auditados) — usando {hs_ef_view.n_periods} "
+                        f"Q4 preliminares como proxy anual."
                     )
-                    ttm_years = [s.year for s in ttm_snaps
-                                   if isinstance(s.quarter, str)
-                                   and s.quarter.startswith("TTM")]
-                    if ttm_years:
-                        years_str = ", ".join(str(y) for y in ttm_years)
-                        st.info(
-                            f"📅 Sin reporte 4D auditado para: **{years_str}** — "
-                            f"se construyó **TTM** sumando los últimos 4 "
-                            f"trimestres (YTD actual + FY anterior − YTD "
-                            f"mismo Q anterior). "
-                            f"Balance Sheet usa el último trimestre tal cual."
-                        )
                 use_annual_flag = False  # ya filtramos manualmente
             else:
                 hs_ef_view = hs_ef
-                use_annual_flag = False
+                use_annual_flag = annual_only_ef
 
             fx_rate = market.fx_rate_usdmxn
 
