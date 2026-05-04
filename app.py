@@ -1058,14 +1058,97 @@ if mode == "Single DCF":
     # ============================================================
     tab_dam_input.__enter__()
     st.subheader(f"📋 Damodaran Input Sheet — {issuer.ticker}")
-    st.caption(
-        f"Réplica de la hoja **Input sheet** de `fcffsimpleginzu.xlsx`. "
-        f"Auto-poblado desde el XBRL parseado · "
-        f"**Most Recent 12M** = {res.info.period_end} · "
-        f"**Last 10K before LTM** = penúltimo anual del histórico"
-    )
 
-    from datetime import date as _date
+    from datetime import date as _date, datetime as _datetime
+
+    # ============================================================
+    # "Last 10K before LTM" + "Years since 10K"
+    # Lógica OFICIAL Damodaran (notas celdas C10/D10 del Excel):
+    #
+    # > C10: "If your last twelve months of data come from a 10K or
+    #   Annual Report, the last 10K will be the previous year's 10K.
+    #   If your last twelve months are midway through a fiscal year,
+    #   this will be the previous fiscal year."
+    #
+    # > D10: "If your most recent 12 months of data represent the most
+    #   recent fiscal year, enter 1.00. If midway through, enter the
+    #   fraction: Q3=0.75, Q2=0.50, Q1=0.25."
+    #
+    # Implementación: buscar el último anual cuyo period_end sea
+    # ESTRICTAMENTE ANTERIOR al period_end del snapshot cargado.
+    # Years since 10K = (LTM_end_date − last_10K_date) / 365.25
+    # ============================================================
+    last_10k = {}
+    years_since_10k = None
+    prev_snap = None
+    try:
+        from src.dcf_mexico.historical.series import load_historical
+        _hs = load_historical(issuer.ticker,
+                              parse_func=lambda fp: _parse_cached(str(fp)))
+        d_recent = _datetime.strptime(res.info.period_end, "%Y-%m-%d")
+        for snap in reversed(_hs.annual):
+            try:
+                snap_date = _datetime.strptime(snap.period_end, "%Y-%m-%d")
+            except Exception:
+                continue
+            if snap_date < d_recent:
+                prev_snap = snap
+                break
+
+        if prev_snap is not None:
+            ppd = prev_snap.parsed.dcf
+            ppi = prev_snap.parsed.informative
+            last_10k = {
+                "revenue":   getattr(ppd, "revenue", None),
+                "ebit":      getattr(ppd, "ebit", None),
+                "intexp":    getattr(ppd, "interest_expense", None),
+                "equity_bv": getattr(ppd, "equity_bv", None),
+                "debt":      getattr(ppd, "total_debt", None),
+                "cash":      getattr(ppd, "cash", None),
+                "minority":  getattr(ppd, "minority_interest", None),
+                "nonop":     getattr(ppd, "non_operating_assets", None),
+                "shares":    getattr(ppi, "shares_outstanding", None),
+                "eff_tax":   getattr(ppd, "effective_tax_rate", None),
+            }
+            try:
+                d_prev = _datetime.strptime(prev_snap.period_end, "%Y-%m-%d")
+                years_since_10k = round(
+                    (d_recent - d_prev).days / 365.25, 2)
+            except Exception:
+                years_since_10k = None
+    except Exception:
+        pass
+
+    # Caption + 3 KPIs explicativos arriba del Input Sheet
+    _last10k_label = (
+        f"FY {prev_snap.period_end}"
+        if prev_snap is not None else "—"
+    )
+    st.caption(
+        "Réplica de la hoja **Input sheet** de `fcffsimpleginzu.xlsx` "
+        "con notas oficiales de Damodaran en cada celda. "
+        "Auto-poblado desde XBRL parseado."
+    )
+    cols_info = st.columns(3)
+    cols_info[0].metric("Most Recent 12M",
+                          res.info.period_end,
+                          help="Período del snapshot que cargaste arriba "
+                               "(LTM end date)")
+    cols_info[1].metric("Last 10K before LTM",
+                          _last10k_label,
+                          help="Último anual auditado cuyo period_end es "
+                               "ESTRICTAMENTE ANTERIOR al LTM. Si tu LTM "
+                               "es FY 2025, este será FY 2024. Si tu LTM "
+                               "es Q3 2025, este será FY 2024 (no FY 2023).")
+    cols_info[2].metric("Years since 10K",
+                          f"{years_since_10k:.2f}"
+                            if years_since_10k is not None else "—",
+                          help=("Fracción del año fiscal en curso cubierta "
+                                "por el LTM. Convención Damodaran (D10): "
+                                "1.00 = LTM es el FY completo · "
+                                "0.75 = LTM hasta Q3 · "
+                                "0.50 = LTM hasta Q2 · "
+                                "0.25 = LTM hasta Q1"))
 
     # Helper: muestra una fila del Input Sheet con etiqueta + valor + nota
     def _ds_row(label: str, val_recent, val_prior=None, note: str = "",
@@ -1105,42 +1188,6 @@ if mode == "Single DCF":
     eff_tax_recent = base.effective_tax_rate
     price_recent = float(issuer.market_price or 0.0)
 
-    # Para "Last 10K before LTM" sacamos del penúltimo anual del histórico.
-    # Usamos pp.dcf (ya en MDP, mismas unidades que `base.*`) para consistencia.
-    last_10k = {}
-    years_since_10k = None
-    try:
-        from src.dcf_mexico.historical.series import load_historical
-        _hs = load_historical(issuer.ticker,
-                              parse_func=lambda fp: _parse_cached(str(fp)))
-        if _hs.annual and len(_hs.annual) >= 2:
-            # Penúltimo anual = "Last 10K before LTM"
-            prev_snap = _hs.annual[-2]
-            ppd = prev_snap.parsed.dcf       # ya en MDP
-            ppi = prev_snap.parsed.informative
-            last_10k = {
-                "revenue":   getattr(ppd, "revenue", None),
-                "ebit":      getattr(ppd, "ebit", None),
-                "intexp":    getattr(ppd, "interest_expense", None),
-                "equity_bv": getattr(ppd, "equity_bv", None),
-                "debt":      getattr(ppd, "total_debt", None),
-                "cash":      getattr(ppd, "cash", None),
-                "minority":  getattr(ppd, "minority_interest", None),
-                "nonop":     getattr(ppd, "non_operating_assets", None),
-                "shares":    getattr(ppi, "shares_outstanding", None),
-                "eff_tax":   getattr(ppd, "effective_tax_rate", None),
-            }
-            # Years since last 10K
-            try:
-                from datetime import datetime
-                d_recent = datetime.strptime(res.info.period_end, "%Y-%m-%d")
-                d_prev = datetime.strptime(prev_snap.period_end, "%Y-%m-%d")
-                years_since_10k = round((d_recent - d_prev).days / 365.25, 2)
-            except Exception:
-                years_since_10k = None
-    except Exception:
-        pass
-
     # ----- SECCION A: Identificacion -----
     with st.expander("**🆔 A · Identificación**", expanded=True):
         c1, c2 = st.columns(2)
@@ -1162,6 +1209,13 @@ if mode == "Single DCF":
     # ----- SECCION B: Base year numbers -----
     with st.expander("**📊 B · Base year numbers** (units: MDP)",
                        expanded=True):
+        st.caption(
+            "💬 **Damodaran (nota celda C10):** *Si tu LTM viene del 10K, "
+            "el Last 10K será el del año previo. Si tu LTM va a la mitad "
+            "del fiscal year, el Last 10K será el último FY completo "
+            "anterior al LTM.* — Implementado: busca el último anual "
+            "con period_end estrictamente anterior al LTM cargado."
+        )
         h = st.columns([3.2, 1.4, 1.4, 1.0, 2.4])
         h[0].markdown("**Concept**")
         h[1].markdown("**Most Recent 12M**")
