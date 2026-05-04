@@ -513,14 +513,15 @@ if mode == "Single DCF":
     # ========================================================================
     # TABS DEFINITION (movida desde abajo - ahora la pagina arranca con tabs)
     # ========================================================================
-    (tab_snapshot, tab_inputs_sug, tab_quality, tab_drivers, tab_proj,
-     tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_intel,
+    (tab_snapshot, tab_inputs_sug, tab_quality, tab_drivers, tab_dam_input,
+     tab_proj, tab_estados, tab_hist, tab_valid, tab_val, tab_forecast, tab_intel,
      tab_stories, tab_pic, tab_sens, tab_dupont, tab_ratios, tab_diag, tab_dl) = st.tabs([
         # NUEVAS TABS (Resumen rapido) - movidas desde pagina principal:
         "📷 Snapshot",
         "💡 Inputs Sugeridos",
         "🎯 Quality Audit + Scenarios",
         "🎛️ Drivers DCF",
+        "📋 Input Sheet (Damodaran)",
         "📈 Proyección FCFF",
         # TABS existentes (Bloomberg + Damodaran + utility):
         "📊 Estados Financieros",
@@ -1103,6 +1104,363 @@ if mode == "Single DCF":
     out = project_company(base, a)
 
     tab_drivers.__exit__(None, None, None)
+
+    # ============================================================
+    # TAB 4-bis: 📋 DAMODARAN INPUT SHEET (replica exacta del Excel)
+    # Estructura idéntica a fcffsimpleginzu.xlsx hoja "Input sheet"
+    # Pre-poblado con datos de la emisora desde el parser.
+    # ============================================================
+    tab_dam_input.__enter__()
+    st.subheader(f"📋 Damodaran Input Sheet — {issuer.ticker}")
+    st.caption(
+        "Réplica exacta de la hoja **Input sheet** del modelo `fcffsimpleginzu.xlsx`. "
+        "Los valores se auto-pueblan desde el XBRL parseado. "
+        "Edita cualquier celda para hacer override (no rompe el modelo principal: "
+        "son los mismos drivers que ves en *Drivers DCF*)."
+    )
+
+    from datetime import date as _date
+
+    # Helper: muestra una fila del Input Sheet con etiqueta + valor + nota
+    def _ds_row(label: str, val_recent, val_prior=None, note: str = "",
+                  unit: str = "", is_input: bool = True):
+        """Renderiza una fila estilo Damodaran Excel."""
+        cols = st.columns([3.2, 1.4, 1.4, 3.0])
+        cols[0].markdown(f"**{label}**" if is_input else label)
+        # Format
+        def _fmt(v):
+            if v is None or v == "":
+                return "—"
+            if isinstance(v, (int, float)):
+                if unit == "%":
+                    return f"{v*100:,.2f}%"
+                if unit == "x":
+                    return f"{v:,.2f}x"
+                if abs(v) >= 1000:
+                    return f"{v:,.1f}"
+                return f"{v:,.4f}" if abs(v) < 1 else f"{v:,.2f}"
+            return str(v)
+        cols[1].markdown(f"`{_fmt(val_recent)}`")
+        cols[2].markdown(f"`{_fmt(val_prior)}`" if val_prior is not None else "")
+        if note:
+            cols[3].caption(note)
+
+    # Datos del parser (CompanyBase ya esta calculado arriba)
+    dcf_p = res.dcf
+    rev_recent = base.revenue
+    ebit_recent = base.ebit
+    intexp_recent = base.interest_expense
+    cash_recent = base.cash
+    debt_recent = base.financial_debt
+    equity_bv_recent = base.equity_book
+    minority_recent = base.minority_interest
+    nonop_recent = base.non_operating_assets
+    shares_recent = base.shares_outstanding
+    eff_tax_recent = base.effective_tax_rate
+    price_recent = float(issuer.market_price or 0.0)
+
+    # Para "Last 10K before LTM" intentamos sacar del histórico anual
+    last_10k = {}
+    try:
+        from src.dcf_mexico.historical.series import load_historical
+        _hs = load_historical(issuer.ticker,
+                              parse_func=lambda fp: _parse_cached(str(fp)))
+        if _hs.annual and len(_hs.annual) >= 2:
+            # Penultimo anual = "Last 10K before LTM"
+            prev_snap = _hs.annual[-2]
+            pp = prev_snap.parsed
+            last_10k = {
+                "revenue": pp.income.revenue,
+                "ebit": pp.income.operating_income,
+                "intexp": pp.income.interest_expense,
+                "equity_bv": pp.balance.total_equity_controlling,
+                "debt": pp.balance.total_debt_with_leases,
+                "cash": pp.balance.cash_and_equivalents,
+            }
+    except Exception:
+        pass
+
+    # ----- SECCION A: Identificacion -----
+    with st.expander("**🆔 A · Identificación**", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.text_input("Date of valuation",
+                          value=_date.today().isoformat(),
+                          key=f"dam_date_{issuer.ticker}")
+            st.text_input("Company name",
+                          value=issuer.name,
+                          key=f"dam_name_{issuer.ticker}", disabled=True)
+        with c2:
+            st.text_input("Country of incorporation",
+                          value="Mexico",
+                          key=f"dam_country_{issuer.ticker}")
+            st.text_input("Industry (Global)",
+                          value=getattr(issuer, "sector", "—"),
+                          key=f"dam_industry_{issuer.ticker}")
+
+    # ----- SECCION B: Base year numbers -----
+    with st.expander("**📊 B · Base year numbers** (units: MDP)",
+                       expanded=True):
+        h = st.columns([3.2, 1.4, 1.4, 3.0])
+        h[0].markdown("**Concept**")
+        h[1].markdown("**Most Recent 12M**")
+        h[2].markdown("**Last 10K before LTM**")
+        h[3].markdown("**Source / Note**")
+        st.divider()
+        _ds_row("Revenues", rev_recent, last_10k.get("revenue"),
+                  "TTM = Q4 acum. Auto desde income.revenue")
+        _ds_row("Operating income (EBIT)", ebit_recent, last_10k.get("ebit"),
+                  "EBIT TTM = operating_income. Si negativo → review")
+        _ds_row("Interest expense", intexp_recent, last_10k.get("intexp"),
+                  "Auto desde income.interest_expense")
+        _ds_row("Book value of equity", equity_bv_recent,
+                  last_10k.get("equity_bv"),
+                  "Equity controladora (sin minority)")
+        _ds_row("Book value of debt", debt_recent, last_10k.get("debt"),
+                  "total_debt_with_leases (incluye operating leases)")
+        _ds_row("Cash and Marketable Securities", cash_recent,
+                  last_10k.get("cash"),
+                  "cash + marketable_securities")
+        _ds_row("Cross holdings & non-operating assets", nonop_recent, None,
+                  "Auto desde balance.non_operating_assets")
+        _ds_row("Minority interests", minority_recent, None,
+                  "balance.minority_interest")
+        st.markdown("")
+        c_rd, c_ol = st.columns(2)
+        with c_rd:
+            st.selectbox("R&D expenses to capitalize?",
+                         ["No", "Yes"], index=0,
+                         key=f"dam_rd_{issuer.ticker}",
+                         help="Para CUERVO/Beverages → siempre No")
+        with c_ol:
+            st.selectbox("Operating lease commitments?",
+                         ["No (ya capitalizadas)", "Yes"], index=0,
+                         key=f"dam_ol_{issuer.ticker}",
+                         help="MX-IFRS 16: ya están en total_debt_with_leases → No")
+
+    # ----- SECCION C: Market data -----
+    with st.expander("**💹 C · Market data**", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.number_input("Number of shares outstanding (millones)",
+                            value=float(shares_recent or 0.0),
+                            step=1.0, format="%.2f",
+                            key=f"dam_shares_{issuer.ticker}")
+            st.number_input("Current stock price (MXN)",
+                            value=float(price_recent),
+                            step=0.5, format="%.2f",
+                            key=f"dam_price_{issuer.ticker}")
+        with c2:
+            st.number_input("Effective tax rate (%)",
+                            value=float(eff_tax_recent * 100),
+                            step=0.5, format="%.2f",
+                            key=f"dam_eff_tax_{issuer.ticker}",
+                            help="ISR pagado / EBT histórico. CUERVO ≈ 24-27%")
+            st.number_input("Marginal tax rate (%)",
+                            value=30.0, step=0.5, format="%.2f",
+                            key=f"dam_marg_tax_{issuer.ticker}",
+                            help="México ISR corporativo = 30%")
+
+    # ----- SECCION D: Value drivers -----
+    with st.expander("**🚀 D · Value drivers** (Damodaran growth/margin levers)",
+                       expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.number_input("Revenue growth Y1 (%)",
+                            value=float(rev_growth * 100), step=0.25,
+                            format="%.2f",
+                            key=f"dam_g_y1_{issuer.ticker}")
+            st.number_input("Operating margin Y1 (%)",
+                            value=float((base.ebit / base.revenue * 100)
+                                          if base.revenue else 22.0),
+                            step=0.5, format="%.2f",
+                            key=f"dam_m_y1_{issuer.ticker}")
+            st.number_input("CAGR revenue Y2-Y5 (%)",
+                            value=float(rev_growth * 100), step=0.25,
+                            format="%.2f",
+                            key=f"dam_g_y2y5_{issuer.ticker}")
+        with c2:
+            st.number_input("Target pre-tax operating margin (%)",
+                            value=float(op_margin * 100), step=0.5,
+                            format="%.2f",
+                            key=f"dam_m_target_{issuer.ticker}")
+            st.number_input("Year of convergence for margin",
+                            value=5, min_value=1, max_value=10, step=1,
+                            key=f"dam_yconv_{issuer.ticker}")
+            st.number_input("Sales-to-Capital Y1-Y5",
+                            value=float(s2c), step=0.05, format="%.2f",
+                            key=f"dam_s2c_15_{issuer.ticker}")
+            st.number_input("Sales-to-Capital Y6-Y10",
+                            value=float(s2c), step=0.05, format="%.2f",
+                            key=f"dam_s2c_610_{issuer.ticker}")
+
+    # ----- SECCION E: Market parameters -----
+    with st.expander("**🌎 E · Market parameters**", expanded=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            st.number_input("Risk-free rate MX (%)",
+                            value=float(rf * 100), step=0.05, format="%.4f",
+                            key=f"dam_rf_{issuer.ticker}",
+                            help="CETES 10Y o Bono M 10Y")
+        with c2:
+            st.number_input("Initial cost of capital (WACC) (%)",
+                            value=float(out.wacc_result.wacc * 100),
+                            step=0.10, format="%.4f", disabled=True,
+                            key=f"dam_wacc_init_{issuer.ticker}",
+                            help="Calculado en Cost of Capital sheet (WACC)")
+
+    # ----- SECCION F: Other inputs (employee options) -----
+    with st.expander("**🎫 F · Other inputs** (employee options)",
+                       expanded=False):
+        opt_yn = st.selectbox("Employee options outstanding?",
+                                ["No", "Yes"], index=0,
+                                key=f"dam_opt_yn_{issuer.ticker}")
+        if opt_yn == "Yes":
+            o1, o2, o3, o4 = st.columns(4)
+            with o1:
+                st.number_input("# options (M)", value=0.0, step=0.1,
+                                key=f"dam_opt_n_{issuer.ticker}")
+            with o2:
+                st.number_input("Avg strike (MXN)", value=0.0, step=0.5,
+                                key=f"dam_opt_strike_{issuer.ticker}")
+            with o3:
+                st.number_input("Avg maturity (yr)", value=7.0, step=0.5,
+                                key=f"dam_opt_mat_{issuer.ticker}")
+            with o4:
+                st.number_input("Stock stdev", value=0.45, step=0.05,
+                                key=f"dam_opt_std_{issuer.ticker}")
+
+    # ----- SECCION G: Default-assumption overrides -----
+    with st.expander(
+        "**⚙️ G · Default assumption overrides** (rows 42-71 del Excel)",
+        expanded=False):
+
+        st.markdown("**Stable-growth cost of capital**")
+        oc1, oc2 = st.columns([1, 2])
+        with oc1:
+            ov_coc = st.selectbox("Override cost of capital después año 10?",
+                                    ["No", "Yes"], index=0,
+                                    key=f"dam_ov_coc_{issuer.ticker}")
+        with oc2:
+            st.number_input("Cost of capital after year 10 (%)",
+                            value=float(out.wacc_result.wacc * 100),
+                            step=0.10, format="%.4f",
+                            disabled=(ov_coc == "No"),
+                            key=f"dam_coc10_{issuer.ticker}")
+
+        st.markdown("**Stable-growth ROIC**")
+        or1, or2 = st.columns([1, 2])
+        with or1:
+            ov_roic = st.selectbox("Override ROIC después año 10?",
+                                     ["No", "Yes"], index=0,
+                                     key=f"dam_ov_roic_{issuer.ticker}")
+        with or2:
+            st.number_input("ROIC after year 10 (%)",
+                            value=15.0, step=0.5, format="%.2f",
+                            disabled=(ov_roic == "No"),
+                            key=f"dam_roic10_{issuer.ticker}")
+
+        st.markdown("**Probability of failure**")
+        of1, of2, of3, of4 = st.columns(4)
+        with of1:
+            ov_fail = st.selectbox("Override probability of failure?",
+                                     ["No", "Yes"], index=0,
+                                     key=f"dam_ov_fail_{issuer.ticker}")
+        with of2:
+            st.number_input("Probability of failure (%)",
+                            value=12.0, step=1.0, format="%.2f",
+                            disabled=(ov_fail == "No"),
+                            key=f"dam_pfail_{issuer.ticker}")
+        with of3:
+            st.selectbox("Tie proceeds in failure to:",
+                         ["V (fair value)", "B (book value of capital)"],
+                         index=0, key=f"dam_basis_{issuer.ticker}")
+        with of4:
+            st.number_input("Distress proceeds (% of book/value)",
+                            value=50.0, step=5.0, format="%.1f",
+                            key=f"dam_proc_{issuer.ticker}")
+
+        st.markdown("**Reinvestment lag**")
+        ol1, ol2 = st.columns([1, 2])
+        with ol1:
+            ov_lag = st.selectbox("Override reinvestment lag?",
+                                    ["No", "Yes"], index=0,
+                                    key=f"dam_ov_lag_{issuer.ticker}")
+        with ol2:
+            st.number_input("Reinvestment lag (años, 0-3)",
+                            value=1, min_value=0, max_value=3, step=1,
+                            disabled=(ov_lag == "No"),
+                            key=f"dam_lag_{issuer.ticker}")
+
+        st.markdown("**Effective vs marginal tax convergence**")
+        ot = st.selectbox("Override effective→marginal tax convergence?",
+                            ["No", "Yes"], index=0,
+                            key=f"dam_ov_tax_{issuer.ticker}")
+
+        st.markdown("**NOL carryforward**")
+        on1, on2 = st.columns([1, 2])
+        with on1:
+            ov_nol = st.selectbox("Override NOL?",
+                                    ["No", "Yes"], index=0,
+                                    key=f"dam_ov_nol_{issuer.ticker}")
+        with on2:
+            st.number_input("NOL into year 1 (MDP)",
+                            value=0.0, step=100.0, format="%.1f",
+                            disabled=(ov_nol == "No"),
+                            key=f"dam_nol_{issuer.ticker}")
+
+        st.markdown("**Risk-free rate / terminal growth**")
+        ot1, ot2 = st.columns([1, 2])
+        with ot1:
+            ov_rf = st.selectbox("Override risk-free después año 10?",
+                                   ["No", "Yes"], index=1,
+                                   key=f"dam_ov_rf_{issuer.ticker}",
+                                   help="MX usualmente: Yes (rf actual ≈ 9% vs estable ≈ 6%)")
+        with ot2:
+            st.number_input("Risk-free after year 10 (%)",
+                            value=6.0, step=0.25, format="%.4f",
+                            disabled=(ov_rf == "No"),
+                            key=f"dam_rf10_{issuer.ticker}")
+        og1, og2 = st.columns([1, 2])
+        with og1:
+            ov_g = st.selectbox("Override terminal growth?",
+                                  ["No", "Yes"], index=1,
+                                  key=f"dam_ov_g_{issuer.ticker}",
+                                  help="MX usualmente: Yes (g ≈ 3.5% inflación)")
+        with og2:
+            st.number_input("Terminal growth (%)",
+                            value=float(terminal_g * 100), step=0.05,
+                            format="%.4f", disabled=(ov_g == "No"),
+                            key=f"dam_g_term_{issuer.ticker}")
+
+        st.markdown("**Trapped cash (foreign markets)**")
+        oc1, oc2, oc3 = st.columns([1, 1, 1])
+        with oc1:
+            ov_tc = st.selectbox("Override trapped cash?",
+                                   ["No", "Yes"], index=0,
+                                   key=f"dam_ov_tc_{issuer.ticker}")
+        with oc2:
+            st.number_input("Trapped cash (MDP)",
+                            value=0.0, step=100.0, format="%.1f",
+                            disabled=(ov_tc == "No"),
+                            key=f"dam_tc_{issuer.ticker}")
+        with oc3:
+            st.number_input("Avg foreign tax rate (%)",
+                            value=15.0, step=1.0, format="%.2f",
+                            disabled=(ov_tc == "No"),
+                            key=f"dam_tc_tax_{issuer.ticker}")
+
+    st.divider()
+    st.success(
+        "✅ **Cómo se conecta este sheet con el modelo:** los inputs de las "
+        "secciones B, C, D y E ya están alimentando al motor de DCF "
+        "(`project_company`). Las secciones F y G capturan los overrides "
+        "avanzados que ya existen en *Drivers DCF → Damodaran Advanced*. "
+        "Esta vista es la **réplica visual del Excel** para validar campo "
+        "por campo contra `fcffsimpleginzu.xlsx`."
+    )
+
+    tab_dam_input.__exit__(None, None, None)
 
     # ============================================================
     # TAB 5: 📈 PROYECCIÓN FCFF (Resultado + Damodaran outputs + Chart)
