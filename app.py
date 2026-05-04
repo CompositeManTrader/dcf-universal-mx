@@ -3653,12 +3653,21 @@ if mode == "Single DCF":
                 import pandas as _pd
                 rows = []
                 for r in items:
+                    # Format inputs_used dict to readable string
+                    if r.inputs_used:
+                        inputs_str = " · ".join(
+                            [f"{k}: {v}" for k, v in r.inputs_used.items()]
+                        )
+                    else:
+                        inputs_str = "—"
                     rows.append({
                         "Ratio": r.name,
                         "Valor": _fmt_val(r),
+                        "Interpretacion": r.interpretation,
                         "Formula": r.formula,
                         "Descripcion": r.description,
-                        "Interpretacion": r.interpretation,
+                        "Datos usados": inputs_str,
+                        "Rating": r.rating or "⚪ N/A",
                     })
                 df_cat = _pd.DataFrame(rows)
                 st.dataframe(
@@ -3668,10 +3677,12 @@ if mode == "Single DCF":
                     height=min(700, 50 + 80 * len(items)),
                     column_config={
                         "Ratio": st.column_config.TextColumn(width=210),
-                        "Valor": st.column_config.TextColumn(width=120),
+                        "Valor": st.column_config.TextColumn(width=110),
+                        "Interpretacion": st.column_config.TextColumn(width=340),
                         "Formula": st.column_config.TextColumn(width=200),
-                        "Descripcion": st.column_config.TextColumn(width=380),
-                        "Interpretacion": st.column_config.TextColumn(width=380),
+                        "Descripcion": st.column_config.TextColumn(width=320),
+                        "Datos usados": st.column_config.TextColumn(width=280),
+                        "Rating": st.column_config.TextColumn(width=120),
                     },
                 )
 

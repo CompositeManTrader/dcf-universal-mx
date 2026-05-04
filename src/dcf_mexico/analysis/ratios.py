@@ -38,6 +38,12 @@ class RatioInfo:
     interpretation: str     # Que significan los valores buenos/malos
     unit: str               # "%", "x", "days", "MDP", "pesos"
     category: str           # Categoria para agrupar
+    inputs_used: dict = None    # Datos numericos usados en el calculo (ej. {"NI": 8654, "Revenue": 43087})
+    rating: str = ""           # "🟢 Excelente" / "🟡 Bueno" / "🟠 Regular" / "🔴 Malo" / "⚪ N/A"
+
+    def __post_init__(self):
+        if self.inputs_used is None:
+            self.inputs_used = {}
 
 
 # ============================================================================
@@ -61,6 +67,282 @@ def _avg(curr: float, prev: float) -> float:
     if curr is None or curr == 0:
         return prev
     return (curr + prev) / 2.0
+
+
+# ============================================================================
+# Rating heuristico (per-ratio rules)
+# ============================================================================
+
+def _rate(value: float, name: str, unit: str) -> str:
+    """Asigna rating cualitativo: Excelente/Bueno/Regular/Malo basado en thresholds.
+
+    Reglas Damodaran/Buffett-style por tipo de ratio.
+    """
+    if value is None:
+        return "⚪ N/A"
+
+    n = name.lower()
+
+    # ==== PROFITABILITY MARGINS (alto es bueno) ====
+    if "gross margin" in n:
+        if value >= 50: return "🟢 Excelente"
+        if value >= 35: return "🟡 Bueno"
+        if value >= 20: return "🟠 Regular"
+        return "🔴 Malo"
+    if "operating margin" in n or "ebit margin" in n:
+        if value >= 20: return "🟢 Excelente"
+        if value >= 12: return "🟡 Bueno"
+        if value >= 5:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "ebitda margin" in n:
+        if value >= 25: return "🟢 Excelente"
+        if value >= 15: return "🟡 Bueno"
+        if value >= 8:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "net margin" in n or "fcf margin" in n or "cfo margin" in n:
+        if value >= 15: return "🟢 Excelente"
+        if value >= 8:  return "🟡 Bueno"
+        if value >= 3:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "pretax margin" in n:
+        if value >= 20: return "🟢 Excelente"
+        if value >= 10: return "🟡 Bueno"
+        if value >= 4:  return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== RETURNS (alto es bueno) ====
+    if "roa" in n:
+        if value >= 10: return "🟢 Excelente"
+        if value >= 5:  return "🟡 Bueno"
+        if value >= 2:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "roe" in n:
+        if value >= 20: return "🟢 Excelente"
+        if value >= 12: return "🟡 Bueno"
+        if value >= 6:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "roic" in n or "roce" in n:
+        if value >= 15: return "🟢 Excelente"
+        if value >= 8:  return "🟡 Bueno"
+        if value >= 4:  return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== TURNOVERS (alto es bueno) ====
+    if "asset turnover" in n or "fixed asset turnover" in n or "working capital turnover" in n:
+        if value >= 1.5: return "🟢 Excelente"
+        if value >= 0.8: return "🟡 Bueno"
+        if value >= 0.4: return "🟠 Regular"
+        return "🔴 Malo"
+    if "inventory turnover" in n or "receivables turnover" in n:
+        if value >= 8:   return "🟢 Excelente"
+        if value >= 4:   return "🟡 Bueno"
+        if value >= 2:   return "🟠 Regular"
+        return "🔴 Malo"
+    if "payables turnover" in n:
+        # Bajo es bueno (financiamiento gratis de proveedores)
+        if value <= 4:   return "🟢 Excelente"
+        if value <= 8:   return "🟡 Bueno"
+        if value <= 12:  return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== DAYS (DIO/DSO bajo es bueno; DPO alto es bueno; CCC bajo es bueno) ====
+    if "dio" in n or "days inventory" in n:
+        if value <= 30:  return "🟢 Excelente"
+        if value <= 90:  return "🟡 Bueno"
+        if value <= 180: return "🟠 Regular"
+        return "🔴 Malo"
+    if "dso" in n or "days sales outstanding" in n:
+        if value <= 30:  return "🟢 Excelente"
+        if value <= 60:  return "🟡 Bueno"
+        if value <= 90:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "dpo" in n or "days payable" in n:
+        # Alto es bueno (proveedores financian)
+        if value >= 60:  return "🟢 Excelente"
+        if value >= 40:  return "🟡 Bueno"
+        if value >= 20:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "cash conversion" in n or "ccc" in n:
+        # Bajo es bueno (puede ser negativo)
+        if value <= 0:   return "🟢 Excelente"
+        if value <= 30:  return "🟢 Excelente"
+        if value <= 90:  return "🟡 Bueno"
+        if value <= 180: return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== LIQUIDITY ====
+    if "current ratio" in n:
+        if 1.5 <= value <= 3.0: return "🟢 Excelente"
+        if 1.2 <= value < 1.5 or 3.0 < value <= 4.0: return "🟡 Bueno"
+        if 1.0 <= value < 1.2 or value > 4.0: return "🟠 Regular"
+        return "🔴 Malo"
+    if "quick ratio" in n or "acid test" in n:
+        if value >= 1.0: return "🟢 Excelente"
+        if value >= 0.7: return "🟡 Bueno"
+        if value >= 0.4: return "🟠 Regular"
+        return "🔴 Malo"
+    if "cash ratio" in n:
+        if value >= 0.5: return "🟢 Excelente"
+        if value >= 0.2: return "🟡 Bueno"
+        if value >= 0.1: return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== LEVERAGE (bajo es bueno generalmente) ====
+    if "net debt / ebitda" in n or "debt / ebitda" in n:
+        if value <= 1.5: return "🟢 Excelente"
+        if value <= 3.0: return "🟡 Bueno"
+        if value <= 5.0: return "🟠 Regular"
+        return "🔴 Malo"
+    if "debt / equity" in n or "d/e" in n:
+        if value <= 0.5: return "🟢 Excelente"
+        if value <= 1.5: return "🟡 Bueno"
+        if value <= 3.0: return "🟠 Regular"
+        return "🔴 Malo"
+    if "debt / assets" in n:
+        if value <= 30:  return "🟢 Excelente"
+        if value <= 50:  return "🟡 Bueno"
+        if value <= 70:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "equity ratio" in n:
+        # alto es bueno
+        if value >= 50:  return "🟢 Excelente"
+        if value >= 30:  return "🟡 Bueno"
+        if value >= 15:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "interest coverage" in n or "ebitda coverage" in n:
+        # alto es bueno
+        if value >= 5:   return "🟢 Excelente"
+        if value >= 3:   return "🟡 Bueno"
+        if value >= 1.5: return "🟠 Regular"
+        return "🔴 Malo"
+    if "capitalization ratio" in n:
+        if value <= 30:  return "🟢 Excelente"
+        if value <= 50:  return "🟡 Bueno"
+        if value <= 70:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "equity multiplier" in n or "financial leverage" in n:
+        if value <= 2:   return "🟢 Excelente"
+        if value <= 3:   return "🟡 Bueno"
+        if value <= 5:   return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== CASH FLOW QUALITY ====
+    if "cfo / net income" in n or "quality of earnings" in n or "cf to net income" in n:
+        if value >= 1.0: return "🟢 Excelente"
+        if value >= 0.7: return "🟡 Bueno"
+        if value >= 0.4: return "🟠 Regular"
+        return "🔴 Malo"
+    if "fcf conversion" in n or "fcf/ebitda" in n:
+        if value >= 70:  return "🟢 Excelente"
+        if value >= 50:  return "🟡 Bueno"
+        if value >= 30:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "capex / sales" in n or "capex/sales" in n:
+        # Bajo es eficiente
+        if value <= 3:   return "🟢 Excelente"
+        if value <= 7:   return "🟡 Bueno"
+        if value <= 15:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "capex / d&a" in n or "maintenance vs growth" in n:
+        # 1.0-1.3 es ideal (no descapitalización pero no over-investment)
+        if 0.9 <= value <= 1.5: return "🟢 Excelente"
+        if 0.7 <= value < 0.9 or 1.5 < value <= 2.0: return "🟡 Bueno"
+        if 0.5 <= value < 0.7 or 2.0 < value <= 3.0: return "🟠 Regular"
+        return "🔴 Malo"
+    if "cfo / total debt" in n or "cfo/total debt" in n:
+        if value >= 40:  return "🟢 Excelente"
+        if value >= 20:  return "🟡 Bueno"
+        if value >= 10:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "fcf / total debt" in n or "fcf/total debt" in n:
+        if value >= 25:  return "🟢 Excelente"
+        if value >= 15:  return "🟡 Bueno"
+        if value >= 5:   return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== PER-SHARE ====
+    if "payout ratio" in n:
+        if 30 <= value <= 60: return "🟢 Excelente"
+        if 15 <= value < 30 or 60 < value <= 80: return "🟡 Bueno"
+        if value < 15 or 80 < value <= 100: return "🟠 Regular"
+        return "🔴 Malo"
+    if "retention ratio" in n:
+        if 40 <= value <= 70: return "🟢 Excelente"
+        if 20 <= value < 40 or 70 < value <= 85: return "🟡 Bueno"
+        return "🟠 Regular"
+    if "sustainable growth" in n:
+        if value >= 12:  return "🟢 Excelente"
+        if value >= 6:   return "🟡 Bueno"
+        if value >= 2:   return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== VALUATION (depende del sector pero rangos generales) ====
+    if "p/e" in n:
+        if 8 <= value <= 18:  return "🟢 Excelente"
+        if 5 <= value < 8 or 18 < value <= 25: return "🟡 Bueno"
+        if value < 5 or 25 < value <= 35: return "🟠 Regular"
+        return "🔴 Malo"
+    if "p/b" in n:
+        if value <= 2:   return "🟢 Excelente"
+        if value <= 3.5: return "🟡 Bueno"
+        if value <= 6:   return "🟠 Regular"
+        return "🔴 Malo"
+    if "p/s" in n:
+        if value <= 1.5: return "🟢 Excelente"
+        if value <= 3:   return "🟡 Bueno"
+        if value <= 6:   return "🟠 Regular"
+        return "🔴 Malo"
+    if "p/fcf" in n:
+        if value <= 15:  return "🟢 Excelente"
+        if value <= 25:  return "🟡 Bueno"
+        if value <= 40:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "ev / ebitda" in n or "ev/ebitda" in n:
+        if value <= 8:   return "🟢 Excelente"
+        if value <= 12:  return "🟡 Bueno"
+        if value <= 18:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "ev / sales" in n or "ev/sales" in n:
+        if value <= 2:   return "🟢 Excelente"
+        if value <= 4:   return "🟡 Bueno"
+        if value <= 7:   return "🟠 Regular"
+        return "🔴 Malo"
+    if "ev / ebit" in n or "ev/ebit" in n:
+        if value <= 12:  return "🟢 Excelente"
+        if value <= 20:  return "🟡 Bueno"
+        if value <= 30:  return "🟠 Regular"
+        return "🔴 Malo"
+    if "earnings yield" in n or "fcf yield" in n:
+        if value >= 8:   return "🟢 Excelente"
+        if value >= 5:   return "🟡 Bueno"
+        if value >= 3:   return "🟠 Regular"
+        return "🔴 Malo"
+    if "dividend yield" in n:
+        if 2 <= value <= 5:  return "🟢 Excelente"
+        if 0.5 <= value < 2 or 5 < value <= 7: return "🟡 Bueno"
+        if value > 7 or value < 0.5: return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== GROWTH (positivo es bueno) ====
+    if "growth yoy" in n or "growth" in n:
+        if value >= 10:  return "🟢 Excelente"
+        if value >= 5:   return "🟡 Bueno"
+        if value >= 0:   return "🟠 Regular"
+        return "🔴 Malo"
+
+    # ==== Default ====
+    return "⚪ N/A"
+
+
+def _fmt_input(name: str, value: float, unit: str = "MDP") -> str:
+    """Formatea un input para mostrar en 'Datos usados'."""
+    if value is None:
+        return f"{name}: —"
+    if abs(value) >= 1e6:
+        return f"{name}: {value/1e6:,.1f}M"
+    if abs(value) >= 1e3:
+        return f"{name}: {value:,.0f}"
+    return f"{name}: {value:.2f}"
 
 
 # ============================================================================
@@ -1286,6 +1568,7 @@ def compute_all_ratios(
 
     Returns:
         Lista plana de RatioInfo con todos los ratios computados.
+        Cada uno con `rating` asignado heuristicamente.
     """
     ttm = None  # placeholder; cada categoria usa inf.revenue_12m, ebit_12m, etc.
     all_ratios = []
@@ -1299,4 +1582,169 @@ def compute_all_ratios(
     all_ratios.extend(_per_share(snap))
     all_ratios.extend(_valuation_multiples(snap, market_price))
     all_ratios.extend(_growth(snap, prev_year_snap))
+
+    # Post-process: asignar rating heuristico + inputs si no estan
+    for r in all_ratios:
+        if not r.rating:
+            r.rating = _rate(r.value, r.name, r.unit)
+        if not r.inputs_used:
+            # Auto-derive inputs basicos de la formula
+            r.inputs_used = _derive_inputs_from_formula(r, snap)
+
     return all_ratios
+
+
+def _derive_inputs_from_formula(ratio, snap) -> dict:
+    """Intenta derivar los inputs numericos del ratio basado en su nombre/formula.
+
+    Retorna dict con los componentes principales (numerador, denominador) en MDP.
+    Si no puede inferir, retorna dict vacio.
+    """
+    inc = snap.parsed.income
+    bs = snap.parsed.balance
+    cf = snap.parsed.cashflow
+    inf = snap.parsed.informative
+
+    name = ratio.name.lower()
+    rev = (inc.revenue or 0) / 1e6
+    ebit = (inc.ebit or 0) / 1e6
+    ni = (inc.net_income or 0) / 1e6
+    ni_ctrl = (inc.net_income_controlling or inc.net_income or 0) / 1e6
+    gp = (inc.gross_profit or 0) / 1e6
+    pbt = (inc.pretax_income or 0) / 1e6
+    da_ttm = (inf.da_12m or 0) / 1e6
+    rev_ttm = (inf.revenue_12m or inc.revenue or 0) / 1e6
+    ebit_ttm = (inf.ebit_12m or inc.ebit or 0) / 1e6
+    cogs = (inc.cost_of_sales or 0) / 1e6
+    cash = (bs.cash or 0) / 1e6
+    debt = (bs.total_debt_with_leases or 0) / 1e6
+    ar = (bs.accounts_receivable or 0) / 1e6
+    inv = (bs.inventories or 0) / 1e6
+    ap = (bs.accounts_payable or 0) / 1e6
+    eq = (bs.equity_controlling or 0) / 1e6
+    ta = (bs.total_assets or 0) / 1e6
+    cl = (bs.total_current_liabilities or 0) / 1e6
+    ca = (bs.total_current_assets or 0) / 1e6
+    cfo = (cf.cfo or 0) / 1e6
+    capex = (cf.capex_ppe or 0) / 1e6
+
+    out = {}
+    if "gross margin" in name:
+        out = {"Gross Profit (MDP)": round(gp, 1), "Revenue (MDP)": round(rev, 1)}
+    elif "operating margin" in name or "ebit margin" in name:
+        out = {"EBIT TTM (MDP)": round(ebit_ttm, 1), "Revenue TTM (MDP)": round(rev_ttm, 1)}
+    elif "ebitda margin" in name:
+        out = {"EBITDA TTM (MDP)": round(ebit_ttm + da_ttm, 1), "Revenue TTM": round(rev_ttm, 1)}
+    elif "net margin (controlling)" in name:
+        out = {"NI Controlling (MDP)": round(ni_ctrl, 1), "Revenue (MDP)": round(rev, 1)}
+    elif "net margin" in name:
+        out = {"Net Income (MDP)": round(ni, 1), "Revenue (MDP)": round(rev, 1)}
+    elif "pretax margin" in name:
+        out = {"Pretax Income": round(pbt, 1), "Revenue": round(rev, 1)}
+    elif "fcf margin" in name:
+        fcf = cfo - capex
+        out = {"FCF (MDP)": round(fcf, 1), "Revenue (MDP)": round(rev, 1)}
+    elif "cfo margin" in name:
+        out = {"CFO (MDP)": round(cfo, 1), "Revenue (MDP)": round(rev, 1)}
+    elif "roa" in name:
+        out = {"Net Income": round(ni, 1), "Avg Total Assets": round(ta, 1)}
+    elif "roe" in name:
+        out = {"NI Controlling": round(ni_ctrl, 1), "Avg Equity": round(eq, 1)}
+    elif "roic" in name:
+        tax_rate = inc.effective_tax_rate or 0.30
+        nopat = ebit_ttm * (1 - tax_rate)
+        ic = eq + debt - cash
+        out = {"NOPAT (MDP)": round(nopat, 1), "Invested Capital": round(ic, 1)}
+    elif "roce" in name:
+        out = {"EBIT": round(ebit_ttm, 1), "Capital Employed": round(ta - cl, 1)}
+    elif "asset turnover" in name and "fixed" not in name and "working" not in name:
+        out = {"Revenue TTM": round(rev_ttm, 1), "Avg Total Assets": round(ta, 1)}
+    elif "fixed asset turnover" in name:
+        out = {"Revenue TTM": round(rev_ttm, 1), "Avg PPE": round((bs.ppe or 0)/1e6, 1)}
+    elif "current ratio" in name:
+        out = {"Current Assets": round(ca, 1), "Current Liabilities": round(cl, 1)}
+    elif "quick ratio" in name or "acid test" in name:
+        out = {"CA - Inv": round(ca - inv, 1), "Current Liab": round(cl, 1)}
+    elif "cash ratio" in name:
+        out = {"Cash": round(cash, 1), "Current Liab": round(cl, 1)}
+    elif "working capital" in name and "turnover" not in name:
+        out = {"Current Assets": round(ca, 1), "Current Liabilities": round(cl, 1)}
+    elif "debt / equity" in name or "d/e" in name:
+        out = {"Total Debt + Leases": round(debt, 1), "Equity": round(eq, 1)}
+    elif "debt / assets" in name:
+        out = {"Total Debt": round(debt, 1), "Total Assets": round(ta, 1)}
+    elif "net debt / ebitda" in name:
+        ebitda = ebit_ttm + da_ttm
+        out = {"Net Debt (MDP)": round(debt - cash, 1), "EBITDA TTM": round(ebitda, 1)}
+    elif "total debt / ebitda" in name:
+        ebitda = ebit_ttm + da_ttm
+        out = {"Total Debt": round(debt, 1), "EBITDA TTM": round(ebitda, 1)}
+    elif "equity ratio" in name:
+        out = {"Equity": round(eq, 1), "Total Assets": round(ta, 1)}
+    elif "interest coverage" in name and "ebitda" not in name:
+        int_exp = abs((inc.interest_expense or 0) / 1e6)
+        out = {"EBIT": round(ebit, 1), "Interest Expense": round(int_exp, 1)}
+    elif "ebitda coverage" in name:
+        ebitda = ebit_ttm + da_ttm
+        int_exp = abs((inc.interest_expense or 0) / 1e6)
+        out = {"EBITDA": round(ebitda, 1), "Interest Exp": round(int_exp, 1)}
+    elif "capitalization" in name:
+        out = {"Debt": round(debt, 1), "Debt + Equity": round(debt + eq, 1)}
+    elif "equity multiplier" in name or "financial leverage" in name:
+        out = {"Avg Assets": round(ta, 1), "Avg Equity": round(eq, 1)}
+    elif "inventory turnover" in name:
+        out = {"COGS TTM": round(cogs, 1), "Avg Inventory": round(inv, 1)}
+    elif "dio" in name or "days inventory" in name:
+        out = {"Inventory": round(inv, 1), "COGS TTM": round(cogs, 1)}
+    elif "receivables turnover" in name:
+        out = {"Revenue TTM": round(rev_ttm, 1), "Avg AR": round(ar, 1)}
+    elif "dso" in name or "days sales" in name:
+        out = {"AR": round(ar, 1), "Revenue TTM": round(rev_ttm, 1)}
+    elif "payables turnover" in name:
+        out = {"COGS": round(cogs, 1), "Avg AP": round(ap, 1)}
+    elif "dpo" in name or "days payable" in name:
+        out = {"AP": round(ap, 1), "COGS": round(cogs, 1)}
+    elif "cash conversion" in name or "ccc" in name:
+        out = {"DIO": "calc", "DSO": "calc", "DPO": "calc",
+                "Note": "DIO + DSO - DPO"}
+    elif "quality of earnings" in name or "cfo / net income" in name or "cfo/ni" in name:
+        out = {"CFO": round(cfo, 1), "Net Income": round(ni, 1)}
+    elif "fcf conversion" in name:
+        fcf = cfo - capex
+        ebitda = ebit_ttm + da_ttm
+        out = {"FCF": round(fcf, 1), "EBITDA TTM": round(ebitda, 1)}
+    elif "capex / sales" in name:
+        capex_total = capex + ((cf.capex_intangibles or 0) / 1e6)
+        out = {"CapEx Total": round(capex_total, 1), "Revenue": round(rev, 1)}
+    elif "capex / d&a" in name:
+        capex_total = capex + ((cf.capex_intangibles or 0) / 1e6)
+        out = {"CapEx Total": round(capex_total, 1), "D&A TTM": round(da_ttm, 1)}
+    elif "cfo / total debt" in name:
+        out = {"CFO": round(cfo, 1), "Total Debt": round(debt, 1)}
+    elif "fcf / total debt" in name:
+        fcf = cfo - capex
+        out = {"FCF": round(fcf, 1), "Total Debt": round(debt, 1)}
+    elif "eps" in name:
+        shares = (inf.shares_outstanding or 0) / 1e6
+        out = {"NI Controlling": round(ni_ctrl, 1), "Shares (M)": round(shares, 2)}
+    elif "bvps" in name:
+        shares = (inf.shares_outstanding or 0) / 1e6
+        out = {"Equity": round(eq, 1), "Shares (M)": round(shares, 2)}
+    elif "cfps" in name:
+        shares = (inf.shares_outstanding or 0) / 1e6
+        out = {"CFO": round(cfo, 1), "Shares (M)": round(shares, 2)}
+    elif "fcfps" in name:
+        shares = (inf.shares_outstanding or 0) / 1e6
+        fcf = cfo - capex
+        out = {"FCF": round(fcf, 1), "Shares (M)": round(shares, 2)}
+    elif "dps" in name or "dividend per share" in name:
+        shares = (inf.shares_outstanding or 0) / 1e6
+        div = abs((cf.dividends_paid or 0) / 1e6)
+        out = {"Dividends": round(div, 1), "Shares (M)": round(shares, 2)}
+    elif "payout ratio" in name:
+        div = abs((cf.dividends_paid or 0) / 1e6)
+        out = {"Dividends": round(div, 1), "NI Controlling": round(ni_ctrl, 1)}
+    elif "growth yoy" in name or "growth" in name:
+        out = {"Note": "Calculado vs mismo periodo año previo"}
+
+    return out
