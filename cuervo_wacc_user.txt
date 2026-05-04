@@ -1,0 +1,61 @@
+[  0] You can use this spreadsheet to compute your cost of capital. You can either use |  |  |  |  | 
+[  2] Estimation of Current Cost of Capital |  |  |  |  | 
+[  3] There are four ways in whch you can estimate your cost of capital. In the first, |  |  |  |  | 
+[ 10] Which approach will you be using? | Detailed |  |  |  | 
+[ 11] If direct input, enter cost of capital to use |           0.09 |  |  |  | 
+[ 12] Cost of capital based upon approach = |       0.112372 |  |  |  | 
+[ 14] Approach 1: Detailed Cost of Capital |  |  |  |  | 
+[ 15] Inputs |  |  |  |  | 
+[ 16] Equity |  |  |  |  | 
+[ 17] Number of Shares outstanding = |       3,591.18 |  |  |  | 
+[ 18] Current Market Price per share = | 14 |  |  |  | 
+[ 20] Approach for estimating beta | Single Business(US) |  |  |  | 
+[ 21] If direct input, enter levered beta (or regression beta) |            1.2 |  |  |  | 
+[ 22] Unlevered beta = |       0.506207 |  |  |  | 
+[ 23] Riskfree Rate = |         0.0921 |  |  |  | 
+[ 24] What approach do you want to use to input ERP? | Operating regions |  |  |  | 
+[ 25] Direct input for ERP (if you choose "will input" |           0.06 |  |  |  | 
+[ 26] Equity Risk Premium used in cost of equity = |      0.0564157 |  |  |  | 
+[ 28] Debt |  |  |  |  | 
+[ 29] Book Value of Straight Debt = |       20,830.3 |  |  |  | 
+[ 30] Interest Expense on Debt = |        1,141.6 |  |  |  | 
+[ 31] Average Maturity = | 3 |  |  |  | 
+[ 32] Approach for estimating pre-tax cost of debt | Actual rating |  |  |  | 
+[ 33] If direct input, input the pre-tax cost of debt |           0.04 |  |  |  | 
+[ 34] If actual rating, input the rating | A1/A+ |  |  |  | 
+[ 35] If synethetic rating, input the type of company | 2 |  |  |  | 
+[ 36] Pre-tax Cost of Debt = |         0.0998 |  |  |  | 
+[ 37] Tax Rate = |            0.3 |  |  |  | 
+[ 39] Book Value of Convertible Debt = | 0 |  |  |  | 
+[ 40] Interest Expense on Convertible = | 0 |  |  |  | 
+[ 41] Maturity of Convertible Bond = | 0 |  |  |  | 
+[ 42] Market Value of Convertible = | 0 |  |  |  | 
+[ 44] Debt value of operating leases = | 0 |  |  |  | 
+[ 46] Preferred Stock |  |  |  |  | 
+[ 47] Number of Preferred Shares = | 0 |  |  |  | 
+[ 48] Current Market Price per Share= | 70 |  |  |  | 
+[ 49] Annual Dividend per Share = | 5 |  |  |  | 
+[ 51] Output |  |  |  |  | 
+[ 52] Estimating Market Value of Straight Debt = |  |       18,498.6 |  |  | 
+[ 53] Estimated Value of Straight Debt in Convertible = |  | 0 |  |  | 
+[ 54] Value of Debt in Operating leases = |  | 0 |  |  | 
+[ 55] Estimated Value of Equity in Convertible = |  | 0 |  |  | 
+[ 56] Levered Beta for equity = |  |       0.636584 |  |  | 
+[ 58]  | Equity | Debt  | Preferred Stock | Capital | 
+[ 59] Market Value |       50,276.5 |       18,498.6 | 0 |       68,775.2 | 
+[ 60] Weight in Cost of Capital |       0.731027 |       0.268973 | 0 | 1 | 
+[ 61] Cost of Component |       0.128013 |        0.06986 |      0.0714286 |       0.112372 | 
+[ 64] Approach 2: industry average cost of capital, adjusted for riskfre rate differen |  |  |  |  | 
+[ 65] Industry  | Multibusiness(US) |  |  |  | 
+[ 66] Cost of capital, adjusted for riskfree rate difference |       0.138245 |  |  |  | 
+[ 68] Approach 3: Uae histogram of costs of capital of all publicly traded firms |  |  |  |  | 
+[ 69] Which grouping (US, Emerging Markets, Global) | US |  |  |  | 
+[ 70] Which risk grouping does your company fall in? | Median |  |  |  | 
+[ 71] Cost of capital based upon decile/group chosen |         0.1298 |  |  |  | 
+[ 73] Region | First Decile | First Quartile | Median | Third Quartile | Ninth Decile
+[ 74] Emerging |         0.1204 |         0.1307 |         0.1424 |         0.1562 |         0.1744
+[ 75] Europe |         0.1141 |         0.1228 |          0.136 |         0.1474 |         0.1615
+[ 76] Global |         0.1152 |         0.1266 |         0.1369 |         0.1494 |         0.1638
+[ 77] Japan |         0.1149 |         0.1246 |         0.1354 |          0.144 |         0.1554
+[ 78] US |         0.1041 |          0.115 |         0.1298 |         0.1394 |         0.1468
+[ 79] These costs of capital are all in US dollars and reflect the US dollar  riskfree |  |  |  |  | 

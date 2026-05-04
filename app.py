@@ -100,6 +100,25 @@ st.set_page_config(
 
 
 # ---------------------------------------------------------------------------
+# AUTO-RESTORE de XBRLs persistidos en session_state al inicio de la app
+# (Streamlit Cloud filesystem es efímero — se borra entre reruns/deploys)
+# ---------------------------------------------------------------------------
+if "uploaded_xbrls" not in st.session_state:
+    st.session_state["uploaded_xbrls"] = {}
+
+# Re-escribir a disco TODOS los archivos persistidos en session_state si no existen
+_raw_dir = ROOT / "data" / "raw_xbrl"
+_raw_dir.mkdir(parents=True, exist_ok=True)
+for _fname, _fbytes in st.session_state["uploaded_xbrls"].items():
+    _fpath = _raw_dir / _fname
+    if not _fpath.exists():
+        try:
+            _fpath.write_bytes(_fbytes)
+        except Exception:
+            pass
+
+
+# ---------------------------------------------------------------------------
 # Bloomberg-style CSS (custom theme on top of Streamlit)
 # ---------------------------------------------------------------------------
 st.markdown("""
@@ -1267,12 +1286,19 @@ if mode == "Single DCF":
                 fmt_df = format_panel(panel_df, kinds_list)
                 import html as _html
 
-                # CSS Bloomberg-grade
+                # CSS Bloomberg-grade con STICKY first column + sticky header
                 css = """
                 <style>
-                .bb-wrap { overflow-x: auto; margin: 4px 0 18px 0; }
+                .bb-wrap {
+                    overflow-x: auto;
+                    overflow-y: visible;
+                    margin: 4px 0 18px 0;
+                    max-width: 100%;
+                    position: relative;
+                }
                 .bb-table {
-                    border-collapse: collapse;
+                    border-collapse: separate;          /* requerido para sticky */
+                    border-spacing: 0;
                     width: 100%;
                     font-family: "Segoe UI","Arial","Helvetica Neue",sans-serif;
                     font-size: 12.5px;
@@ -1282,6 +1308,7 @@ if mode == "Single DCF":
                     padding: 4px 12px;
                     border-bottom: 1px solid #E5E7EB;
                 }
+                /* Column headers (top row) - sticky en eje Y */
                 .bb-col-head {
                     text-align: right;
                     background: #F9FAFB;
@@ -1290,35 +1317,52 @@ if mode == "Single DCF":
                     border-bottom: 2px solid #1F4E79 !important;
                     position: sticky; top: 0; z-index: 2;
                 }
+                /* PRIMERA COLUMNA (concepto) - STICKY en eje X */
                 .bb-row-head {
                     text-align: left;
                     white-space: pre;
                     padding-left: 12px;
                     font-weight: inherit;
                     color: inherit;
-                    background: inherit;
+                    position: sticky;
+                    left: 0;
+                    z-index: 1;                           /* arriba de td normales */
+                    box-shadow: 2px 0 4px -2px rgba(0,0,0,0.15);  /* sombra sutil al scroll */
+                    min-width: 280px;
+                    max-width: 380px;
+                }
+                /* Esquina top-left (intersección sticky row + col) - z-index mas alto */
+                .bb-col-head.bb-row-head {
+                    z-index: 3;
                 }
                 .bb-table td { text-align: right; font-variant-numeric: tabular-nums; }
-                /* Row variants */
+                /* Row variants - aplicar bg a TH sticky tambien para que tape al hacer scroll */
                 .bb-r-header   { background: #1F4E79; color: #FFFFFF; font-weight: 700; }
-                .bb-r-header   td, .bb-r-header   th { color: #FFFFFF !important; font-weight: 700 !important; }
+                .bb-r-header   td, .bb-r-header   th { color: #FFFFFF !important; font-weight: 700 !important; background: #1F4E79; }
                 .bb-r-subtotal { background: #DCEDC8; color: #14532D; font-weight: 700; }
-                .bb-r-subtotal td, .bb-r-subtotal th { font-weight: 700 !important; }
+                .bb-r-subtotal td, .bb-r-subtotal th { font-weight: 700 !important; background: #DCEDC8; }
                 .bb-r-section  { background: #4B5563; color: #FFFFFF; font-weight: 600; font-style: italic; }
-                .bb-r-section  td, .bb-r-section  th { color: #FFFFFF !important; }
+                .bb-r-section  td, .bb-r-section  th { color: #FFFFFF !important; background: #4B5563; }
                 .bb-r-ratio    { background: #F1F8E9; color: #1F2937; font-style: italic; }
+                .bb-r-ratio    td, .bb-r-ratio    th { background: #F1F8E9; }
                 .bb-r-ratio_eps{ background: #FFF8E1; color: #1F2937; font-style: italic; }
+                .bb-r-ratio_eps td, .bb-r-ratio_eps th { background: #FFF8E1; }
                 .bb-r-ratio_x  { background: #FFF3E0; color: #1F2937; font-style: italic; }
+                .bb-r-ratio_x  td, .bb-r-ratio_x  th { background: #FFF3E0; }
                 .bb-r-raw_days { background: #FCE7F3; color: #1F2937; font-style: italic; }
+                .bb-r-raw_days td, .bb-r-raw_days th { background: #FCE7F3; }
                 .bb-r-raw      { background: #F9FBF7; color: #1F2937; }
+                .bb-r-raw      td, .bb-r-raw      th { background: #F9FBF7; }
                 .bb-r-string   { background: #F3F4F6; color: #374151; font-style: italic; }
+                .bb-r-string   td, .bb-r-string   th { background: #F3F4F6; }
                 .bb-r-sub      { background: #FAFCFA; color: #4B5563; font-size: 11.5px; }
+                .bb-r-sub      td, .bb-r-sub      th { background: #FAFCFA; }
                 .bb-r-bold_line{ background: #F9FBF7; color: #111827; font-weight: 700; }
-                .bb-r-bold_line td, .bb-r-bold_line th { font-weight: 700 !important; }
+                .bb-r-bold_line td, .bb-r-bold_line th { font-weight: 700 !important; background: #F9FBF7; }
                 .bb-r-spacer   { background: #FFFFFF; height: 8px; }
-                .bb-r-spacer td, .bb-r-spacer th { padding: 0 12px; border-bottom: none; }
+                .bb-r-spacer td, .bb-r-spacer th { padding: 0 12px; border-bottom: none; background: #FFFFFF; }
                 .bb-r-line     { background: #FFFFFF; color: #1F2937; }
-                .bb-r-line:hover, .bb-r-bold_line:hover, .bb-r-sub:hover { background: #EFF6FF; }
+                .bb-r-line     td, .bb-r-line     th { background: #FFFFFF; }
                 </style>
                 """
 
@@ -3062,18 +3106,75 @@ elif mode == "Upload XBRL":
         "Naming convention: `ifrsxbrl_<TICKER>_<YYYY>-<Q>.xls`"
     )
 
-    uploaded = st.file_uploader(
-        "Archivo(s) XBRL", type=["xls", "xlsx"], accept_multiple_files=True,
-    )
-    if not uploaded:
-        st.info("Sube uno o mas archivos para procesar.")
-        st.stop()
+    # ----- PERSISTENCIA (Streamlit Cloud filesystem es efímero) -----
+    # Guardamos los bytes uploaded en st.session_state y los re-escribimos a disco
+    # al inicio si no existen. Persiste durante la sesión del navegador.
+    if "uploaded_xbrls" not in st.session_state:
+        st.session_state["uploaded_xbrls"] = {}   # filename -> bytes
 
     raw = ROOT / "data" / "raw_xbrl"
     raw.mkdir(parents=True, exist_ok=True)
+
+    # Auto-restore: si hay archivos en session_state pero no en disco, escribirlos
+    restored = []
+    for fname, fbytes in st.session_state["uploaded_xbrls"].items():
+        path = raw / fname
+        if not path.exists():
+            path.write_bytes(fbytes)
+            restored.append(fname)
+    if restored:
+        st.success(
+            f"♻️ Restaurados {len(restored)} archivos de session_state al disco "
+            f"(persistencia entre reruns):\n" + "\n".join(f"  • {f}" for f in restored)
+        )
+        _list_local_xbrl_names.clear()
+
+    # Mostrar archivos en session_state actuales
+    if st.session_state["uploaded_xbrls"]:
+        with st.expander(
+            f"📦 {len(st.session_state['uploaded_xbrls'])} archivos persistidos en sesión "
+            "(sobreviven reruns hasta cerrar el navegador)",
+            expanded=False,
+        ):
+            persisted_df = pd.DataFrame([
+                {"Archivo": fname, "Tamaño (KB)": f"{len(fb)/1024:.1f}"}
+                for fname, fb in st.session_state["uploaded_xbrls"].items()
+            ])
+            st.dataframe(persisted_df, hide_index=True, use_container_width=True)
+            colp1, colp2 = st.columns(2)
+            with colp1:
+                if st.button("🗑️ Limpiar archivos persistidos", key="clear_persisted"):
+                    st.session_state["uploaded_xbrls"] = {}
+                    st.success("Archivos persistidos borrados de session_state.")
+                    st.rerun()
+            with colp2:
+                st.caption(
+                    "💡 Para persistencia PERMANENTE, hacer commit de los archivos "
+                    "a `data/raw_xbrl/` en el repo GitHub."
+                )
+
+    st.divider()
+
+    uploaded = st.file_uploader(
+        "Archivo(s) XBRL", type=["xls", "xlsx"], accept_multiple_files=True,
+    )
+
+    if not uploaded:
+        if not st.session_state["uploaded_xbrls"]:
+            st.info("Sube uno o mas archivos para procesar.")
+        else:
+            st.info(
+                f"No hay archivos nuevos. {len(st.session_state['uploaded_xbrls'])} "
+                "ya están persistidos en sesión (panel arriba)."
+            )
+        st.stop()
+
     summaries = []
 
     for u in uploaded:
+        # 1) Guardar bytes en session_state (persistencia entre reruns)
+        st.session_state["uploaded_xbrls"][u.name] = u.getvalue()
+        # 2) Escribir a disco para parser
         path = raw / u.name
         path.write_bytes(u.getvalue())
         try:
@@ -3095,8 +3196,17 @@ elif mode == "Upload XBRL":
 
     _list_local_xbrl_names.clear()
     _parse_cached.clear()
-    st.success(f"Procesados {len(summaries)} archivos")
+    st.success(
+        f"✅ Procesados {len(summaries)} archivos. "
+        f"Persistidos en session_state ({len(st.session_state['uploaded_xbrls'])} totales)."
+    )
     st.dataframe(pd.DataFrame(summaries), hide_index=True, use_container_width=True)
+    st.info(
+        "ℹ️ **Persistencia:** Los archivos sobrevivirán reruns de Streamlit "
+        "**durante esta sesión del navegador**. Si cierras la pestaña, se pierden.\n\n"
+        "**Para persistencia permanente:** descarga los archivos y haz commit "
+        "manualmente a `data/raw_xbrl/` en el repo GitHub."
+    )
 
 
 # ===========================================================================
