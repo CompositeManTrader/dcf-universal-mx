@@ -1113,10 +1113,10 @@ if mode == "Single DCF":
     tab_dam_input.__enter__()
     st.subheader(f"📋 Damodaran Input Sheet — {issuer.ticker}")
     st.caption(
-        "Réplica exacta de la hoja **Input sheet** del modelo `fcffsimpleginzu.xlsx`. "
-        "Los valores se auto-pueblan desde el XBRL parseado. "
-        "Edita cualquier celda para hacer override (no rompe el modelo principal: "
-        "son los mismos drivers que ves en *Drivers DCF*)."
+        f"Réplica de la hoja **Input sheet** de `fcffsimpleginzu.xlsx`. "
+        f"Auto-poblado desde el XBRL parseado · "
+        f"**Most Recent 12M** = {res.info.period_end} · "
+        f"**Last 10K before LTM** = penúltimo anual del histórico"
     )
 
     from datetime import date as _date
@@ -1159,24 +1159,39 @@ if mode == "Single DCF":
     eff_tax_recent = base.effective_tax_rate
     price_recent = float(issuer.market_price or 0.0)
 
-    # Para "Last 10K before LTM" intentamos sacar del histórico anual
+    # Para "Last 10K before LTM" sacamos del penúltimo anual del histórico.
+    # Usamos pp.dcf (ya en MDP, mismas unidades que `base.*`) para consistencia.
     last_10k = {}
+    years_since_10k = None
     try:
         from src.dcf_mexico.historical.series import load_historical
         _hs = load_historical(issuer.ticker,
                               parse_func=lambda fp: _parse_cached(str(fp)))
         if _hs.annual and len(_hs.annual) >= 2:
-            # Penultimo anual = "Last 10K before LTM"
+            # Penúltimo anual = "Last 10K before LTM"
             prev_snap = _hs.annual[-2]
-            pp = prev_snap.parsed
+            ppd = prev_snap.parsed.dcf       # ya en MDP
+            ppi = prev_snap.parsed.informative
             last_10k = {
-                "revenue": pp.income.revenue,
-                "ebit": pp.income.operating_income,
-                "intexp": pp.income.interest_expense,
-                "equity_bv": pp.balance.total_equity_controlling,
-                "debt": pp.balance.total_debt_with_leases,
-                "cash": pp.balance.cash_and_equivalents,
+                "revenue":   getattr(ppd, "revenue", None),
+                "ebit":      getattr(ppd, "ebit", None),
+                "intexp":    getattr(ppd, "interest_expense", None),
+                "equity_bv": getattr(ppd, "equity_bv", None),
+                "debt":      getattr(ppd, "total_debt", None),
+                "cash":      getattr(ppd, "cash", None),
+                "minority":  getattr(ppd, "minority_interest", None),
+                "nonop":     getattr(ppd, "non_operating_assets", None),
+                "shares":    getattr(ppi, "shares_outstanding", None),
+                "eff_tax":   getattr(ppd, "effective_tax_rate", None),
             }
+            # Years since last 10K
+            try:
+                from datetime import datetime
+                d_recent = datetime.strptime(res.info.period_end, "%Y-%m-%d")
+                d_prev = datetime.strptime(prev_snap.period_end, "%Y-%m-%d")
+                years_since_10k = round((d_recent - d_prev).days / 365.25, 2)
+            except Exception:
+                years_since_10k = None
     except Exception:
         pass
 
@@ -1201,30 +1216,64 @@ if mode == "Single DCF":
     # ----- SECCION B: Base year numbers -----
     with st.expander("**📊 B · Base year numbers** (units: MDP)",
                        expanded=True):
-        h = st.columns([3.2, 1.4, 1.4, 3.0])
+        h = st.columns([3.2, 1.4, 1.4, 1.0, 2.4])
         h[0].markdown("**Concept**")
         h[1].markdown("**Most Recent 12M**")
         h[2].markdown("**Last 10K before LTM**")
-        h[3].markdown("**Source / Note**")
+        h[3].markdown("**Years since 10K**")
+        h[4].markdown("**Source / Note**")
         st.divider()
-        _ds_row("Revenues", rev_recent, last_10k.get("revenue"),
-                  "TTM = Q4 acum. Auto desde income.revenue")
-        _ds_row("Operating income (EBIT)", ebit_recent, last_10k.get("ebit"),
-                  "EBIT TTM = operating_income. Si negativo → review")
-        _ds_row("Interest expense", intexp_recent, last_10k.get("intexp"),
-                  "Auto desde income.interest_expense")
-        _ds_row("Book value of equity", equity_bv_recent,
-                  last_10k.get("equity_bv"),
-                  "Equity controladora (sin minority)")
-        _ds_row("Book value of debt", debt_recent, last_10k.get("debt"),
-                  "total_debt_with_leases (incluye operating leases)")
-        _ds_row("Cash and Marketable Securities", cash_recent,
-                  last_10k.get("cash"),
-                  "cash + marketable_securities")
-        _ds_row("Cross holdings & non-operating assets", nonop_recent, None,
-                  "Auto desde balance.non_operating_assets")
-        _ds_row("Minority interests", minority_recent, None,
-                  "balance.minority_interest")
+
+        # Helper actualizado que acepta col extra "Years since"
+        def _ds_row5(label, val_recent, val_prior=None,
+                       val_years=None, note="", unit=""):
+            cols = st.columns([3.2, 1.4, 1.4, 1.0, 2.4])
+            cols[0].markdown(f"**{label}**")
+            def _fmt(v):
+                if v is None or v == "":
+                    return "—"
+                if isinstance(v, (int, float)):
+                    if unit == "%":
+                        return f"{v*100:,.2f}%"
+                    if unit == "x":
+                        return f"{v:,.2f}x"
+                    if abs(v) >= 1000:
+                        return f"{v:,.1f}"
+                    return f"{v:,.4f}" if abs(v) < 1 else f"{v:,.2f}"
+                return str(v)
+            cols[1].markdown(f"`{_fmt(val_recent)}`")
+            cols[2].markdown(f"`{_fmt(val_prior)}`" if val_prior is not None else "—")
+            if val_years is not None:
+                cols[3].markdown(f"`{val_years}`")
+            else:
+                cols[3].markdown("")
+            if note:
+                cols[4].caption(note)
+
+        _ds_row5("Revenues", rev_recent, last_10k.get("revenue"),
+                   years_since_10k,
+                   "TTM. Auto desde income.revenue")
+        _ds_row5("Operating income (EBIT)", ebit_recent, last_10k.get("ebit"),
+                   None,
+                   "EBIT TTM. Si negativo → review")
+        _ds_row5("Interest expense", intexp_recent, last_10k.get("intexp"),
+                   None,
+                   "Auto desde income.interest_expense")
+        _ds_row5("Book value of equity", equity_bv_recent,
+                   last_10k.get("equity_bv"), None,
+                   "Equity controladora (sin minority)")
+        _ds_row5("Book value of debt", debt_recent, last_10k.get("debt"),
+                   None,
+                   "total_debt = financial + lease (IFRS 16)")
+        _ds_row5("Cash and Marketable Securities", cash_recent,
+                   last_10k.get("cash"), None,
+                   "balance.cash + marketable_securities")
+        _ds_row5("Cross holdings & non-operating assets",
+                   nonop_recent, last_10k.get("nonop"), None,
+                   "Auto desde dcf.non_operating_assets")
+        _ds_row5("Minority interests", minority_recent,
+                   last_10k.get("minority"), None,
+                   "balance.minority_interest")
         st.markdown("")
         c_rd, c_ol = st.columns(2)
         with c_rd:
@@ -1236,7 +1285,7 @@ if mode == "Single DCF":
             st.selectbox("Operating lease commitments?",
                          ["No (ya capitalizadas)", "Yes"], index=0,
                          key=f"dam_in_ol_{issuer.ticker}",
-                         help="MX-IFRS 16: ya están en total_debt_with_leases → No")
+                         help="MX-IFRS 16: ya están en total_debt → No")
 
     # ----- SECCION C: Market data -----
     with st.expander("**💹 C · Market data**", expanded=True):
