@@ -12,6 +12,7 @@ from .storage import (
     load_all_reports, delete_report, list_report_files,
     save_and_commit_to_github,
     get_storage_root, get_ticker_dir,
+    get_pdfs_dir, save_pdf_alongside_report, load_pdf_for_report,
 )
 from .extractor import (
     extract_with_claude_api, extract_from_manual_json,
@@ -49,6 +50,7 @@ __all__ = [
     "load_all_reports", "delete_report", "list_report_files",
     "save_and_commit_to_github",
     "get_storage_root", "get_ticker_dir",
+    "get_pdfs_dir", "save_pdf_alongside_report", "load_pdf_for_report",
     # Extractor
     "extract_with_claude_api", "extract_from_manual_json",
     "get_cuervo_demo_reports", "EXTRACTION_PROMPT",

@@ -6,6 +6,7 @@
   "title": "Guia para el ano completo 2026",
   "source_url": "",
   "pdf_filename": "Guia para el anio completo 2026.pdf",
+  "pdf_local_path": "data/investor_reports/CUERVO/pdfs/Guia para el anio completo 2026.pdf",
   "guidance": [
     {
       "metric": "Ventas Netas Consolidadas (Constant Currency)",
@@ -71,6 +72,6 @@
   "summary_es": "CUERVO formaliza guia 2026 NEGATIVA: Ventas Netas Consolidadas caeran en rango bajo de single digit (-1% a -3%) a tipo de cambio constante. CapEx se reduce ligeramente a US$90-110M (vs ~$120M en 2025) pero se mantiene robusto, enfocado en expansion de destilerias y anejamiento de tequila premium. AMP se mantiene 19-21% de ventas (en linea historico). Tono CAUTELOSO.",
   "summary_en": "",
   "extraction_method": "claude_code_slash",
-  "extraction_date": "2026-05-04T02:17:55.977583",
+  "extraction_date": "2026-05-04T02:29:14.439042",
   "extraction_notes": ""
 }

@@ -28,6 +28,7 @@ guia_2026 = InvestorReport(
     report_type=ReportType.GUIDANCE_UPDATE.value,
     title="Guia para el ano completo 2026",
     pdf_filename="Guia para el anio completo 2026.pdf",
+    pdf_local_path="data/investor_reports/CUERVO/pdfs/Guia para el anio completo 2026.pdf",
     guidance=[
         GuidanceItem(
             metric="Ventas Netas Consolidadas (Constant Currency)",
@@ -112,6 +113,7 @@ q1_26 = InvestorReport(
     report_type=ReportType.EARNINGS_RELEASE.value,
     title="Becle, S.A.B. de C.V. Reporta Resultados Financieros No Auditados del 1T26",
     pdf_filename="1T26 Reporte de Resultados - Final.pdf",
+    pdf_local_path="data/investor_reports/CUERVO/pdfs/1T26 Reporte de Resultados - Final.pdf",
     guidance=[
         GuidanceItem(
             metric="AMP % Ventas Netas (FY2026 reaffirm)",

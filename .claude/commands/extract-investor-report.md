@@ -103,20 +103,30 @@ Procesar un PDF de Investor Relations de una emisora IPC mexicana y guardar el r
 
 ## Save to disk
 
-4. **Generate filename**: `{TICKER}_{report_date}_{report_type}.json`
+4. **Copiar el PDF** al repo: `data/investor_reports/{TICKER}/pdfs/{filename}.pdf`
+   (para que se pueda visualizar inline en Streamlit)
+   - Usar Bash `cp` o `Write` con bytes del PDF
+   - Crear directorio `pdfs/` si no existe
+
+5. **Generate filename JSON**: `{TICKER}_{report_date}_{report_type}.json`
    Example: `CUERVO_2026-02-27_guidance_update.json`
 
-5. **Write to**: `data/investor_reports/{TICKER}/{filename}.json`
+6. **Write JSON to**: `data/investor_reports/{TICKER}/{filename}.json`
    Crear directorio si no existe.
+   Asegurar que el JSON tenga `pdf_local_path` apuntando al PDF copiado:
+   ```
+   "pdf_local_path": "data/investor_reports/CUERVO/pdfs/Guia2026.pdf"
+   ```
 
-6. **Validate** que el JSON es parseable con Python `json.loads()`.
+7. **Validate** que el JSON es parseable con Python `json.loads()`.
 
 ## (Opcional) GitHub commit
 
-7. Si el usuario tiene GitHub configurado y lo pide, hacer commit con mensaje:
+8. Si el usuario tiene GitHub configurado y lo pide, hacer commit con mensaje:
    ```
    intel({ticker.lower()}): add {report_type} {period_covered} ({report_date})
    ```
+   Incluir tanto el JSON como el PDF en el commit.
 
 ## Output
 

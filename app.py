@@ -2623,6 +2623,15 @@ if mode == "Single DCF":
                         key=f"wizard_commit_{issuer.ticker}",
                     )
 
+                # Optional: subir el PDF original también (para viewer inline)
+                wizard_pdf = st.file_uploader(
+                    "📄 (Opcional) Sube el PDF original también — para verlo inline después",
+                    type=["pdf"],
+                    key=f"wizard_pdf_{issuer.ticker}",
+                    help="Si subes el PDF aquí, se guardará junto con el JSON y "
+                         "podrás verlo inline en el timeline.",
+                )
+
                 # Live JSON validator
                 if json_text:
                     # Strip markdown fences si existen
@@ -2654,22 +2663,40 @@ if mode == "Single DCF":
                             clean = "\n".join(lines[1:-1])
                         else:
                             clean = "\n".join(lines[1:])
+                    # Si el usuario subió el PDF, usar su nombre real
+                    if wizard_pdf:
+                        fname = wizard_pdf.name
                     report, err = extract_from_manual_json(
                         clean.strip(), ticker=issuer.ticker, filename=fname,
                     )
                     if err:
                         st.error(f"❌ {err}")
                     elif report:
+                        # Guardar PDF original si se subio
+                        if wizard_pdf:
+                            from src.dcf_mexico.investor_intel import save_pdf_alongside_report
+                            pdf_path = save_pdf_alongside_report(
+                                wizard_pdf.getvalue(),
+                                ticker=issuer.ticker,
+                                pdf_filename=wizard_pdf.name,
+                            )
+                            # Set relative path en el report
+                            report.pdf_local_path = (
+                                f"data/investor_reports/{issuer.ticker.upper()}/"
+                                f"pdfs/{wizard_pdf.name}"
+                            )
+                            st.success(f"📄 PDF guardado: {pdf_path.name}")
+
                         if do_commit:
                             fpath, gh_result = save_and_commit_to_github(report)
-                            st.success(f"✅ Guardado: {fpath.name}")
+                            st.success(f"✅ JSON guardado: {fpath.name}")
                             if gh_result and gh_result.ok:
                                 st.success(f"📤 GitHub: {gh_result.commit_url}")
                             elif gh_result:
                                 st.warning(f"⚠️ Commit GitHub falló: {gh_result.message}")
                         else:
                             fpath = save_report(report)
-                            st.success(f"✅ Guardado local: {fpath.name}")
+                            st.success(f"✅ JSON guardado local: {fpath.name}")
                         st.rerun()
 
         elif intel_mode == "💻 Slash command Claude Code":
@@ -2727,8 +2754,19 @@ if mode == "Single DCF":
                         if err:
                             st.error(f"❌ Error: {err}")
                         elif report:
+                            # Guardar PDF original tambien
+                            from src.dcf_mexico.investor_intel import save_pdf_alongside_report
+                            save_pdf_alongside_report(
+                                uploaded_pdf.getvalue(),
+                                ticker=issuer.ticker,
+                                pdf_filename=uploaded_pdf.name,
+                            )
+                            report.pdf_local_path = (
+                                f"data/investor_reports/{issuer.ticker.upper()}/"
+                                f"pdfs/{uploaded_pdf.name}"
+                            )
                             fpath, gh_result = save_and_commit_to_github(report)
-                            st.success(f"✅ Procesado y guardado: {fpath.name}")
+                            st.success(f"✅ Procesado: {fpath.name} + PDF guardado")
                             if gh_result and gh_result.ok:
                                 st.success(f"📤 Commit a GitHub: {gh_result.commit_url}")
                             st.rerun()
@@ -2855,7 +2893,48 @@ if mode == "Single DCF":
                     col1, col2 = st.columns([2, 1])
 
                     with col1:
-                        st.markdown(f"**📄 PDF:** `{r.pdf_filename}`")
+                        # PDF original (download + viewer embebido)
+                        from src.dcf_mexico.investor_intel import load_pdf_for_report
+                        pdf_bytes = load_pdf_for_report(r)
+
+                        if pdf_bytes:
+                            pdf_c1, pdf_c2 = st.columns([1, 2])
+                            with pdf_c1:
+                                st.download_button(
+                                    label="📄 Descargar PDF",
+                                    data=pdf_bytes,
+                                    file_name=r.pdf_filename or "report.pdf",
+                                    mime="application/pdf",
+                                    key=f"dl_pdf_{r.report_id}",
+                                    use_container_width=True,
+                                )
+                            with pdf_c2:
+                                show_viewer = st.toggle(
+                                    "👁️ Ver PDF inline",
+                                    value=False,
+                                    key=f"toggle_pdf_{r.report_id}",
+                                )
+                            if show_viewer:
+                                # Embed PDF as base64 iframe
+                                import base64 as _b64
+                                pdf_b64 = _b64.b64encode(pdf_bytes).decode("utf-8")
+                                pdf_display = (
+                                    f'<iframe src="data:application/pdf;base64,{pdf_b64}" '
+                                    f'width="100%" height="800px" type="application/pdf" '
+                                    f'style="border: 1px solid #ddd; border-radius: 4px;">'
+                                    f'</iframe>'
+                                )
+                                st.markdown(pdf_display, unsafe_allow_html=True)
+                                st.caption(
+                                    f"PDF: `{r.pdf_filename}` "
+                                    f"({len(pdf_bytes)/1024:.0f} KB)"
+                                )
+                        else:
+                            st.caption(
+                                f"📄 PDF: `{r.pdf_filename}` (no guardado en repo — "
+                                "solo JSON disponible)"
+                            )
+
                         if r.summary_es:
                             st.info(f"📝 **Resumen:** {r.summary_es}")
 

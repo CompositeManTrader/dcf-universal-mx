@@ -35,6 +35,50 @@ def get_ticker_dir(ticker: str, base_dir: Optional[Path] = None) -> Path:
     return tdir
 
 
+def get_pdfs_dir(ticker: str, base_dir: Optional[Path] = None) -> Path:
+    """Devuelve la carpeta de PDFs para un ticker."""
+    pdfs_dir = get_ticker_dir(ticker, base_dir) / "pdfs"
+    pdfs_dir.mkdir(parents=True, exist_ok=True)
+    return pdfs_dir
+
+
+def save_pdf_alongside_report(
+    pdf_bytes: bytes,
+    ticker: str,
+    pdf_filename: str,
+    base_dir: Optional[Path] = None,
+) -> Path:
+    """Guarda el PDF original junto con el JSON.
+
+    Path: data/investor_reports/{TICKER}/pdfs/{filename}.pdf
+    """
+    pdfs_dir = get_pdfs_dir(ticker, base_dir)
+    safe_filename = pdf_filename.replace("/", "_").replace("\\", "_")
+    pdf_path = pdfs_dir / safe_filename
+    pdf_path.write_bytes(pdf_bytes)
+    return pdf_path
+
+
+def load_pdf_for_report(report, base_dir: Optional[Path] = None) -> Optional[bytes]:
+    """Carga el PDF original asociado a un report (si existe).
+
+    Returns: bytes del PDF, o None si no existe.
+    """
+    if not report.pdf_local_path:
+        return None
+    from ..config import _project_root
+    repo_root = _project_root() if base_dir is None else base_dir.parent.parent
+    pdf_full = repo_root / report.pdf_local_path
+    if pdf_full.exists():
+        return pdf_full.read_bytes()
+    # Try fallback al pdf_filename en pdfs_dir
+    pdfs_dir = get_pdfs_dir(report.ticker, base_dir)
+    fallback = pdfs_dir / report.pdf_filename
+    if fallback.exists():
+        return fallback.read_bytes()
+    return None
+
+
 def save_report(report: InvestorReport, base_dir: Optional[Path] = None) -> Path:
     """Guarda un InvestorReport como JSON.
 

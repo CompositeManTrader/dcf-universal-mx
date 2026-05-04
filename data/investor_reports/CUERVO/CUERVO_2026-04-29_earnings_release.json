@@ -6,6 +6,7 @@
   "title": "Becle, S.A.B. de C.V. Reporta Resultados Financieros No Auditados del 1T26",
   "source_url": "",
   "pdf_filename": "1T26 Reporte de Resultados - Final.pdf",
+  "pdf_local_path": "data/investor_reports/CUERVO/pdfs/1T26 Reporte de Resultados - Final.pdf",
   "guidance": [
     {
       "metric": "AMP % Ventas Netas (FY2026 reaffirm)",
@@ -124,6 +125,6 @@
   "summary_es": "CUERVO reporto 1T26 BRUTALMENTE DEBIL: Ventas -23.1% YoY (-13.5% en moneda constante), UAFIDA -52.5%, Utilidad Neta -66.5%. Margen UAFIDA cayo 860bps a 13.9% (16.7% ajustado por FX). Drivers principales: (1) transicion de distribuidores en EE.UU. con destocking del sistema, (2) apreciacion peso vs USD, (3) mezcla geografica desfavorable. POSITIVOS: Mexico organico +6.1%, RoW volume +20.1%, costos agave estables, AMP discipline 20.4% (dentro de guia 19-21%). Empresa completo deleveraging: Net Debt/UAFIDA 1.0x (vs 1.9x). Management RE-AFFIRMA solo guia AMP, NO actualiza revenue. Tono DEFENSIVO.",
   "summary_en": "",
   "extraction_method": "claude_code_slash",
-  "extraction_date": "2026-05-04T02:17:56.014860",
+  "extraction_date": "2026-05-04T02:29:14.474691",
   "extraction_notes": ""
 }

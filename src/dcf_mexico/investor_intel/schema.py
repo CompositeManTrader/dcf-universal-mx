@@ -147,6 +147,7 @@ class InvestorReport:
     title: str = ""                          # título del PDF
     source_url: str = ""                     # URL si scrapeado
     pdf_filename: str = ""                   # nombre del archivo PDF
+    pdf_local_path: str = ""                 # path relativo al repo (e.g. "data/investor_reports/CUERVO/pdfs/x.pdf")
 
     # Extracción estructurada
     guidance: List[GuidanceItem] = field(default_factory=list)
