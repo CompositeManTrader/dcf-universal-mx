@@ -4012,6 +4012,69 @@ if mode == "Single DCF":
                                     f"*Impact:* {e.financial_impact} • Materialidad: {e.materiality}"
                                 )
 
+                        # ===== TRANSCRIPT (earnings calls) =====
+                        transcript_text = getattr(r, "transcript_text", "")
+                        participants = getattr(r, "participants", [])
+                        qa_topics = getattr(r, "qa_topics", [])
+                        if transcript_text or participants or qa_topics:
+                            with st.expander(
+                                f"📜 Transcript completo "
+                                f"({len(transcript_text):,} chars · "
+                                f"{len(participants)} mgmt · "
+                                f"{len(qa_topics)} analysts)",
+                                expanded=False,
+                            ):
+                                if participants:
+                                    st.markdown("**👔 Company Participants:**")
+                                    for p in participants:
+                                        st.markdown(f"• {p}")
+                                if qa_topics:
+                                    st.markdown("**🎤 Q&A Participants (analistas):**")
+                                    for q in qa_topics:
+                                        st.markdown(f"• {q}")
+                                if transcript_text:
+                                    # Search box dentro del transcript
+                                    search_term = st.text_input(
+                                        "🔍 Buscar en transcript",
+                                        key=f"tr_search_{r.report_id}",
+                                        placeholder="ej. AMP, EBITDA, USA, "
+                                                    "guidance, supply chain...",
+                                    )
+                                    if search_term and search_term.strip():
+                                        # Mostrar líneas que contienen el término
+                                        # con contexto de 2 líneas antes/después
+                                        lines = transcript_text.split("\n")
+                                        hits = []
+                                        for i, line in enumerate(lines):
+                                            if search_term.lower() in line.lower():
+                                                ctx_start = max(0, i - 2)
+                                                ctx_end = min(len(lines), i + 3)
+                                                ctx = "\n".join(
+                                                    lines[ctx_start:ctx_end])
+                                                hits.append((i, ctx))
+                                        if hits:
+                                            st.success(
+                                                f"📍 {len(hits)} match(es) "
+                                                f"encontrado(s)")
+                                            for i, ctx in hits[:20]:
+                                                st.code(ctx, language="text")
+                                            if len(hits) > 20:
+                                                st.caption(
+                                                    f"… y {len(hits)-20} "
+                                                    f"matches más (refina la "
+                                                    f"búsqueda)")
+                                        else:
+                                            st.warning(
+                                                f"Sin matches para "
+                                                f"'{search_term}'")
+                                    else:
+                                        st.text_area(
+                                            "Transcript",
+                                            value=transcript_text,
+                                            height=400, disabled=True,
+                                            key=f"tr_text_{r.report_id}",
+                                            label_visibility="collapsed")
+
                     with col2:
                         if r.sentiment:
                             st.metric("Sentiment Tone", r.sentiment.tone,

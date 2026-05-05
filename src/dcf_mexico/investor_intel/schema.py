@@ -21,6 +21,7 @@ import json
 
 class ReportType(Enum):
     EARNINGS_RELEASE = "earnings_release"          # Reporte trimestral / FY
+    EARNINGS_CALL = "earnings_call"                 # Transcript de earnings call
     GUIDANCE_UPDATE = "guidance_update"             # Guía nueva o actualizada
     INVESTOR_PRESENTATION = "investor_presentation" # IR deck
     ANNUAL_REPORT = "annual_report"                 # Annual / 20-F
@@ -160,8 +161,13 @@ class InvestorReport:
     summary_es: str = ""                     # resumen ejecutivo en español
     summary_en: str = ""                     # english version
 
+    # Transcript (para earnings calls completos)
+    transcript_text: str = ""                # texto completo del transcript
+    participants: List[str] = field(default_factory=list)  # Q&A participants
+    qa_topics: List[str] = field(default_factory=list)     # tópicos del Q&A
+
     # Metadata extracción
-    extraction_method: str = "manual"        # claude_api / manual / scraped
+    extraction_method: str = "manual"        # claude_api / manual / scraped / pdftotext
     extraction_date: str = ""                # cuándo se extrajo
     extraction_notes: str = ""
 
