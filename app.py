@@ -311,8 +311,14 @@ def _available_tickers() -> list[str]:
 # ---------------------------------------------------------------------------
 # Helpers UI
 # ---------------------------------------------------------------------------
-def _style_upside_table(df: pd.DataFrame, upside_col: str = "upside_pct") -> pd.io.formats.style.Styler:
-    """Conditional formatting: verde upside, rojo downside."""
+def _style_upside_table(df: pd.DataFrame, upside_col: str = "upside_pct"):
+    """Conditional formatting: verde upside, rojo downside.
+
+    Returns: pandas Styler. (Removed return type annotation — sin
+    ``from __future__ import annotations`` el lookup eager de
+    ``pd.io.formats.style.Styler`` falla porque el sub-módulo no está
+    auto-importado.)
+    """
     def color(v):
         if pd.isna(v):
             return ""
