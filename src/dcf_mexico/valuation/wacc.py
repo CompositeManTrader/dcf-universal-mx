@@ -13,7 +13,6 @@ Defaults (revisar trimestralmente):
   - CRP Mexico: 1.80% (Damodaran Jan-26)
   - Marginal tax MX: 30%
 """
-from __future__ import annotations
 
 from dataclasses import dataclass
 

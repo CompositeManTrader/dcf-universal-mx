@@ -9,7 +9,6 @@ Métricas:
 - MAPE (Mean Absolute Percentage Error)
 - Direction accuracy (¿predijo subida/bajada correctamente?)
 """
-from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 import pandas as pd

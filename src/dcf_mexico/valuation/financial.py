@@ -18,7 +18,6 @@ Implementamos 2 metodos:
         Value = BV_0 + sum_t [(ROE_t - Re) * BV_{t-1}] / (1+Re)^t + Terminal
      Donde el terminal usa Gordon sobre los excess returns en estado estable.
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional

@@ -1,5 +1,4 @@
 """Estructuras tipadas para los EEFF parseados del XBRL CNBV."""
-from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from typing import Optional

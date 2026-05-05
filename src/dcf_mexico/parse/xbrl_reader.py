@@ -13,7 +13,6 @@ Mejoras vs xbrl_parser_cnbv_v2.ipynb:
   8. Validacion contable A = L + E con tolerancia.
   9. Sin dependencias de google.colab; corre en cualquier entorno con pandas.
 """
-from __future__ import annotations
 
 import re
 import unicodedata

@@ -10,7 +10,6 @@ Donde Q es uno de:
     '4D' -> Q4 dictaminado (anual auditado)
     '1', '2', '3', '4' -> trimestres
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import lru_cache

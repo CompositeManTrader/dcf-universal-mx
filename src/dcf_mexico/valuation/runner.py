@@ -1,5 +1,4 @@
 """Helper centralizado: parser + DCF para un ticker, devolviendo dict listo para tabla."""
-from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from pathlib import Path

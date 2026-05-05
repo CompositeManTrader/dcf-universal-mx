@@ -14,7 +14,6 @@ Notas:
   - Streamlit Cloud no tiene salida HTTP a sites externos en algunas
     configuraciones; este modulo se usa principalmente desde CLI local.
 """
-from __future__ import annotations
 
 import io
 import re

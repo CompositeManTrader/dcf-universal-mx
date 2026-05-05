@@ -21,7 +21,6 @@ Uso:
     print(scenarios.bear_value_share, scenarios.base_value_share, scenarios.bull_value_share)
     print(scenarios.weighted_expected_value)
 """
-from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Callable
 from enum import Enum

@@ -7,7 +7,6 @@ anterior. Genera notificaciones por:
 - Guidance cuts/upgrades
 - Eventos materiales (M&A, buybacks, dividends)
 """
-from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 from datetime import datetime

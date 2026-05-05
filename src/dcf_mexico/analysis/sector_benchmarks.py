@@ -23,7 +23,6 @@ Ratios incluidos por industria:
 - payout_ratio:     Dividend payout tipico
 - description:      Texto descriptivo
 """
-from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional, List
 

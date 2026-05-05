@@ -6,7 +6,6 @@ Permite:
 2. Track record adjustment (haircuts si management ha fallado guidance)
 3. Comparison: management view vs DCF assumptions
 """
-from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Tuple
 

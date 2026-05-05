@@ -13,7 +13,6 @@ Reinvestment_t = (Revenue_t - Revenue_{t-1}) / sales_to_capital
 Terminal_FV = FCFF_{11} / (WACC_terminal - g_terminal)
 Equity = EV - Net Debt + Cash + Non-op assets - Minority interest
 """
-from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from typing import Optional
