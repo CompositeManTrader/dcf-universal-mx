@@ -33,7 +33,11 @@ from .schema import (
     Informative,
     ValidationReport,
 )
-from .validators import merge_reports, validate_balance, validate_income
+# NOTA: el import de .validators se hace lazy (dentro de parse_xbrl) para
+# evitar un circular import en Python 3.14:
+#   parse/__init__.py → xbrl_reader.py → validators.py → .schema
+# triggers re-load de parse/__init__.py en 3.14 (relative import semantics
+# changed). Lazy import rompe el ciclo.
 
 
 # ---------------------------------------------------------------------------
@@ -995,6 +999,9 @@ class XBRLReader:
         cf = self._parse_cashflow(factor)
         inf = self._parse_informative(factor)
         dcf = self._build_dcf(info, bs, is_, cf, inf)
+        # Lazy import: ver nota arriba (línea ~36)
+        from .validators import (
+            merge_reports, validate_balance, validate_income)
         validation = merge_reports(validate_balance(bs), validate_income(is_))
         return ParseResult(
             info=info,
