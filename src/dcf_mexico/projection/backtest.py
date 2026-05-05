@@ -9,11 +9,12 @@ Métricas:
 - MAPE (Mean Absolute Percentage Error)
 - Direction accuracy (¿predijo subida/bajada correctamente?)
 """
+from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional
 import pandas as pd
 
-from dcf_mexico.projection.engine import BaseFinancials, ProjectionDrivers, project_financials
+from .engine import BaseFinancials, ProjectionDrivers, project_financials
 
 
 @dataclass

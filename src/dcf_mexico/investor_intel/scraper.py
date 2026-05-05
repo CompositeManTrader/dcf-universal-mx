@@ -10,6 +10,7 @@ Pipeline:
 
 Diseñado para ejecutarse via GitHub Actions cron diario.
 """
+from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import List, Optional, Dict

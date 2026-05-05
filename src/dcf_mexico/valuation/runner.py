@@ -1,11 +1,12 @@
 """Helper centralizado: parser + DCF para un ticker, devolviendo dict listo para tabla."""
+from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from pathlib import Path
 from typing import Optional
 
-from dcf_mexico.parse import parse_xbrl
-from dcf_mexico.config import (
+from ..parse import parse_xbrl
+from ..config import (
     SectorDefaults,
     IssuerInfo,
     MarketDefaults,
@@ -13,7 +14,7 @@ from dcf_mexico.config import (
     load_issuers,
     find_xbrl,
 )
-from dcf_mexico.valuation.dcf_fcff import CompanyBase, DCFAssumptions, project_company
+from .dcf_fcff import CompanyBase, DCFAssumptions, project_company
 
 
 @dataclass

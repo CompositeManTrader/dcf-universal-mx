@@ -6,11 +6,12 @@ Permite:
 2. Track record adjustment (haircuts si management ha fallado guidance)
 3. Comparison: management view vs DCF assumptions
 """
+from __future__ import annotations
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Tuple
 
-from dcf_mexico.investor_intel.schema import InvestorReport, GuidanceItem
-from dcf_mexico.investor_intel.analyzer import compare_guidance_vs_actuals, compute_credibility
+from .schema import InvestorReport, GuidanceItem
+from .analyzer import compare_guidance_vs_actuals, compute_credibility
 
 
 # ============================================================================

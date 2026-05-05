@@ -21,6 +21,7 @@ Uso:
     print(s2c.value_breakdown)         # DataFrame año a año
     print(s2c.explanation)             # "Por cada peso..."
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict

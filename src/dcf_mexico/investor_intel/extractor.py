@@ -10,13 +10,14 @@ Para Claude API necesitas:
 - Variable env ANTHROPIC_API_KEY o secret en Streamlit
 - pip install anthropic
 """
+from __future__ import annotations
 import json
 import base64
 from pathlib import Path
 from datetime import datetime, date
 from typing import Optional, Tuple
 
-from dcf_mexico.investor_intel.schema import (
+from .schema import (
     InvestorReport, GuidanceItem, Driver, StrategicEvent, SentimentScore,
     ReportType, GuidanceDirection, GuidanceConfidence, SentimentTone,
     DriverImpact, EventType,

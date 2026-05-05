@@ -26,6 +26,7 @@ Uso:
     h = horizontal_analysis(curr_snap, prior_snap)
     flags = detect_changes(curr_snap, prior_snap)
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum

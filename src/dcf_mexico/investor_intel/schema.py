@@ -7,6 +7,7 @@ Captura QUE dice management trimestre a trimestre:
 - Strategic events (M&A, buybacks, capex announcements)
 - Sentiment + key topics
 """
+from __future__ import annotations
 from dataclasses import dataclass, field, asdict
 from datetime import date
 from enum import Enum

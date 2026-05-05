@@ -9,13 +9,14 @@ Cada panel es un DataFrame:
 Compatible con cualquier ParseResult del parser CNBV.
 Las etiquetas siguen el esquema Bloomberg standardizado.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Callable, Optional
 
 import pandas as pd
 
-from dcf_mexico.historical.panel import _detect_fx_mult
+from .panel import _detect_fx_mult
 
 
 # ---------------------------------------------------------------------------

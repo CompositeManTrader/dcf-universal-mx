@@ -14,6 +14,7 @@ Notas:
   - Streamlit Cloud no tiene salida HTTP a sites externos en algunas
     configuraciones; este modulo se usa principalmente desde CLI local.
 """
+from __future__ import annotations
 
 import io
 import re
@@ -25,7 +26,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from dcf_mexico.config import load_issuers, IssuerInfo
+from ..config import load_issuers, IssuerInfo
 
 
 # URLs raiz / patrones

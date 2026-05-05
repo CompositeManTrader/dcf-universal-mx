@@ -13,6 +13,7 @@ Mejoras vs xbrl_parser_cnbv_v2.ipynb:
   8. Validacion contable A = L + E con tolerancia.
   9. Sin dependencias de google.colab; corre en cualquier entorno con pandas.
 """
+from __future__ import annotations
 
 import re
 import unicodedata
@@ -22,7 +23,7 @@ from typing import Optional
 
 import pandas as pd
 
-from dcf_mexico.parse.schema import (
+from .schema import (
     BalanceSheet,
     CashFlow,
     CompanyInfo,
@@ -998,8 +999,8 @@ class XBRLReader:
         cf = self._parse_cashflow(factor)
         inf = self._parse_informative(factor)
         dcf = self._build_dcf(info, bs, is_, cf, inf)
-        # Lazy import + absolute path (ver nota línea ~36)
-        from dcf_mexico.parse.validators import (
+        # Lazy import: ver nota arriba (línea ~36)
+        from .validators import (
             merge_reports, validate_balance, validate_income)
         validation = merge_reports(validate_balance(bs), validate_income(is_))
         return ParseResult(

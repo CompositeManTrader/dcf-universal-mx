@@ -18,11 +18,12 @@ Implementamos 2 metodos:
         Value = BV_0 + sum_t [(ROE_t - Re) * BV_{t-1}] / (1+Re)^t + Terminal
      Donde el terminal usa Gordon sobre los excess returns en estado estable.
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional
 
-from dcf_mexico.valuation.wacc import cost_of_equity_capm, RF_MX_DEFAULT, ERP_MX_DEFAULT
+from .wacc import cost_of_equity_capm, RF_MX_DEFAULT, ERP_MX_DEFAULT
 
 
 # -------------------------------------------------------------------

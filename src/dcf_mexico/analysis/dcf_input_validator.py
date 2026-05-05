@@ -21,14 +21,15 @@ Uso:
     print(scenarios.bear_value_share, scenarios.base_value_share, scenarios.bull_value_share)
     print(scenarios.weighted_expected_value)
 """
+from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Callable
 from enum import Enum
 import statistics
 import pandas as pd
 
-from dcf_mexico.analysis.sector_benchmarks import get_sector, SectorBenchmark
-from dcf_mexico.analysis.dcf_inputs_auto import (
+from .sector_benchmarks import get_sector, SectorBenchmark
+from .dcf_inputs_auto import (
     compute_sales_to_capital,
     compute_revenue_growth,
     compute_op_margin,

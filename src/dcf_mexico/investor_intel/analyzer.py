@@ -8,13 +8,14 @@ Funciones clave:
 4. detect_material_changes: changes vs prior report
 5. extract_guidance_evolution: cómo cambió guidance del mismo metric over time
 """
+from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from typing import List, Dict, Optional, Tuple
 import statistics
 import pandas as pd
 
-from dcf_mexico.investor_intel.schema import (
+from .schema import (
     InvestorReport, GuidanceItem, SentimentScore,
     ReportType, GuidanceDirection,
 )

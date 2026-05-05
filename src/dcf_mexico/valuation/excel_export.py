@@ -12,6 +12,7 @@ Layout:
   Sheet 'Bridge'         - EV -> Equity Value -> Value/share
   Sheet 'Audit'          - Comparacion vs el calculo Python (para QA)
 """
+from __future__ import annotations
 
 from io import BytesIO
 from openpyxl import Workbook

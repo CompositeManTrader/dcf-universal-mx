@@ -13,6 +13,7 @@ Reinvestment_t = (Revenue_t - Revenue_{t-1}) / sales_to_capital
 Terminal_FV = FCFF_{11} / (WACC_terminal - g_terminal)
 Equity = EV - Net Debt + Cash + Non-op assets - Minority interest
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field, asdict
 from typing import Optional
@@ -20,12 +21,7 @@ import math
 
 import pandas as pd
 
-# NOTA: usamos imports absolutos en lugar de relativos para evitar que
-# Python re-entre valuation/__init__.py durante la resolución del '.'.
-# Patrón observado en Python 3.12 sin 'from __future__ import annotations':
-# el relative import dentro de un módulo cargado por __init__ puede
-# disparar re-entrada del package init, formando un circular import.
-from dcf_mexico.valuation.wacc import (
+from .wacc import (
     compute_wacc,
     WACCResult,
     RF_MX_DEFAULT,

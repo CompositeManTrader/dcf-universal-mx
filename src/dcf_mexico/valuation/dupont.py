@@ -9,6 +9,7 @@ Analisis DuPont (3-step y 5-step) para descomponer ROE en componentes.
     ROE = Tax Burden × Interest Burden × EBIT Margin × Asset Turnover × Equity Multiplier
         = (NI / EBT) × (EBT / EBIT) × (EBIT / Sales) × (Sales / Assets) × (Assets / Equity)
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, asdict
 from typing import Optional

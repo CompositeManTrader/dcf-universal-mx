@@ -16,6 +16,7 @@ Por cada periodo (year), comparamos:
 
 Output: tabla con cada concepto x periodo, con flag de status (OK/WARN/ERROR/N/A).
 """
+from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field

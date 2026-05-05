@@ -17,6 +17,7 @@ Uso:
     for t in trends:
         print(t.metric, t.cagr_5y, t.classification, t.narrative)
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum

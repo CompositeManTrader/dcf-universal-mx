@@ -17,6 +17,7 @@ Uso:
     result = project_financials(base, drivers, horizon=5)
     print(result.income_statement_table())
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Optional, List, Dict

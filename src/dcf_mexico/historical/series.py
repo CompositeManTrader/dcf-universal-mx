@@ -10,6 +10,7 @@ Donde Q es uno de:
     '4D' -> Q4 dictaminado (anual auditado)
     '1', '2', '3', '4' -> trimestres
 """
+from __future__ import annotations
 
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -18,8 +19,8 @@ from typing import Optional
 
 import pandas as pd
 
-from dcf_mexico.config import find_all_xbrl, parse_period_tag, is_annual_period
-from dcf_mexico.parse import parse_xbrl
+from ..config import find_all_xbrl, parse_period_tag, is_annual_period
+from ..parse import parse_xbrl
 
 
 @dataclass

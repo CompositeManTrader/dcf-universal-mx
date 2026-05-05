@@ -19,6 +19,7 @@ Uso:
     for r in ratios:
         print(f"{r.category}: {r.name} = {r.value} ({r.unit})")
 """
+from __future__ import annotations
 from dataclasses import dataclass
 from typing import Optional, List
 
