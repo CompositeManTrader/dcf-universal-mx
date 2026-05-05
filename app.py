@@ -1058,6 +1058,14 @@ if mode == "Single DCF":
     terminal_wacc = _ss_pct("term_wacc",
                               market.terminal_wacc_override or 0.085)
 
+    # Effective tax rate desde Section C (depende del método LTM vs Avg)
+    _tax_method_state = st.session_state.get(
+        f"dam_in_tax_method_{issuer.ticker}", "Current year (LTM)")
+    _tax_key_suffix = "avg" if _tax_method_state.startswith("Avg") else "ltm"
+    eff_tax_user = _ss_pct(f"eff_tax_{_tax_key_suffix}",
+                             base.effective_tax_rate)
+    marginal_tax_user = _ss_pct("marg_tax", market.marginal_tax)
+
     # === Y1 separado de Y2-Y5 (Input Sheet sec D) ===
     rev_growth_y1 = _ss_pct("g_y1", rev_growth)
     op_margin_y1  = _ss_pct(
@@ -1104,8 +1112,8 @@ if mode == "Single DCF":
         terminal_growth=terminal_g,
         target_op_margin=op_margin,
         sales_to_capital=s2c,
-        effective_tax_base=market.marginal_tax,
-        marginal_tax_terminal=market.marginal_tax,
+        effective_tax_base=eff_tax_user,
+        marginal_tax_terminal=marginal_tax_user,
         risk_free=rf,
         erp=erp,
         unlevered_beta=beta_unlev,
@@ -1399,28 +1407,40 @@ if mode == "Single DCF":
     with st.expander("**💹 C · Market data**", expanded=True):
         c1, c2 = st.columns(2)
         with c1:
-            st.number_input("Number of shares outstanding (millones)",
-                            value=float(shares_recent or 0.0),
-                            step=1.0, format="%.2f",
-                            key=f"dam_in_shares_{issuer.ticker}",
-                            help="B21 Damodaran: agregar todas las series. "
-                                 "Incluir RSUs, NO incluir shares underlying "
-                                 "employee options.")
-            st.number_input("Current stock price (MXN)",
-                            value=float(price_recent),
-                            step=0.5, format="%.2f",
-                            key=f"dam_in_price_{issuer.ticker}",
-                            help=("**B22 Damodaran:** *'Enter the most recent "
-                                  "stock price (how about today's?)'* — "
-                                  f"Auto-cargado desde Yahoo "
-                                  f"({issuer.yahoo or 'sin ticker'}, "
-                                  f"cache 10 min). Edita aquí para override."))
+            # === Shares outstanding (en millones, auto del XBRL) ===
+            shares_millions = float(shares_recent or 0.0) / 1_000_000.0
+            st.number_input(
+                "Number of shares outstanding (millones)",
+                value=shares_millions,
+                step=1.0, format="%.2f",
+                key=f"dam_in_shares_{issuer.ticker}",
+                help=(f"**B21 Damodaran:** *'Aggregate all series, count "
+                      f"RSUs, no employee options.'* — Auto-cargado del "
+                      f"XBRL (informative.shares_outstanding) y convertido "
+                      f"a millones. Raw del XBRL: "
+                      f"{shares_recent:,.0f} shares."))
 
-        # Effective tax rate: ahora ofrecemos 1Y vs avg multi-año (B23 Damodaran)
+            # === Current stock price (auto desde Yahoo Finance) ===
+            st.number_input(
+                "Current stock price (MXN)",
+                value=float(price_recent),
+                step=0.05, format="%.2f",
+                key=f"dam_in_price_{issuer.ticker}",
+                help=("**B22 Damodaran:** *'How about today's?'* — "
+                      f"Auto-fetch desde Yahoo Finance "
+                      f"({issuer.yahoo or 'sin ticker'}, cache 10 min). "
+                      f"Edita para override manual."))
+            st.caption(f"📡 Fuente: {_price_label}")
+
+        # === Effective tax rate ===
+        # Truco: incluir el método en la key del input para que cambie
+        # automáticamente cuando el usuario alterna LTM ↔ Avg 4y.
         with c2:
             # Construir opciones del selectbox según haya history
             tax_method_opts = ["Current year (LTM)"]
-            if eff_tax_avg is not None and len(eff_tax_history_years) >= 2:
+            ltm_value_pct = eff_tax_recent * 100
+            avg_value_pct = (eff_tax_avg * 100) if eff_tax_avg else None
+            if avg_value_pct is not None and len(eff_tax_history_years) >= 2:
                 yrs = ", ".join(str(y) for y, _ in eff_tax_history_years)
                 tax_method_opts.append(
                     f"Avg {len(eff_tax_history_years)}y ({yrs})")
@@ -1428,30 +1448,44 @@ if mode == "Single DCF":
                 "Effective tax rate · método",
                 tax_method_opts, horizontal=True,
                 key=f"dam_in_tax_method_{issuer.ticker}",
-                help="B23 Damodaran: 'If your effective tax rate varies "
-                     "across years, you can use an average.'")
-            if tax_method.startswith("Avg") and eff_tax_avg is not None:
-                _eff_tax_default = eff_tax_avg * 100
-                _eff_tax_help = (
-                    f"Promedio multi-año: "
-                    + " · ".join(f"{y}={r*100:.2f}%"
-                                   for y, r in eff_tax_history_years)
-                    + f" → avg = {eff_tax_avg*100:.2f}%"
-                )
+                help="**B23 Damodaran:** *'If your effective tax rate "
+                     "varies across years, you can use an average.'*")
+
+            # Mostrar AMBOS valores explícitamente para que el usuario
+            # vea cuál está eligiendo
+            mc1, mc2 = st.columns(2)
+            mc1.metric("LTM", f"{ltm_value_pct:.2f}%",
+                         help=f"Tax expense / Pretax income del periodo "
+                              f"actual ({res.info.period_end})")
+            if avg_value_pct is not None:
+                breakdown = " · ".join(
+                    f"{y}={r*100:.1f}%" for y, r in eff_tax_history_years)
+                mc2.metric(f"Avg {len(eff_tax_history_years)}y",
+                              f"{avg_value_pct:.2f}%",
+                              help=f"Promedio: {breakdown}")
             else:
-                _eff_tax_default = eff_tax_recent * 100
-                _eff_tax_help = ("Tax expense / Pretax income del LTM "
-                                 "actual. CUERVO LTM ≈ 24-27%.")
-            st.number_input("Effective tax rate (%)",
-                            value=float(_eff_tax_default),
-                            step=0.5, format="%.2f",
-                            key=f"dam_in_eff_tax_{issuer.ticker}",
-                            help=_eff_tax_help)
-            st.number_input("Marginal tax rate (%)",
-                            value=30.0, step=0.5, format="%.2f",
-                            key=f"dam_in_marg_tax_{issuer.ticker}",
-                            help="B24 Damodaran: statutory tax rate del país. "
-                                 "México ISR corporativo = 30%.")
+                mc2.metric("Avg multi-año", "—",
+                              help="No hay suficiente histórico anual")
+
+            # Input editable: la KEY incluye el método, así Streamlit la
+            # trata como widget distinto y carga el default correcto al
+            # cambiar entre LTM/Avg.
+            is_avg = tax_method.startswith("Avg") and avg_value_pct is not None
+            chosen_default = avg_value_pct if is_avg else ltm_value_pct
+            method_tag = "avg" if is_avg else "ltm"
+            st.number_input(
+                "Effective tax rate (%)",
+                value=float(chosen_default),
+                step=0.5, format="%.2f",
+                key=f"dam_in_eff_tax_{issuer.ticker}_{method_tag}",
+                help=f"Usando: **{tax_method}** = {chosen_default:.2f}%. "
+                     f"Cambia el método arriba para alternar.")
+            st.number_input(
+                "Marginal tax rate (%)",
+                value=30.0, step=0.5, format="%.2f",
+                key=f"dam_in_marg_tax_{issuer.ticker}",
+                help="**B24 Damodaran:** statutory tax rate del país. "
+                     "México ISR corporativo = 30%.")
 
     # ----- SECCION D: Value drivers -----
     with st.expander("**🚀 D · Value drivers** (Damodaran growth/margin levers)",
