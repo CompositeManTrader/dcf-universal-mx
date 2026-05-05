@@ -61,16 +61,16 @@ from dcf_mexico.valuation import (
 try:
     from dcf_mexico.valuation import dupont_from_parser
     HAS_DUPONT = True
-except ImportError as _e:
+except (ImportError, KeyError, Exception) as _e:
     HAS_DUPONT = False
-    _DUPONT_ERR = str(_e)
+    _DUPONT_ERR = f"{type(_e).__name__}: {_e}"
 
 try:
     from dcf_mexico.valuation import export_dcf_to_excel
     HAS_EXCEL_EXPORT = True
-except ImportError as _e:
+except (ImportError, KeyError, Exception) as _e:
     HAS_EXCEL_EXPORT = False
-    _EXCEL_ERR = str(_e)
+    _EXCEL_ERR = f"{type(_e).__name__}: {_e}"
 
 try:
     from dcf_mexico.historical import (
@@ -87,9 +87,12 @@ try:
         build_cf_standardized_panel,
     )
     HAS_HISTORICAL = True
-except ImportError as _e:
+except (ImportError, KeyError, Exception) as _e:
+    # Capturar también KeyError porque Python 3.14 lo tira de _load_unlocked
+    # cuando un sub-módulo falla al cargar (esconde el error real).
     HAS_HISTORICAL = False
-    _HIST_ERR = str(_e)
+    import traceback as _tb
+    _HIST_ERR = f"{type(_e).__name__}: {_e}\n{_tb.format_exc()}"
 
 try:
     from dcf_mexico.validation import (
@@ -107,9 +110,9 @@ try:
             "Cash Flow - As Reported":  CUERVO_CF_AR,
         },
     }
-except ImportError as _e:
+except (ImportError, KeyError, Exception) as _e:
     HAS_VALIDATION = False
-    _VAL_ERR = str(_e)
+    _VAL_ERR = f"{type(_e).__name__}: {_e}"
     BLOOMBERG_MAPPINGS = {}
 
 from dcf_mexico.view import build_all_sheets, BLOOMBERG_HEADER

@@ -4,7 +4,6 @@ Storage layer para Investor Reports.
 Guarda JSONs en data/investor_reports/{ticker}/{report_id}.json
 y opcionalmente commitea al repo via GitHub API (mismo flow que XBRLs).
 """
-from __future__ import annotations
 import json
 from pathlib import Path
 from typing import List, Optional, Dict

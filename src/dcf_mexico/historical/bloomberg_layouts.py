@@ -9,7 +9,6 @@ Diferencia clave con financial_panels.py:
     derivadores especiales para Cash Flow (Q acum - Q-1 acum)
   - Para vista anual, getters apuntan a `income` (acumulado YTD del Q4)
 """
-from __future__ import annotations
 
 import pandas as pd
 from typing import Optional

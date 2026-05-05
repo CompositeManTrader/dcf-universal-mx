@@ -19,7 +19,6 @@ Limitaciones:
   - Algunos campos Bloomberg que requieren breakdown granular salen como
     '—' cuando el XBRL CNBV no los expone (ej. inventory raw materials)
 """
-from __future__ import annotations
 
 from typing import Any
 import pandas as pd

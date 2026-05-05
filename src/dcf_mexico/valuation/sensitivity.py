@@ -1,5 +1,4 @@
 """Analisis de sensibilidad: tornado y matriz 2D sobre el value/share."""
-from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import replace, fields

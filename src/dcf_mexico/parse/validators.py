@@ -1,5 +1,4 @@
 """Validaciones contables sobre los EEFF parseados."""
-from __future__ import annotations
 from .schema import BalanceSheet, IncomeStatement, ValidationReport
 
 

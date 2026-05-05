@@ -4,7 +4,6 @@ Construye paneles historicos a partir de HistoricalSeries:
   - Time series por metrica clave
   - Stats de crecimiento (CAGR, peak/trough, vol)
 """
-from __future__ import annotations
 
 from typing import Optional
 
