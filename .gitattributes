@@ -1,0 +1,8 @@
+# Force LF line endings for files that Streamlit Cloud / Heroku
+# buildpack is strict about. CRLF makes them invisible to the buildpack
+# (causes Python version pin to be ignored, etc).
+runtime.txt          text eol=lf
+.python-version      text eol=lf
+requirements.txt     text eol=lf
+Pipfile              text eol=lf
+Procfile             text eol=lf
