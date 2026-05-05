@@ -18,8 +18,8 @@ from typing import Optional
 
 import pandas as pd
 
-from ..config import find_all_xbrl, parse_period_tag, is_annual_period
-from ..parse import parse_xbrl
+from dcf_mexico.config import find_all_xbrl, parse_period_tag, is_annual_period
+from dcf_mexico.parse import parse_xbrl
 
 
 @dataclass

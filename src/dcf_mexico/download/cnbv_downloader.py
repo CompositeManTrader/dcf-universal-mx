@@ -25,7 +25,7 @@ from urllib.parse import urljoin
 
 import requests
 
-from ..config import load_issuers, IssuerInfo
+from dcf_mexico.config import load_issuers, IssuerInfo
 
 
 # URLs raiz / patrones

@@ -15,7 +15,7 @@ from typing import Callable, Optional
 
 import pandas as pd
 
-from .panel import _detect_fx_mult
+from dcf_mexico.historical.panel import _detect_fx_mult
 
 
 # ---------------------------------------------------------------------------

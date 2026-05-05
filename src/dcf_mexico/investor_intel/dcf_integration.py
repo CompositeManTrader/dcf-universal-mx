@@ -9,8 +9,8 @@ Permite:
 from dataclasses import dataclass
 from typing import List, Optional, Dict, Tuple
 
-from .schema import InvestorReport, GuidanceItem
-from .analyzer import compare_guidance_vs_actuals, compute_credibility
+from dcf_mexico.investor_intel.schema import InvestorReport, GuidanceItem
+from dcf_mexico.investor_intel.analyzer import compare_guidance_vs_actuals, compute_credibility
 
 
 # ============================================================================

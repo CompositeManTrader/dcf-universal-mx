@@ -22,7 +22,7 @@ Implementamos 2 metodos:
 from dataclasses import dataclass, field
 from typing import Optional
 
-from .wacc import cost_of_equity_capm, RF_MX_DEFAULT, ERP_MX_DEFAULT
+from dcf_mexico.valuation.wacc import cost_of_equity_capm, RF_MX_DEFAULT, ERP_MX_DEFAULT
 
 
 # -------------------------------------------------------------------

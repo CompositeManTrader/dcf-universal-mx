@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 import pandas as pd
 
-from .engine import BaseFinancials, ProjectionDrivers, project_financials
+from dcf_mexico.projection.engine import BaseFinancials, ProjectionDrivers, project_financials
 
 
 @dataclass

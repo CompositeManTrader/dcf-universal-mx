@@ -13,7 +13,7 @@ Diferencia clave con financial_panels.py:
 import pandas as pd
 from typing import Optional
 
-from .panel import _detect_fx_mult
+from dcf_mexico.historical.panel import _detect_fx_mult
 
 
 # ===========================================================================

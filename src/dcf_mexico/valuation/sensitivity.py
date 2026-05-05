@@ -6,7 +6,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from .dcf_fcff import DCFAssumptions, project_company, CompanyBase
+from dcf_mexico.valuation.dcf_fcff import DCFAssumptions, project_company, CompanyBase
 
 
 def _value_with_override(base: CompanyBase, a: DCFAssumptions, **overrides) -> float:

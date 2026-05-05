@@ -20,7 +20,12 @@ import math
 
 import pandas as pd
 
-from .wacc import (
+# NOTA: usamos imports absolutos en lugar de relativos para evitar que
+# Python re-entre valuation/__init__.py durante la resolución del '.'.
+# Patrón observado en Python 3.12 sin 'from __future__ import annotations':
+# el relative import dentro de un módulo cargado por __init__ puede
+# disparar re-entrada del package init, formando un circular import.
+from dcf_mexico.valuation.wacc import (
     compute_wacc,
     WACCResult,
     RF_MX_DEFAULT,

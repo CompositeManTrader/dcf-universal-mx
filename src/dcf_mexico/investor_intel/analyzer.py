@@ -14,7 +14,7 @@ from typing import List, Dict, Optional, Tuple
 import statistics
 import pandas as pd
 
-from .schema import (
+from dcf_mexico.investor_intel.schema import (
     InvestorReport, GuidanceItem, SentimentScore,
     ReportType, GuidanceDirection,
 )

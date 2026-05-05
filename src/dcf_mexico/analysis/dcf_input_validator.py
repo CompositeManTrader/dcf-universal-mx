@@ -27,8 +27,8 @@ from enum import Enum
 import statistics
 import pandas as pd
 
-from .sector_benchmarks import get_sector, SectorBenchmark
-from .dcf_inputs_auto import (
+from dcf_mexico.analysis.sector_benchmarks import get_sector, SectorBenchmark
+from dcf_mexico.analysis.dcf_inputs_auto import (
     compute_sales_to_capital,
     compute_revenue_growth,
     compute_op_margin,

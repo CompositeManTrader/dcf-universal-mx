@@ -22,7 +22,7 @@ from typing import Optional
 
 import pandas as pd
 
-from .schema import (
+from dcf_mexico.parse.schema import (
     BalanceSheet,
     CashFlow,
     CompanyInfo,
@@ -998,8 +998,8 @@ class XBRLReader:
         cf = self._parse_cashflow(factor)
         inf = self._parse_informative(factor)
         dcf = self._build_dcf(info, bs, is_, cf, inf)
-        # Lazy import: ver nota arriba (línea ~36)
-        from .validators import (
+        # Lazy import + absolute path (ver nota línea ~36)
+        from dcf_mexico.parse.validators import (
             merge_reports, validate_balance, validate_income)
         validation = merge_reports(validate_balance(bs), validate_income(is_))
         return ParseResult(

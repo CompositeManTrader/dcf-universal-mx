@@ -11,8 +11,8 @@ from dataclasses import dataclass
 from typing import List, Optional
 from datetime import datetime
 
-from .schema import InvestorReport
-from .analyzer import detect_material_changes, MaterialChange
+from dcf_mexico.investor_intel.schema import InvestorReport
+from dcf_mexico.investor_intel.analyzer import detect_material_changes, MaterialChange
 
 
 @dataclass

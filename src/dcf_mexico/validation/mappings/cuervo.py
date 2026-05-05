@@ -16,7 +16,7 @@ Notas de signo:
   - "Interest Income" Bloomberg negativo (-393 = ingreso). CNBV positivo.
   - Capex en CF Bloomberg negativo, en CNBV positivo (label trae prefijo "-").
 """
-from ..bloomberg_compare import LineMapping, BloombergMapping
+from dcf_mexico.validation.bloomberg_compare import LineMapping, BloombergMapping
 
 
 # -----------------------------------------------------------------

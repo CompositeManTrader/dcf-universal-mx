@@ -16,7 +16,7 @@ from pathlib import Path
 from datetime import datetime, date
 from typing import Optional, Tuple
 
-from .schema import (
+from dcf_mexico.investor_intel.schema import (
     InvestorReport, GuidanceItem, Driver, StrategicEvent, SentimentScore,
     ReportType, GuidanceDirection, GuidanceConfidence, SentimentTone,
     DriverImpact, EventType,

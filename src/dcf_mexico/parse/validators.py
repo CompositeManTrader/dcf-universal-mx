@@ -1,5 +1,5 @@
 """Validaciones contables sobre los EEFF parseados."""
-from .schema import BalanceSheet, IncomeStatement, ValidationReport
+from dcf_mexico.parse.schema import BalanceSheet, IncomeStatement, ValidationReport
 
 
 def _close(a: float, b: float, rel_tol: float = 0.005, abs_tol: float = 1.0) -> bool:
