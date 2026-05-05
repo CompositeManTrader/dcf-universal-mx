@@ -1,7 +1,30 @@
 """
 DCF Universal — Streamlit App (v2 con altair + conditional formatting + financieras)
 """
-from __future__ import annotations
+# ─────────────────────────────────────────────────────────────────────
+# Python 3.14 dataclasses workaround
+# Bug: dataclasses._is_type llama sys.modules.get(cls.__module__).__dict__
+# sin verificar None. Si el módulo no está en sys.modules todavía
+# (loading order, lazy imports), tira AttributeError y rompe todo el
+# import chain. Streamlit Cloud sigue en 3.14 a pesar del runtime.txt
+# pin a 3.12, así que monkey-patcheamos antes de cualquier @dataclass.
+# Ref: https://github.com/python/cpython/issues/* (bug del 3.14 RC)
+# ─────────────────────────────────────────────────────────────────────
+import sys as _sys
+if _sys.version_info >= (3, 14):
+    try:
+        import dataclasses as _dc
+        _orig_is_type = getattr(_dc, "_is_type", None)
+        if _orig_is_type is not None:
+            def _safe_is_type(annotation, cls, a_module, a_type, is_type_predicate):
+                try:
+                    return _orig_is_type(annotation, cls, a_module, a_type, is_type_predicate)
+                except AttributeError:
+                    # cls.__module__ no está en sys.modules → asumir False
+                    return False
+            _dc._is_type = _safe_is_type
+    except Exception:
+        pass
 
 import sys
 import warnings
