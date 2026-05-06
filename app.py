@@ -2012,6 +2012,112 @@ if mode == "Single DCF":
         "Las celdas read-only en sec E vienen del Cost of Capital sheet."
     )
 
+    # ============================================================
+    # 📥 EXPORT al Excel original Damodaran (con tus inputs)
+    # ============================================================
+    st.divider()
+    st.markdown("### 📥 Descargar Excel Damodaran con tus inputs")
+    st.caption(
+        "Toma el template original `fcffsimpleginzu.xlsx` de Damodaran "
+        "y sobrescribe la hoja **Input sheet** con tus valores actuales. "
+        "Las hojas restantes (Valuation Output, Cost of Capital, "
+        "Diagnostics, Sensitivity, etc.) recalculan automáticamente al "
+        "abrir el archivo en Excel."
+    )
+
+    try:
+        from src.dcf_mexico.valuation import export_to_damodaran_excel
+        # Industria mapping para el Excel (Damodaran usa nombres específicos)
+        _industry_map = {
+            "beverage_alcoholic": "Beverage (Alcoholic)",
+            "beverage_soft": "Beverage (Soft)",
+            "food_processing": "Food Processing",
+            "telecom_wireless": "Telecommunications Services",
+            "telecom_services": "Telecommunications Services",
+            "retail_general": "Retail (General)",
+            "retail_grocery": "Retail (Grocery and Food)",
+            "building_materials": "Construction Supplies",
+            "metals_mining": "Metals & Mining",
+            "chemical_basic": "Chemical (Basic)",
+            "air_transport": "Air Transport",
+            "reit": "R.E.I.T.",
+            "bank_money_center": "Bank (Money Center)",
+        }
+        _industry_dam = _industry_map.get(issuer.sector,
+                                            "Beverage (Alcoholic)")
+
+        ex_col1, ex_col2 = st.columns([3, 2])
+        with ex_col1:
+            st.markdown(
+                f"""
+                **Lo que vas a descargar:**
+                - Empresa: **{issuer.name}** ({issuer.ticker})
+                - Período base: **{res.info.period_end}**
+                - País: México
+                - Industria (Damodaran): **{_industry_dam}**
+                - **{len([k for k in dir(a) if not k.startswith('_')])}+ inputs** sobrescritos
+                  en la hoja Input sheet
+                - Todas las demás hojas del Excel **recalculan auto**
+                """
+            )
+        with ex_col2:
+            # Generar el Excel cuando el usuario hace click
+            if st.button("📊 Generar Excel Damodaran",
+                          key=f"gen_dam_xlsx_{issuer.ticker}",
+                          type="primary",
+                          use_container_width=True):
+                try:
+                    xlsx_bytes = export_to_damodaran_excel(
+                        base, a, out,
+                        last_10k_revenue=last_10k.get("revenue"),
+                        last_10k_ebit=last_10k.get("ebit"),
+                        last_10k_interest=last_10k.get("intexp"),
+                        last_10k_equity_bv=last_10k.get("equity_bv"),
+                        last_10k_debt=last_10k.get("debt"),
+                        last_10k_cash=last_10k.get("cash"),
+                        years_since_10k=years_since_10k or 1.0,
+                        country="Mexico",
+                        industry_us=_industry_dam,
+                        industry_global=_industry_dam,
+                    )
+                    st.session_state[f"_dam_xlsx_{issuer.ticker}"] = xlsx_bytes
+                    st.success(
+                        f"✅ Excel generado ({len(xlsx_bytes)/1024:.0f} KB) "
+                        f"— ya puedes descargarlo abajo")
+                except FileNotFoundError as _ferr:
+                    st.error(f"❌ Template no encontrado: {_ferr}")
+                except Exception as _xerr:
+                    st.error(f"❌ Error generando Excel: {_xerr}")
+                    import traceback as _tb
+                    st.code(_tb.format_exc())
+
+            # Mostrar download button si ya está generado
+            xlsx_data = st.session_state.get(
+                f"_dam_xlsx_{issuer.ticker}")
+            if xlsx_data:
+                from datetime import date as _date
+                fname = (f"{issuer.ticker}_DCF_Damodaran_"
+                          f"{_date.today().isoformat()}.xlsx")
+                st.download_button(
+                    label="⬇️ Descargar .xlsx",
+                    data=xlsx_data,
+                    file_name=fname,
+                    mime=("application/vnd.openxmlformats-officedocument."
+                          "spreadsheetml.sheet"),
+                    key=f"dl_dam_xlsx_{issuer.ticker}",
+                    use_container_width=True,
+                )
+
+        st.info(
+            "💡 **Tip:** Cuando abras el Excel, ve a la pestaña "
+            "**'Valuation output'** para ver el value/share calculado "
+            "por las fórmulas oficiales de Damodaran. Compáralo contra "
+            "el value/share de mi modelo (sub-tab 4) para validar el "
+            "motor."
+        )
+    except Exception as _e:
+        st.error(f"Error en el módulo de export: {_e}")
+
     tab_dam_input.__exit__(None, None, None)
 
     # ============================================================

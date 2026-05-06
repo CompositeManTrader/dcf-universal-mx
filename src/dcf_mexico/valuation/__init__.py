@@ -28,3 +28,4 @@ from .dupont import (  # noqa: F401
     dupont_from_parser,
 )
 from .excel_export import export_dcf_to_excel  # noqa: F401
+from .damodaran_excel_export import export_to_damodaran_excel  # noqa: F401
