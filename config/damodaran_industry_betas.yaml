@@ -1,0 +1,350 @@
+# Industry Average Beta — Damodaran Global (Jan-2026)
+# https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/Betas.html
+#
+# Para cada industria:
+#   beta_unlevered:  bottom-up beta promedio (sin apalancar)
+#   d_e_ratio:       average D/E ratio del industry (para info)
+#   tax_rate:        avg corporate tax rate (Damodaran assumption)
+#   sales_to_capital: median industry sales to invested capital ratio
+#   target_op_margin: median industry pre-tax operating margin
+#   roic:            median industry ROIC
+#   notes:           contexto opcional
+
+industries:
+  # ============= BEVERAGES & FOOD =============
+  beverage_alcoholic:
+    name: "Beverage (Alcoholic)"
+    beta_unlevered: 0.85
+    d_e_ratio: 0.32
+    tax_rate: 0.21
+    sales_to_capital: 0.85
+    target_op_margin: 0.22
+    roic: 0.115
+    notes: "Tequila, beer, spirits. Estable, premium pricing."
+  beverage_soft:
+    name: "Beverage (Soft)"
+    beta_unlevered: 0.78
+    d_e_ratio: 0.42
+    tax_rate: 0.22
+    sales_to_capital: 1.10
+    target_op_margin: 0.18
+    roic: 0.135
+    notes: "Coca-Cola, Pepsi tipo. Defensive, capital intensive."
+  food_processing:
+    name: "Food Processing"
+    beta_unlevered: 0.72
+    d_e_ratio: 0.38
+    tax_rate: 0.22
+    sales_to_capital: 1.30
+    target_op_margin: 0.12
+    roic: 0.105
+    notes: "Bimbo, Kraft Heinz tipo. Margins delgados, scale matters."
+  food_wholesalers:
+    name: "Food Wholesalers"
+    beta_unlevered: 0.68
+    d_e_ratio: 0.45
+    tax_rate: 0.22
+    sales_to_capital: 2.50
+    target_op_margin: 0.05
+    roic: 0.095
+
+  # ============= CONSUMER STAPLES =============
+  household_products:
+    name: "Household Products"
+    beta_unlevered: 0.71
+    d_e_ratio: 0.30
+    tax_rate: 0.22
+    sales_to_capital: 1.40
+    target_op_margin: 0.16
+    roic: 0.140
+
+  # ============= RETAIL =============
+  retail_general:
+    name: "Retail (General)"
+    beta_unlevered: 1.05
+    d_e_ratio: 0.42
+    tax_rate: 0.21
+    sales_to_capital: 2.30
+    target_op_margin: 0.07
+    roic: 0.115
+  retail_grocery:
+    name: "Retail (Grocery & Food)"
+    beta_unlevered: 0.65
+    d_e_ratio: 0.38
+    tax_rate: 0.22
+    sales_to_capital: 3.20
+    target_op_margin: 0.04
+    roic: 0.110
+    notes: "Walmex, Soriana tipo. Margins muy delgados, alta velocity."
+  retail_distributors:
+    name: "Retail (Distributors)"
+    beta_unlevered: 0.95
+    d_e_ratio: 0.40
+    tax_rate: 0.22
+    sales_to_capital: 2.80
+    target_op_margin: 0.06
+    roic: 0.105
+
+  # ============= MATERIALS & MINING =============
+  building_materials:
+    name: "Building Materials"
+    beta_unlevered: 1.15
+    d_e_ratio: 0.55
+    tax_rate: 0.22
+    sales_to_capital: 1.10
+    target_op_margin: 0.16
+    roic: 0.095
+    notes: "CEMEX, Lafarge. Cyclical, capital-heavy."
+  metals_mining:
+    name: "Metals & Mining"
+    beta_unlevered: 1.25
+    d_e_ratio: 0.42
+    tax_rate: 0.21
+    sales_to_capital: 1.20
+    target_op_margin: 0.20
+    roic: 0.115
+    notes: "Grupo Mexico, Penoles. Commodity-driven."
+  paper_forest:
+    name: "Paper & Forest Products"
+    beta_unlevered: 0.95
+    d_e_ratio: 0.55
+    tax_rate: 0.22
+    sales_to_capital: 1.20
+    target_op_margin: 0.10
+    roic: 0.075
+  steel:
+    name: "Steel"
+    beta_unlevered: 1.20
+    d_e_ratio: 0.50
+    tax_rate: 0.21
+    sales_to_capital: 1.30
+    target_op_margin: 0.09
+    roic: 0.075
+
+  # ============= CHEMICALS =============
+  chemical_basic:
+    name: "Chemical (Basic)"
+    beta_unlevered: 1.05
+    d_e_ratio: 0.45
+    tax_rate: 0.22
+    sales_to_capital: 1.30
+    target_op_margin: 0.12
+    roic: 0.090
+    notes: "Mexichem/ORBIA, Alpek. Cyclical."
+  chemical_specialty:
+    name: "Chemical (Specialty)"
+    beta_unlevered: 1.00
+    d_e_ratio: 0.32
+    tax_rate: 0.22
+    sales_to_capital: 1.10
+    target_op_margin: 0.16
+    roic: 0.115
+
+  # ============= TELECOM & MEDIA =============
+  telecom_wireless:
+    name: "Telecom (Wireless)"
+    beta_unlevered: 0.85
+    d_e_ratio: 0.95
+    tax_rate: 0.22
+    sales_to_capital: 0.85
+    target_op_margin: 0.22
+    roic: 0.105
+    notes: "AMX, AT&T MX. Capex pesado, margins resilient."
+  telecom_services:
+    name: "Telecommunications Services"
+    beta_unlevered: 0.75
+    d_e_ratio: 0.80
+    tax_rate: 0.22
+    sales_to_capital: 0.75
+    target_op_margin: 0.20
+    roic: 0.090
+  broadcasting:
+    name: "Broadcasting"
+    beta_unlevered: 1.10
+    d_e_ratio: 0.55
+    tax_rate: 0.22
+    sales_to_capital: 0.95
+    target_op_margin: 0.18
+    roic: 0.110
+  cable_tv:
+    name: "Cable TV"
+    beta_unlevered: 0.95
+    d_e_ratio: 0.85
+    tax_rate: 0.22
+    sales_to_capital: 0.65
+    target_op_margin: 0.25
+    roic: 0.085
+    notes: "Megacable, Televisa Cable."
+
+  # ============= TRANSPORT =============
+  air_transport:
+    name: "Air Transport"
+    beta_unlevered: 1.15
+    d_e_ratio: 0.85
+    tax_rate: 0.22
+    sales_to_capital: 1.20
+    target_op_margin: 0.10
+    roic: 0.075
+    notes: "Aeromex, Volaris. Volátil, FX-sensitive."
+  trucking:
+    name: "Trucking"
+    beta_unlevered: 1.05
+    d_e_ratio: 0.55
+    tax_rate: 0.22
+    sales_to_capital: 1.40
+    target_op_margin: 0.10
+    roic: 0.105
+  railroad:
+    name: "Railroad"
+    beta_unlevered: 1.00
+    d_e_ratio: 0.45
+    tax_rate: 0.22
+    sales_to_capital: 0.45
+    target_op_margin: 0.32
+    roic: 0.115
+
+  # ============= REAL ESTATE =============
+  reit:
+    name: "REIT (Diversified)"
+    beta_unlevered: 0.55
+    d_e_ratio: 0.55
+    tax_rate: 0.0
+    sales_to_capital: 0.20
+    target_op_margin: 0.45
+    roic: 0.060
+    notes: "FIBRA UNO, Funo. REITs no pagan ISR (pass-through)."
+  real_estate_dev:
+    name: "Real Estate (Development)"
+    beta_unlevered: 1.00
+    d_e_ratio: 0.65
+    tax_rate: 0.22
+    sales_to_capital: 0.85
+    target_op_margin: 0.18
+    roic: 0.075
+
+  # ============= FINANCIALS =============
+  bank_money_center:
+    name: "Bank (Money Center)"
+    beta_unlevered: 0.90
+    d_e_ratio: 4.5
+    tax_rate: 0.22
+    sales_to_capital: 0.0
+    target_op_margin: 0.30
+    roic: 0.115
+    notes: "Banorte, BBVA Mexico. Use Justified P/B not FCFF."
+  insurance_general:
+    name: "Insurance (General)"
+    beta_unlevered: 0.75
+    d_e_ratio: 0.65
+    tax_rate: 0.22
+    sales_to_capital: 0.85
+    target_op_margin: 0.10
+    roic: 0.085
+
+  # ============= HEALTHCARE =============
+  healthcare_facilities:
+    name: "Healthcare Facilities"
+    beta_unlevered: 0.85
+    d_e_ratio: 0.65
+    tax_rate: 0.21
+    sales_to_capital: 1.10
+    target_op_margin: 0.10
+    roic: 0.080
+    notes: "Hospitals (CMR), labs."
+  drugs_pharma:
+    name: "Drugs (Pharma)"
+    beta_unlevered: 1.05
+    d_e_ratio: 0.20
+    tax_rate: 0.21
+    sales_to_capital: 1.05
+    target_op_margin: 0.18
+    roic: 0.140
+  drugs_biotech:
+    name: "Drugs (Biotech)"
+    beta_unlevered: 1.20
+    d_e_ratio: 0.15
+    tax_rate: 0.21
+    sales_to_capital: 0.55
+    target_op_margin: 0.05
+    roic: 0.060
+
+  # ============= TECH =============
+  software_systems:
+    name: "Software (System & Application)"
+    beta_unlevered: 1.10
+    d_e_ratio: 0.10
+    tax_rate: 0.21
+    sales_to_capital: 1.50
+    target_op_margin: 0.20
+    roic: 0.155
+    notes: "Capital-light, high margins."
+  computer_services:
+    name: "Computer Services"
+    beta_unlevered: 1.00
+    d_e_ratio: 0.18
+    tax_rate: 0.21
+    sales_to_capital: 1.50
+    target_op_margin: 0.10
+    roic: 0.110
+  internet_software:
+    name: "Internet Software & Services"
+    beta_unlevered: 1.15
+    d_e_ratio: 0.10
+    tax_rate: 0.21
+    sales_to_capital: 1.20
+    target_op_margin: 0.18
+    roic: 0.135
+
+  # ============= ENERGY =============
+  oil_gas_integrated:
+    name: "Oil & Gas (Integrated)"
+    beta_unlevered: 0.95
+    d_e_ratio: 0.42
+    tax_rate: 0.30
+    sales_to_capital: 1.10
+    target_op_margin: 0.15
+    roic: 0.090
+  oil_gas_production:
+    name: "Oil & Gas (Production)"
+    beta_unlevered: 1.10
+    d_e_ratio: 0.42
+    tax_rate: 0.30
+    sales_to_capital: 0.85
+    target_op_margin: 0.20
+    roic: 0.075
+
+  # ============= UTILITIES =============
+  utility_general:
+    name: "Utility (General)"
+    beta_unlevered: 0.55
+    d_e_ratio: 1.10
+    tax_rate: 0.22
+    sales_to_capital: 0.40
+    target_op_margin: 0.30
+    roic: 0.060
+  utility_water:
+    name: "Utility (Water)"
+    beta_unlevered: 0.55
+    d_e_ratio: 0.95
+    tax_rate: 0.22
+    sales_to_capital: 0.30
+    target_op_margin: 0.32
+    roic: 0.055
+
+  # ============= CAPITAL GOODS =============
+  machinery:
+    name: "Machinery"
+    beta_unlevered: 1.05
+    d_e_ratio: 0.45
+    tax_rate: 0.22
+    sales_to_capital: 1.30
+    target_op_margin: 0.13
+    roic: 0.115
+  construction:
+    name: "Construction Supplies"
+    beta_unlevered: 1.10
+    d_e_ratio: 0.55
+    tax_rate: 0.22
+    sales_to_capital: 1.40
+    target_op_margin: 0.10
+    roic: 0.090

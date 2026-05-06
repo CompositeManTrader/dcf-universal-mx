@@ -1,0 +1,232 @@
+# Country Equity Risk Premiums (Damodaran Jan-2026)
+# https://pages.stern.nyu.edu/~adamodar/New_Home_Page/datafile/ctryprem.html
+#
+# mature_erp = 4.33%  (US S&P 500 implied ERP, Jan-2026)
+# total_erp   = mature_erp + country_risk_premium
+# tax_rate    = corporate statutory rate
+#
+# Sources: Moody's sovereign ratings → default spread → CRP
+mature_erp: 0.0433
+
+countries:
+  # Norteamerica
+  US:
+    name: "United States"
+    region: "North America"
+    rating: "Aaa"
+    crp: 0.000
+    total_erp: 0.0433
+    tax_rate: 0.21
+  CA:
+    name: "Canada"
+    region: "North America"
+    rating: "Aaa"
+    crp: 0.000
+    total_erp: 0.0433
+    tax_rate: 0.265
+  MX:
+    name: "Mexico"
+    region: "Central and South America"
+    rating: "Baa2"
+    crp: 0.0180
+    total_erp: 0.0613
+    tax_rate: 0.30
+
+  # Latinoamerica
+  BR:
+    name: "Brazil"
+    region: "Central and South America"
+    rating: "Ba2"
+    crp: 0.0331
+    total_erp: 0.0764
+    tax_rate: 0.34
+  CL:
+    name: "Chile"
+    region: "Central and South America"
+    rating: "A2"
+    crp: 0.0094
+    total_erp: 0.0527
+    tax_rate: 0.27
+  CO:
+    name: "Colombia"
+    region: "Central and South America"
+    rating: "Baa2"
+    crp: 0.0180
+    total_erp: 0.0613
+    tax_rate: 0.35
+  PE:
+    name: "Peru"
+    region: "Central and South America"
+    rating: "Baa1"
+    crp: 0.0142
+    total_erp: 0.0575
+    tax_rate: 0.295
+  AR:
+    name: "Argentina"
+    region: "Central and South America"
+    rating: "Caa3"
+    crp: 0.1410
+    total_erp: 0.1843
+    tax_rate: 0.35
+  UY:
+    name: "Uruguay"
+    region: "Central and South America"
+    rating: "Baa1"
+    crp: 0.0142
+    total_erp: 0.0575
+    tax_rate: 0.25
+
+  # Europa core
+  DE:
+    name: "Germany"
+    region: "Western Europe"
+    rating: "Aaa"
+    crp: 0.000
+    total_erp: 0.0433
+    tax_rate: 0.30
+  FR:
+    name: "France"
+    region: "Western Europe"
+    rating: "Aa3"
+    crp: 0.0050
+    total_erp: 0.0483
+    tax_rate: 0.25
+  GB:
+    name: "United Kingdom"
+    region: "Western Europe"
+    rating: "Aa3"
+    crp: 0.0050
+    total_erp: 0.0483
+    tax_rate: 0.25
+  ES:
+    name: "Spain"
+    region: "Western Europe"
+    rating: "Baa1"
+    crp: 0.0142
+    total_erp: 0.0575
+    tax_rate: 0.25
+  IT:
+    name: "Italy"
+    region: "Western Europe"
+    rating: "Baa3"
+    crp: 0.0235
+    total_erp: 0.0668
+    tax_rate: 0.28
+  CH:
+    name: "Switzerland"
+    region: "Western Europe"
+    rating: "Aaa"
+    crp: 0.000
+    total_erp: 0.0433
+    tax_rate: 0.18
+  NL:
+    name: "Netherlands"
+    region: "Western Europe"
+    rating: "Aaa"
+    crp: 0.000
+    total_erp: 0.0433
+    tax_rate: 0.258
+  IE:
+    name: "Ireland"
+    region: "Western Europe"
+    rating: "Aa3"
+    crp: 0.0050
+    total_erp: 0.0483
+    tax_rate: 0.125
+
+  # Europa este
+  PL:
+    name: "Poland"
+    region: "Eastern Europe & Russia"
+    rating: "A2"
+    crp: 0.0094
+    total_erp: 0.0527
+    tax_rate: 0.19
+  CZ:
+    name: "Czech Republic"
+    region: "Eastern Europe & Russia"
+    rating: "Aa3"
+    crp: 0.0050
+    total_erp: 0.0483
+    tax_rate: 0.21
+
+  # Asia
+  JP:
+    name: "Japan"
+    region: "Asia"
+    rating: "A1"
+    crp: 0.0067
+    total_erp: 0.0500
+    tax_rate: 0.30
+  CN:
+    name: "China"
+    region: "Asia"
+    rating: "A1"
+    crp: 0.0067
+    total_erp: 0.0500
+    tax_rate: 0.25
+  IN:
+    name: "India"
+    region: "Asia"
+    rating: "Baa3"
+    crp: 0.0235
+    total_erp: 0.0668
+    tax_rate: 0.252
+  KR:
+    name: "South Korea"
+    region: "Asia"
+    rating: "Aa2"
+    crp: 0.0040
+    total_erp: 0.0473
+    tax_rate: 0.27
+  SG:
+    name: "Singapore"
+    region: "Asia"
+    rating: "Aaa"
+    crp: 0.000
+    total_erp: 0.0433
+    tax_rate: 0.17
+  AU:
+    name: "Australia"
+    region: "Australia & NZ"
+    rating: "Aaa"
+    crp: 0.000
+    total_erp: 0.0433
+    tax_rate: 0.30
+
+  # Africa & Middle East
+  ZA:
+    name: "South Africa"
+    region: "Africa"
+    rating: "Ba2"
+    crp: 0.0331
+    total_erp: 0.0764
+    tax_rate: 0.27
+  AE:
+    name: "United Arab Emirates"
+    region: "Middle East"
+    rating: "Aa2"
+    crp: 0.0040
+    total_erp: 0.0473
+    tax_rate: 0.09
+  SA:
+    name: "Saudi Arabia"
+    region: "Middle East"
+    rating: "Aa3"
+    crp: 0.0050
+    total_erp: 0.0483
+    tax_rate: 0.20
+  IL:
+    name: "Israel"
+    region: "Middle East"
+    rating: "A2"
+    crp: 0.0094
+    total_erp: 0.0527
+    tax_rate: 0.23
+  TR:
+    name: "Turkey"
+    region: "Middle East"
+    rating: "B1"
+    crp: 0.0535
+    total_erp: 0.0968
+    tax_rate: 0.25

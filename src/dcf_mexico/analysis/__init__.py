@@ -47,6 +47,12 @@ from .trends import (
     trends_to_table,
     categorize_trends,
 )
+from .damodaran_tables import (
+    CountryERP, IndustryBeta,
+    load_country_erp, get_country_erp,
+    load_industry_betas, get_industry_beta,
+    SYNTHETIC_RATING_TABLE, FAILURE_RATE_GUIDE,
+)
 
 __all__ = [
     "compute_all_ratios", "RatioInfo", "RATIO_CATEGORIES",

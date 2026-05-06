@@ -621,7 +621,8 @@ if mode == "Single DCF":
     # Sub-tabs dentro de DCF Damodaran (orden estilo Damodaran fcffsimpleginzu)
     with tab_dcf:
         (sub_input, sub_coc, sub_proj, sub_val,
-         sub_stories, sub_pic, sub_sens, sub_worksheets) = st.tabs([
+         sub_stories, sub_pic, sub_sens, sub_worksheets,
+         sub_reference) = st.tabs([
             "📋 1. Input Sheet",
             "💰 2. Cost of Capital",
             "📈 3. Proyección FCFF",
@@ -630,6 +631,7 @@ if mode == "Single DCF":
             "🎨 6. Valuation as Picture",
             "📊 7. Sensitivity",
             "🔧 8. Supporting Worksheets",
+            "📐 9. Damodaran Reference",
         ])
 
     # Helper: wraps un sub-tab con su parent para que el patrón
@@ -654,6 +656,7 @@ if mode == "Single DCF":
     tab_pic        = _SubTab(tab_dcf, sub_pic)
     tab_sens       = _SubTab(tab_dcf, sub_sens)
     tab_worksheets = _SubTab(tab_dcf, sub_worksheets)
+    tab_reference  = _SubTab(tab_dcf, sub_reference)
 
     # ============================================================
     # TAB 1: 📷 SNAPSHOT (movido desde header de pagina)
@@ -4814,6 +4817,246 @@ if mode == "Single DCF":
     )
 
     tab_worksheets.__exit__(None, None, None)
+
+    # ============================================================
+    # SUB-TAB 9: 📐 DAMODARAN REFERENCE TABLES
+    # Tablas oficiales Damodaran cableadas al modelo:
+    #   A. Country Equity Risk Premiums (~30 países)
+    #   B. Industry Average Beta Global (~40 industrias)
+    #   C. Synthetic Rating Table (interest coverage → spread)
+    #   D. Failure Rate Reference Guide (probabilidad por etapa)
+    # ============================================================
+    tab_reference.__enter__()
+    st.subheader(f"📐 Damodaran Reference Tables — {issuer.ticker}")
+    st.caption(
+        "Tablas oficiales de Damodaran (Jan-2026). Usa los selectores "
+        "para auto-poblar los inputs del modelo. Cambios se aplican "
+        "en la próxima rerun."
+    )
+    try:
+        from src.dcf_mexico.analysis import (
+            load_country_erp, load_industry_betas,
+            SYNTHETIC_RATING_TABLE, FAILURE_RATE_GUIDE,
+        )
+        import pandas as _pd
+
+        ref_a, ref_b, ref_c, ref_d = st.tabs([
+            "🌎 A · Country ERP",
+            "🏭 B · Industry Beta (Global)",
+            "💳 C · Synthetic Rating",
+            "⚠️ D · Failure Rate Guide",
+        ])
+
+        # ---- A · Country ERP ----
+        with ref_a:
+            st.markdown(
+                "**Country Equity Risk Premiums** (Damodaran Jan-26). "
+                "Total ERP = Mature ERP + Country Risk Premium."
+            )
+            mature, countries = load_country_erp()
+            st.metric("Mature ERP (US S&P 500 implied)",
+                       f"{mature*100:.2f}%",
+                       help="Base sobre la cual se suman los CRPs")
+
+            sel_country = st.selectbox(
+                "Selecciona país",
+                options=list(countries.keys()),
+                format_func=lambda c: f"{c} · {countries[c].name}",
+                index=list(countries.keys()).index("MX"),
+                key="ref_country_pick",
+            )
+            ce = countries[sel_country]
+            cc1, cc2, cc3, cc4 = st.columns(4)
+            cc1.metric("Country", ce.name, ce.region)
+            cc2.metric("Sov. Rating", ce.rating)
+            cc3.metric("CRP", f"{ce.crp*100:.2f}%")
+            cc4.metric("Total ERP", f"{ce.total_erp*100:.2f}%",
+                         f"= {mature*100:.2f}% + {ce.crp*100:.2f}%")
+
+            if st.button("📥 Aplicar al Input Sheet (sec E)",
+                          key="apply_country_erp"):
+                st.session_state[f"dam_in_erp_{issuer.ticker}"] = (
+                    ce.total_erp * 100)
+                st.session_state[f"dam_in_cds_{issuer.ticker}"] = ce.crp * 100
+                st.success(
+                    f"✅ ERP actualizado a {ce.total_erp*100:.2f}% "
+                    f"y CRP a {ce.crp*100:.2f}% — refresca para ver "
+                    f"el nuevo WACC."
+                )
+
+            # Tabla completa
+            st.divider()
+            st.markdown("**Tabla completa**")
+            df_c = _pd.DataFrame([
+                {"Code": c.code, "Country": c.name, "Region": c.region,
+                 "Rating": c.rating, "CRP": f"{c.crp*100:.2f}%",
+                 "Total ERP": f"{c.total_erp*100:.2f}%",
+                 "Tax Rate": f"{c.tax_rate*100:.1f}%"}
+                for c in sorted(countries.values(), key=lambda x: x.name)
+            ])
+            st.dataframe(df_c, hide_index=True, use_container_width=True,
+                          height=400)
+
+        # ---- B · Industry Beta ----
+        with ref_b:
+            st.markdown(
+                "**Industry Average Beta (Global)** (Damodaran Jan-26). "
+                "Bottom-up unlevered beta + sales/cap + target margin."
+            )
+            industries = load_industry_betas()
+
+            sel_ind = st.selectbox(
+                "Selecciona industria",
+                options=list(industries.keys()),
+                format_func=lambda k: industries[k].name,
+                key="ref_industry_pick",
+            )
+            ib = industries[sel_ind]
+            ic1, ic2, ic3, ic4 = st.columns(4)
+            ic1.metric("β unlevered", f"{ib.beta_unlevered:.3f}")
+            ic2.metric("S2C ratio", f"{ib.sales_to_capital:.2f}x")
+            ic3.metric("Op Margin", f"{ib.target_op_margin*100:.1f}%")
+            ic4.metric("ROIC", f"{ib.roic*100:.1f}%")
+            if ib.notes:
+                st.caption(f"💡 {ib.notes}")
+
+            ic5, ic6 = st.columns(2)
+            with ic5:
+                if st.button("📥 Aplicar β + S2C + Margin al Input Sheet",
+                              key="apply_industry"):
+                    st.session_state[
+                        f"dam_in_beta_u_{issuer.ticker}"] = ib.beta_unlevered
+                    st.session_state[
+                        f"dam_in_s2c_15_{issuer.ticker}"] = ib.sales_to_capital
+                    st.session_state[
+                        f"dam_in_s2c_610_{issuer.ticker}"] = ib.sales_to_capital
+                    st.session_state[
+                        f"dam_in_m_target_{issuer.ticker}"] = (
+                            ib.target_op_margin * 100)
+                    st.success(
+                        f"✅ β={ib.beta_unlevered:.3f}, "
+                        f"S2C={ib.sales_to_capital:.2f}x, "
+                        f"Margin={ib.target_op_margin*100:.1f}% aplicados."
+                    )
+            with ic6:
+                st.info(
+                    "**Damodaran B23:** *'If you input a beta directly, "
+                    "I will unlever it using the current debt to equity ratio.'*"
+                )
+
+            # Tabla completa
+            st.divider()
+            st.markdown("**Tabla completa de industrias**")
+            df_i = _pd.DataFrame([
+                {"Industry": i.name,
+                 "β unlev": f"{i.beta_unlevered:.3f}",
+                 "D/E": f"{i.d_e_ratio:.2f}",
+                 "Tax": f"{i.tax_rate*100:.0f}%",
+                 "S2C": f"{i.sales_to_capital:.2f}x",
+                 "Op Margin": f"{i.target_op_margin*100:.1f}%",
+                 "ROIC": f"{i.roic*100:.1f}%"}
+                for i in sorted(industries.values(), key=lambda x: x.name)
+            ])
+            st.dataframe(df_i, hide_index=True, use_container_width=True,
+                          height=500)
+
+        # ---- C · Synthetic Rating ----
+        with ref_c:
+            st.markdown(
+                "**Synthetic Rating Table** (Damodaran). Mapea Interest "
+                "Coverage Ratio (EBIT / Interest Expense) → Rating → "
+                "Default Spread sobre risk-free."
+            )
+            df_r = _pd.DataFrame([
+                {"Coverage ≥": f"{cov_min:.2f}x" if cov_min > -1e8 else "any",
+                 "Rating": rating,
+                 "Default Spread": f"{spread*100:.2f}%",
+                 "Pre-tax Kd (rf=9.21%)": f"{(0.0921 + spread)*100:.2f}%"}
+                for cov_min, rating, spread in SYNTHETIC_RATING_TABLE
+            ])
+            st.dataframe(df_r, hide_index=True, use_container_width=True)
+
+            st.info(
+                f"📌 **Tu emisora actual ({issuer.ticker}):** "
+                f"Interest Coverage = "
+                f"{(out.wacc_result.interest_coverage):.2f}x → "
+                f"Rating sintético: **{out.wacc_result.rating}** → "
+                f"Default Spread: **{out.wacc_result.default_spread*100:.2f}%**"
+            )
+
+            st.markdown(
+                """
+                **Notas Damodaran (B36):**
+                - **Tabla 1 (large/safe, market cap > $5B):** se usa por default.
+                - **Tabla 2 (small/risky, < $5B o cíclico):** thresholds más
+                   estrictos. Mi código usa tabla 1 — si tu emisora es small-cap
+                   o muy volátil, los spreads reales pueden ser más altos.
+                """
+            )
+
+        # ---- D · Failure Rate Guide ----
+        with ref_d:
+            st.markdown(
+                "**Failure Rate Reference Guide.** Damodaran sugiere "
+                "estimar la probabilidad de quiebra por etapa del negocio. "
+                "Esta tabla es orientativa."
+            )
+            df_f = _pd.DataFrame([
+                {"Etapa": f"{r['color']} {r['stage']}",
+                 "P(failure) bajo": f"{r['p_fail_low']*100:.0f}%",
+                 "P(failure) típico": f"{r['p_fail_typical']*100:.0f}%",
+                 "P(failure) alto": f"{r['p_fail_high']*100:.0f}%",
+                 "Ejemplos": r["examples"]}
+                for r in FAILURE_RATE_GUIDE
+            ])
+            st.dataframe(df_f, hide_index=True, use_container_width=True)
+
+            st.divider()
+            st.markdown("**Estimador interactivo**")
+
+            stages = [r["stage"] for r in FAILURE_RATE_GUIDE]
+            sel_stage = st.selectbox(
+                "Etapa de tu emisora",
+                options=stages,
+                index=4 if issuer.ticker == "CUERVO" else 3,
+                key="ref_failure_stage",
+                help=("Ej. CUERVO = Blue chip / IG, "
+                      "AEROMEX = Distressed, "
+                      "etc.")
+            )
+            stage_data = next(r for r in FAILURE_RATE_GUIDE
+                              if r["stage"] == sel_stage)
+            fc1, fc2, fc3 = st.columns(3)
+            fc1.metric("P(failure) bajo", f"{stage_data['p_fail_low']*100:.0f}%")
+            fc2.metric("P(failure) típico",
+                         f"{stage_data['p_fail_typical']*100:.0f}%")
+            fc3.metric("P(failure) alto",
+                         f"{stage_data['p_fail_high']*100:.0f}%")
+
+            if st.button("📥 Aplicar P(failure) típica al Input Sheet sec G",
+                          key="apply_pfail"):
+                st.session_state[f"dam_in_ov_fail_{issuer.ticker}"] = (
+                    "Yes" if stage_data["p_fail_typical"] > 0 else "No")
+                st.session_state[f"dam_in_pfail_{issuer.ticker}"] = (
+                    stage_data["p_fail_typical"] * 100)
+                st.success(
+                    f"✅ P(failure) = "
+                    f"{stage_data['p_fail_typical']*100:.0f}% aplicado."
+                )
+
+            st.warning(
+                "⚠️ **Para CUERVO recomendado P(failure) ≈ 0%** "
+                "(blue chip mature). Activar > 0% solo si crees que la "
+                "transición distribuidores US 2026 introduce riesgo "
+                "material de quiebra."
+            )
+
+    except Exception as _e:
+        st.error(f"Error cargando reference tables: {_e}")
+        import traceback as _tb
+        st.code(_tb.format_exc())
+
+    tab_reference.__exit__(None, None, None)
 
     # ----- DuPont open -----
     tab_dupont.__enter__()
