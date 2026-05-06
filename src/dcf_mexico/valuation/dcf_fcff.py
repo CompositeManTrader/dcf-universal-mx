@@ -69,13 +69,16 @@ class DCFAssumptions:
 
     # Tax
     effective_tax_base: float = 0.27
-    marginal_tax_terminal: float = MARGINAL_TAX_MX
+    marginal_tax_current: float = MARGINAL_TAX_MX   # BUG #13: usado en Hamada (current)
+    marginal_tax_terminal: float = MARGINAL_TAX_MX  # usado en NOPAT terminal y fade
 
     # ===== BLOQUE E — WACC =====
     risk_free: float = RF_MX_DEFAULT
     erp: float = ERP_MX_DEFAULT
     unlevered_beta: float = 0.85               # Damodaran industry default
     terminal_wacc_override: Optional[float] = None
+    country_debt_premium: float = 0.0          # BUG #5: editable desde Input Sheet sec E
+                                                # (solo > 0 si rf es USD-denominated)
 
     # Mercado
     market_price: Optional[float] = None       # MXN por accion
@@ -102,6 +105,11 @@ class DCFAssumptions:
     # 6. Trapped cash (cash en jurisdicciones con tax adicional)
     trapped_cash: float = 0.0                  # MDP
     trapped_cash_tax_rate: float = 0.0         # tax rate adicional o discount
+    # 7. Employee options (BUG #9: dilución del equity)
+    # Damodaran: equity_value debe restar el valor de opciones outstanding.
+    # Aproximación simple intrinsic value (Black-Scholes pendiente).
+    options_count: float = 0.0                  # MILLONES de opciones outstanding
+    options_strike: float = 0.0                 # MXN strike promedio
 
     # ---- PER-YEAR OVERRIDES (si se llenan, anulan la curva smooth) ----
     revenue_growth_per_year: Optional[list] = None
@@ -221,6 +229,11 @@ class DCFOutput:
     equity_value: float = 0.0
     value_per_share: float = 0.0
     upside_pct: float = 0.0
+    # ===== Tracking warnings y overrides silenciosos (BUG #4, #12) =====
+    terminal_wacc_sanity_overridden: bool = False             # True si sanity check forzó cambio
+    terminal_wacc_sanity_reason: str = ""                     # explicación del override
+    nol_unused_at_y10: float = 0.0                            # NOL > 0 al fin de forecast (BUG #12)
+    options_value_subtracted: float = 0.0                     # BUG #9 employee options dilution
 
     def projection_table(self) -> pd.DataFrame:
         """Tabla principal Damodaran-style (12 columnas, año a año)."""
@@ -376,8 +389,9 @@ def project_company(
     # 1) WACC inicial via bottom-up
     market_cap = (a.market_price or 0) * base.shares_outstanding / 1e6  # MDP
     if market_cap <= 0:
-        # Fallback: usar BV equity para inicializar WACC
-        market_cap = max(base.financial_debt, 1.0) * 1.5
+        # BUG #6 fix: fallback usa BV equity (Damodaran-recommended proxy)
+        # en lugar del arbitrario debt × 1.5.
+        market_cap = max(base.equity_book, base.financial_debt * 0.5, 1.0)
 
     wacc_res = compute_wacc(
         market_cap=market_cap,
@@ -386,31 +400,64 @@ def project_company(
         unlevered_beta=a.unlevered_beta,
         risk_free=a.risk_free,
         erp=a.erp,
-        marginal_tax=a.marginal_tax_terminal,
+        # BUG #13 fix: Hamada usa marginal_tax_current (statutory hoy),
+        # no marginal_tax_terminal (potencial cambio futuro).
+        marginal_tax=a.marginal_tax_current,
+        # BUG #5 fix: pasar country_debt_premium del Input Sheet
+        country_debt_premium=a.country_debt_premium,
     )
 
-    # Terminal WACC: por defecto NO fade (mismo WACC inicial).
-    # Justificacion: con high Rf MX (9.5%) y ERP MX alto (6.8%), forzar beta=1
-    # al terminal genera WACC > inicial, lo cual no tiene sentido economico.
-    # El analista puede pasar `terminal_wacc_override` para fade explicito.
-    terminal_wacc = a.terminal_wacc_override
-    if terminal_wacc is None:
+    # Terminal WACC: 3 modos
+    #   1. Override explícito (terminal_wacc_override)
+    #   2. Override vía rf terminal (BUG #8: recomputar WACC con nuevo rf)
+    #   3. Default: mismo WACC inicial (no fade)
+    terminal_wacc_overridden = False
+    terminal_wacc_reason = ""
+    if a.terminal_wacc_override is not None:
+        terminal_wacc = a.terminal_wacc_override
+    elif a.override_terminal_riskfree:
+        # BUG #8 fix: recomputar WACC terminal usando rf override.
+        # Asume β terminal = 1.0 (mature company), D/E = current.
+        wacc_terminal_res = compute_wacc(
+            market_cap=market_cap,
+            total_debt=base.financial_debt,
+            interest_coverage=base.ebit / max(base.interest_expense, 1e-6),
+            unlevered_beta=1.0,                               # mature → β=1
+            risk_free=a.terminal_riskfree_override,
+            erp=a.erp,
+            marginal_tax=a.marginal_tax_terminal,
+            country_debt_premium=a.country_debt_premium,
+        )
+        terminal_wacc = wacc_terminal_res.wacc
+    else:
         terminal_wacc = wacc_res.wacc
-    # Sanity: terminal WACC debe ser > terminal growth (Gordon estabilidad)
+    # Sanity: terminal WACC debe ser > terminal growth + buffer (Gordon estable)
+    # BUG #4 fix: trackeamos el override para mostrar warning en UI
     if terminal_wacc <= a.terminal_growth + 0.005:
+        original = terminal_wacc
         terminal_wacc = a.terminal_growth + 0.02
+        terminal_wacc_overridden = True
+        terminal_wacc_reason = (
+            f"Original {original:.2%} ≤ g_terminal {a.terminal_growth:.2%} + 0.5%; "
+            f"forzado a g + 2% = {terminal_wacc:.2%} para estabilidad Gordon. "
+            f"Damodaran B68: g > rf + 1% rinde valuación inválida."
+        )
 
     # 2) Setup forecast
     n = a.forecast_years
     high_n = a.high_growth_years
     base_margin = base.ebit / base.revenue if base.revenue else a.target_op_margin
-    base_tax = base.effective_tax_rate
+    # BUG #3 fix: clamp effective_tax_rate a [0, 0.50] para evitar refunds
+    # negativos o tax rates inflados que distorsionarían NOPAT.
+    base_tax = max(0.0, min(0.50, base.effective_tax_rate))
 
     out = DCFOutput(
         base=base,
         assumptions=a,
         wacc_result=wacc_res,
         terminal_wacc=terminal_wacc,
+        terminal_wacc_sanity_overridden=terminal_wacc_overridden,
+        terminal_wacc_sanity_reason=terminal_wacc_reason,
     )
 
     # ===== Helpers Damodaran-style =====
@@ -501,7 +548,11 @@ def project_company(
             nopat_t = ebit_t * (1 - tax_t)
 
         s2c_t = _s2c(t)
-        reinvest_t = delta_rev / s2c_t if s2c_t > 0 else 0.0
+        # BUG #1 fix: clamp reinvest >= 0. Si revenue cae (g < 0), no se
+        # "des-invierte" (las fábricas no se desconstruyen gratis). Damodaran:
+        # en años de declive, reinvestment floor = 0 (a menos que se modele
+        # explícitamente liquidación de PPE, que no es nuestro caso).
+        reinvest_t = max(0.0, delta_rev / s2c_t) if s2c_t > 0 else 0.0
         fcff_t = nopat_t - reinvest_t
 
         # ===== Invested Capital evolutivo (Hoja 2 implied) =====
@@ -579,39 +630,77 @@ def project_company(
     operating_value_dcf = out.sum_pv_fcff + pv_tv
     out.operating_value_dcf = operating_value_dcf
 
-    # 5) Probability of failure adjustment (Damodaran)
-    # Final = (1-p) × DCF_value + p × failure_proceeds
-    if a.probability_of_failure > 0:
-        if a.failure_proceeds_basis == "B":
-            # Book value of capital = Book Equity + Book Debt
-            book_capital = (base.equity_book + base.financial_debt)
-            distress_proceeds = book_capital * a.failure_proceeds_pct
-        else:
-            # Fair value (V): % del DCF operating value
-            distress_proceeds = operating_value_dcf * a.failure_proceeds_pct
-        operating_value_adj = (1 - a.probability_of_failure) * operating_value_dcf \
-                            + a.probability_of_failure * distress_proceeds
-    else:
-        distress_proceeds = 0.0
-        operating_value_adj = operating_value_dcf
+    # BUG #12 fix: track NOL no agotado al final del forecast
+    out.nol_unused_at_y10 = nol_remaining if nol_remaining > 0 else 0.0
 
-    out.distress_proceeds = distress_proceeds
-    out.enterprise_value = operating_value_adj
+    # 5) Probability of failure adjustment (Damodaran) — REFACTOR (BUG #7)
+    # ANTES: aplicaba el blend (1-p)·DCF + p·distress al EV completo, luego
+    # restaba debt íntegro al equity. Esto sobreestima equity en distress
+    # porque debtholders cobran PRIMERO en quiebra; equity recupera residual.
+    # AHORA: blend a nivel EQUITY: (1-p)·equity_DCF + p·equity_distress
+    #   donde equity_distress = max(0, distress_proceeds_total − debt − minority).
+    # Para CUERVO (low leverage) el efecto es chico; para CEMEX (high lev) es
+    # material.
     net_debt = base.financial_debt - base.cash
-    # Trapped cash: si lo hay, se descuenta el tax adicional sobre el cash repatriado
-    cash_value = base.cash
+    # BUG #11 fix: removida línea muerta `cash_value = base.cash`.
     if a.trapped_cash > 0 and a.trapped_cash_tax_rate > 0:
-        # Restar tax adicional sobre cash trapped al hacer bridge
         cash_haircut = a.trapped_cash * a.trapped_cash_tax_rate
         net_debt += cash_haircut    # equivalente a reducir cash en bridge
 
-    out.equity_value = (
-        out.enterprise_value
-        - net_debt
-        - base.minority_interest
+    equity_dcf_pre_failure = (
+        operating_value_dcf - net_debt - base.minority_interest
         + base.non_operating_assets
     )
-    out.value_per_share = out.equity_value * 1e6 / base.shares_outstanding if base.shares_outstanding > 0 else 0.0
+
+    if a.probability_of_failure > 0:
+        # Distress proceeds totales (cubren a TODOS los stakeholders)
+        if a.failure_proceeds_basis == "B":
+            book_capital = (base.equity_book + base.financial_debt)
+            distress_proceeds = book_capital * a.failure_proceeds_pct
+        else:
+            distress_proceeds = operating_value_dcf * a.failure_proceeds_pct
+        # Equity solo recupera lo que quede DESPUÉS de pagar debt + minority
+        equity_distress = max(
+            0.0,
+            distress_proceeds - base.financial_debt - base.minority_interest,
+        )
+        # Blend a nivel equity (NO a nivel EV como antes)
+        out.equity_value = (
+            (1 - a.probability_of_failure) * equity_dcf_pre_failure
+            + a.probability_of_failure * equity_distress
+        )
+        out.distress_proceeds = distress_proceeds
+        # EV reportado para diagnóstico (blend tradicional)
+        out.enterprise_value = (
+            (1 - a.probability_of_failure) * operating_value_dcf
+            + a.probability_of_failure * distress_proceeds
+        )
+    else:
+        out.distress_proceeds = 0.0
+        out.enterprise_value = operating_value_dcf
+        out.equity_value = equity_dcf_pre_failure
+
+    # BUG #9 fix: dilución por employee options (intrinsic value approx).
+    # No usamos Black-Scholes (overkill para nuestros casos MX), sino el
+    # value intrínseco simple: max(0, value_per_share_pre - strike) × N_options.
+    # Para Damodaran completo se requiere B-S; documentamos limitación.
+    options_value = 0.0
+    n_opts = getattr(a, "options_count", 0.0) or 0.0
+    if n_opts > 0:
+        # Calculamos value_per_share PRE-options para evitar circularidad simple
+        vps_pre = (out.equity_value * 1e6 / base.shares_outstanding
+                     if base.shares_outstanding > 0 else 0.0)
+        strike = getattr(a, "options_strike", 0.0) or 0.0
+        intrinsic_per_option = max(0.0, vps_pre - strike)
+        # n_opts viene en MILLONES (mismo unit que el Input Sheet)
+        options_value = intrinsic_per_option * n_opts * 1e6 / 1e6  # MDP
+        out.equity_value -= options_value
+    out.options_value_subtracted = options_value
+
+    out.value_per_share = (
+        out.equity_value * 1e6 / base.shares_outstanding
+        if base.shares_outstanding > 0 else 0.0
+    )
 
     if a.market_price and a.market_price > 0:
         out.upside_pct = out.value_per_share / a.market_price - 1.0

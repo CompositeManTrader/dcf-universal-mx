@@ -23,7 +23,12 @@ ERP_MATURE_DEFAULT = 0.0500      # ERP US maduro (Damodaran)
 CRP_MX_DEFAULT = 0.0180          # Country Risk Premium Mexico
 ERP_MX_DEFAULT = ERP_MATURE_DEFAULT + CRP_MX_DEFAULT  # 6.80%
 MARGINAL_TAX_MX = 0.30
-DEFAULT_REGION_PREMIUM_FOR_DEBT = 0.0180  # spread soberano MX vs UST
+# BUG #2 fix: el M-Bono 10Y MXN (RF_MX_DEFAULT=9.5%) YA INCLUYE el spread
+# soberano MX vs UST (~1.8%). Sumarle de nuevo country_debt_premium en Kd
+# generaba doble conteo del CRP. Ahora default = 0.
+# Si en algún momento se trabaja con Rf USD-base, este parámetro debe
+# subirse a ~1.8% para reflejar el spread soberano MX.
+DEFAULT_REGION_PREMIUM_FOR_DEBT = 0.0   # rf MXN ya embed CRP
 
 
 # --- Synthetic rating table de Damodaran (interest coverage -> rating + default spread) ---
@@ -116,17 +121,28 @@ def compute_wacc(
     country_debt_premium: float = DEFAULT_REGION_PREMIUM_FOR_DEBT,
 ) -> WACCResult:
     """Calcula WACC bottom-up al style Damodaran adaptado a MX."""
+    # BUG #15 fix: en lugar de raise, retornar Ke con weights (1, 0).
+    # Caso edge: empresa sin deuda y sin precio (preIPO o data faltante).
     if market_cap <= 0 and total_debt <= 0:
-        raise ValueError("market_cap + total_debt deben ser > 0")
+        ke_only = risk_free + unlevered_beta * erp  # asume D/E=0, βL=βU
+        return WACCResult(
+            risk_free=risk_free, erp=erp,
+            unlevered_beta=unlevered_beta, levered_beta=unlevered_beta,
+            cost_equity=ke_only,
+            pretax_cost_debt=risk_free, aftertax_cost_debt=risk_free*(1-marginal_tax),
+            rating="N/A (no debt)", default_spread=0.0,
+            weight_equity=1.0, weight_debt=0.0,
+            wacc=ke_only, interest_coverage=float("inf"), debt_to_equity=0.0,
+        )
 
     d_to_e = total_debt / market_cap if market_cap > 0 else 99.0
     levered_beta = relever_beta(unlevered_beta, d_to_e, marginal_tax)
     cost_equity = cost_of_equity_capm(risk_free, levered_beta, erp)
 
     rating, spread_us = synthetic_rating(interest_coverage)
-    # Pretax cost debt MXN = Rf MXN + spread crediticio + premium pais (default ya incluido?)
-    # Damodaran: cost_debt = Rf + default_spread (sobre risk-free de la moneda)
-    # Para evitar doble conteo del CRP, usamos solo el spread crediticio.
+    # BUG #2 fix: cuando risk_free es local (M-Bono MXN), ya incluye CRP MX.
+    # `country_debt_premium` solo debe sumarse si rf es USD-denominated (raro).
+    # Default DEFAULT_REGION_PREMIUM_FOR_DEBT = 0 evita el doble conteo.
     pretax_cost_debt = risk_free + spread_us + country_debt_premium
     aftertax_cost_debt = pretax_cost_debt * (1.0 - marginal_tax)
 

@@ -1106,6 +1106,27 @@ if mode == "Single DCF":
     terminal_g = (_ss_pct("g_term", market.terminal_growth)
                    if override_g else market.terminal_growth)
 
+    # BUG #5 fix: country_debt_premium del Input Sheet sec E
+    cds_user = _ss_pct("cds", market.country_default_spread_mx
+                                if hasattr(market, "country_default_spread_mx")
+                                else 0.0)
+    # Nota: si rf_user es M-Bono MXN (caso default), cds_user NO debe sumarse
+    # al Kd (ya está embebido en rf). Lo pasamos al modelo igual; el motor
+    # decide vía DEFAULT_REGION_PREMIUM_FOR_DEBT=0 (BUG #2 fix).
+    # Solo > 0 si el analista explícitamente trabaja con rf USD-base.
+
+    # BUG #8 fix: terminal riskfree override (Input Sheet sec G)
+    override_term_rf = _ss_yes("ov_rf")
+    term_rf_value = _ss_pct("rf10", 0.06)
+
+    # BUG #9 fix: employee options outstanding (Input Sheet sec F)
+    options_yn = st.session_state.get(
+        f"dam_in_opt_yn_{issuer.ticker}", "No") == "Yes"
+    options_count_user = (float(_ss_num("opt_n", 0.0))
+                            if options_yn else 0.0)
+    options_strike_user = (float(_ss_num("opt_strike", 0.0))
+                              if options_yn else 0.0)
+
     a = DCFAssumptions(
         # ===== Inputs basicos =====
         revenue_growth_high=rev_growth,
@@ -1113,11 +1134,13 @@ if mode == "Single DCF":
         target_op_margin=op_margin,
         sales_to_capital=s2c,
         effective_tax_base=eff_tax_user,
+        marginal_tax_current=marginal_tax_user,    # BUG #13: Hamada usa current
         marginal_tax_terminal=marginal_tax_user,
         risk_free=rf,
         erp=erp,
         unlevered_beta=beta_unlev,
         terminal_wacc_override=terminal_wacc,
+        country_debt_premium=cds_user,              # BUG #5
         market_price=market_price,
         # ===== Damodaran Hoja 1 (advanced) =====
         revenue_growth_y1=rev_growth_y1 if use_y1_growth else None,
@@ -1134,8 +1157,23 @@ if mode == "Single DCF":
         reinvestment_lag=reinvest_lag,
         trapped_cash=trapped,
         trapped_cash_tax_rate=trapped_tax,
+        # BUG #8: terminal rf override
+        override_terminal_riskfree=override_term_rf,
+        terminal_riskfree_override=term_rf_value,
+        # BUG #9: employee options
+        options_count=options_count_user,
+        options_strike=options_strike_user,
     )
     out = project_company(base, a)
+
+    # BUG #4 fix: si sanity check overrideó terminal WACC, advertir AL USUARIO.
+    # Hacemos el warning visible (no banner silencioso) para que sepa que
+    # su input fue ignorado y por qué.
+    if out.terminal_wacc_sanity_overridden:
+        st.warning(
+            f"⚠️ **Terminal WACC ajustado automáticamente:** "
+            f"{out.terminal_wacc_sanity_reason}"
+        )
 
     # ============================================================
     # TAB 4-bis: 📋 DAMODARAN INPUT SHEET (replica exacta del Excel)

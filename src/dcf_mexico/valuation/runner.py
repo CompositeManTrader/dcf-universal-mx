@@ -48,8 +48,9 @@ def _resolve_target_margin(parsed_dcf, sector: SectorDefaults, override: Optiona
     if override and "target_op_margin" in override:
         return float(override["target_op_margin"])
     current = parsed_dcf.operating_margin
-    # Si margen actual es razonable (5%-100%), usarlo. Si no, sector default.
-    if 0.05 <= current <= 1.0:
+    # BUG #10 fix: cap a 50% (no 100%). Margen op > 50% es absurdo para
+    # cualquier emisora pública; valores fuera de rango = data basura del parser.
+    if 0.05 <= current <= 0.50:
         return current
     return sector.target_op_margin
 
