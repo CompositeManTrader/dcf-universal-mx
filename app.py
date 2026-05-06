@@ -1022,14 +1022,35 @@ if mode == "Single DCF":
         v_scaled = v * scale
         return max(vmin, min(vmax, v_scaled))
 
-    _default_rev_growth = _sug_or_default(
-        "revenue_growth_y2y5", market.revenue_growth_high,
-        0.0, 0.20, scale=0.01)
-    _default_op_margin = _sug_or_default(
-        "op_margin_target", sector.target_op_margin,
-        0.0, 0.60, scale=0.01)
-    _default_s2c = _sug_or_default(
-        "sales_to_capital", sector.sales_to_capital, 0.1, 6.0)
+    # 🔧 BUG FIX: respetar `issuer.dcf_override` del yaml (antes ignorado).
+    # Prioridad de defaults: dcf_override (yaml) > sugerencia histórica > sector/market.
+    # Esto permite calibrar emisora-específico (e.g., CUERVO con valores Damodaran).
+    _override = getattr(issuer, "dcf_override", None) or {}
+
+    _default_rev_growth = (
+        float(_override["revenue_growth_high"])
+        if "revenue_growth_high" in _override
+        else _sug_or_default("revenue_growth_y2y5",
+                              market.revenue_growth_high, 0.0, 0.20, scale=0.01)
+    )
+    _default_op_margin = (
+        float(_override["target_op_margin"])
+        if "target_op_margin" in _override
+        else _sug_or_default("op_margin_target",
+                              sector.target_op_margin, 0.0, 0.60, scale=0.01)
+    )
+    _default_s2c = (
+        float(_override["sales_to_capital"])
+        if "sales_to_capital" in _override
+        else _sug_or_default("sales_to_capital",
+                              sector.sales_to_capital, 0.1, 6.0)
+    )
+    # β unlevered también puede venir del override
+    _default_beta = float(_override.get("unlevered_beta", sector.beta_unlevered))
+    # Y1 growth y target margin Y1 (Damodaran-style)
+    _default_g_y1 = float(_override.get("revenue_growth_y1", _default_rev_growth))
+    _default_terminal_g = float(_override.get("terminal_growth",
+                                                market.terminal_growth))
 
     def _ss_pct(key_suffix, default):
         """Lee key 'dam_in_<key>_<ticker>' (UI guarda en %) → decimal."""
@@ -1053,7 +1074,8 @@ if mode == "Single DCF":
     rf           = _ss_pct("rf", market.risk_free)
 
     # Risk inputs ahora editables en Input Sheet sec E
-    beta_unlev    = float(_ss_num("beta_u", sector.beta_unlevered))
+    # BUG FIX: usar _default_beta del override yaml en lugar de sector.beta_unlevered
+    beta_unlev    = float(_ss_num("beta_u", _default_beta))
     erp           = _ss_pct("erp", market.erp)
     terminal_wacc = _ss_pct("term_wacc",
                               market.terminal_wacc_override or 0.085)
@@ -1067,7 +1089,9 @@ if mode == "Single DCF":
     marginal_tax_user = _ss_pct("marg_tax", market.marginal_tax)
 
     # === Y1 separado de Y2-Y5 (Input Sheet sec D) ===
-    rev_growth_y1 = _ss_pct("g_y1", rev_growth)
+    # BUG FIX: si el override yaml define revenue_growth_y1 distinto, usarlo
+    rev_growth_y1 = _ss_pct("g_y1", _default_g_y1 if _default_g_y1 != _default_rev_growth
+                                       else rev_growth)
     op_margin_y1  = _ss_pct(
         "m_y1",
         base.ebit / base.revenue if base.revenue else op_margin)
@@ -1103,8 +1127,9 @@ if mode == "Single DCF":
                      if (override_tc and trapped > 0) else 0.0)
 
     override_g = _ss_yes("ov_g")
-    terminal_g = (_ss_pct("g_term", market.terminal_growth)
-                   if override_g else market.terminal_growth)
+    # BUG FIX: usar _default_terminal_g (incluye override yaml si existe)
+    terminal_g = (_ss_pct("g_term", _default_terminal_g)
+                   if override_g else _default_terminal_g)
 
     # BUG #5 fix: country_debt_premium del Input Sheet sec E
     cds_user = _ss_pct("cds", market.country_default_spread_mx
