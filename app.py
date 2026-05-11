@@ -586,18 +586,29 @@ if mode == "Single DCF":
         st.stop()
 
     # ----- NON-FINANCIAL: FCFF DCF -----
-    # 🔧 BUG FIX: detectar moneda y aplicar FX si reporta en USD.
-    # Emisoras como GMEXICO, CEMEX, ORBIA, KOF reportan en USD.
-    # Sin este fix, el modelo trataba 5,000 USD como 5,000 MXN.
+    # 🔧 FX HANDLING: emisoras USD (GMEXICO, CEMEX, ORBIA, KOF) requieren
+    # conversión a MXN. Usamos el USDMXN PROMEDIO del trimestre cargado
+    # (no un FX constante arbitrario) — datos históricos Banxico en
+    # config/fx_rates_historic.yaml.
     _currency = (res.info.currency or "MXN").upper().strip()
-    _fx_mult = market.fx_rate_usdmxn if _currency == "USD" else 1.0
     if _currency == "USD":
-        st.info(
-            f"💱 **Emisora reporta en USD** — aplicando FX = "
-            f"{market.fx_rate_usdmxn:.2f} MXN/USD para convertir TODOS "
-            f"los flujos monetarios a MXN. Resultado final del DCF en "
-            f"MXN/acción (compatible con precio BMV)."
+        from src.dcf_mexico.fx_rates import (
+            get_usdmxn_avg, get_spot_rate, get_period_breakdown,
         )
+        _fx_breakdown = get_period_breakdown(res.info.period_end)
+        _fx_period = _fx_breakdown["avg"]   # promedio del trimestre = flujos
+        _fx_spot = _fx_breakdown["spot_for_reference"]
+        _fx_mult = _fx_period
+        st.info(
+            f"💱 **Emisora reporta en USD** — aplicando FX por periodo. "
+            f"Periodo: **{res.info.period_end}** · "
+            f"USDMXN promedio Q: **{_fx_period:.2f}** · "
+            f"Spot ref: {_fx_spot:.2f} · "
+            f"(Histórico Banxico — varía por trimestre, no es constante)"
+        )
+    else:
+        _fx_mult = 1.0
+
     base = CompanyBase.from_parser_dcf(
         res.dcf,
         include_leases_as_debt=True,
@@ -2495,7 +2506,25 @@ if mode == "Single DCF":
                 hs_ef_view = hs_ef
                 use_annual_flag = annual_only_ef
 
-            fx_rate = market.fx_rate_usdmxn
+            # 🔧 FX HANDLING: para emisoras USD (GMEXICO, CEMEX, ORBIA, KOF),
+            # _detect_fx_mult automáticamente usa el USDMXN promedio del
+            # trimestre del snapshot (config/fx_rates_historic.yaml).
+            # fx_rate=None hace que panel.py haga lookup por periodo.
+            _ef_use_constant_ccy = False
+            if (res.info.currency or "MXN").upper() == "USD":
+                _ef_use_constant_ccy = st.checkbox(
+                    "💱 Constant currency (usar FX spot para TODOS los periodos)",
+                    value=False,
+                    key=f"ef_constccy_{issuer.ticker}",
+                    help="Damodaran-style: aísla desempeño operacional del "
+                         "ruido FX. OFF = cada periodo usa su FX real "
+                         "(análisis histórico). ON = todos al FX spot "
+                         "(análisis operativo, comparable).",
+                )
+                from src.dcf_mexico.fx_rates import get_spot_rate
+                fx_rate = get_spot_rate() if _ef_use_constant_ccy else None
+            else:
+                fx_rate = None
 
             # Sub-tabs Income / Balance / CashFlow / Vertical & Horizontal
             sub_is, sub_bs, sub_cf, sub_vh = st.tabs([
@@ -3040,9 +3069,9 @@ if mode == "Single DCF":
 
                 # Multi-period Bloomberg table
                 st.markdown("### Multi-period financial panel")
-                st.caption("Filas = metricas, columnas = periodos. Valores en MDP donde aplica (USD->MXN auto-detectado).")
-                fx_rate = market.fx_rate_usdmxn
-                bb_hist = build_historical_bloomberg(hs, fx_rate_usdmxn=fx_rate,
+                st.caption("Filas = metricas, columnas = periodos. Valores en MDP donde aplica (USD→MXN auto-detectado por periodo, FX Banxico).")
+                # FX por periodo: panel.py hace lookup automático si fx_rate=None
+                bb_hist = build_historical_bloomberg(hs, fx_rate_usdmxn=None,
                                                        annual_only=annual_only)
                 if not bb_hist.empty:
                     # Format
