@@ -599,6 +599,8 @@ if mode == "Single DCF":
         _fx_period = _fx_breakdown["avg"]   # promedio del trimestre = flujos
         _fx_spot = _fx_breakdown["spot_for_reference"]
         _fx_mult = _fx_period
+
+        # Banner principal
         st.info(
             f"💱 **Emisora reporta en USD** — aplicando FX por periodo. "
             f"Periodo: **{res.info.period_end}** · "
@@ -606,8 +608,61 @@ if mode == "Single DCF":
             f"Spot ref: {_fx_spot:.2f} · "
             f"(Histórico Banxico — varía por trimestre, no es constante)"
         )
+
+        # Panel diagnóstico FX (transparencia total para debugging)
+        with st.expander("🔍 Diagnóstico FX detallado", expanded=False):
+            _rev_raw = res.dcf.revenue or 0    # USD raw del XBRL
+            _rev_mxn = _rev_raw * _fx_mult
+            d1, d2, d3 = st.columns(3)
+            d1.markdown(f"""
+            **Detección XBRL**
+            - Currency: `{res.info.currency}`
+            - Rounding declarado: `{res.info.rounding}`
+            - Periodo: `{res.info.period_end}`
+            """)
+            d2.markdown(f"""
+            **FX aplicado**
+            - eop (cierre): `{_fx_breakdown['eop']:.2f}`
+            - avg (flujos): `{_fx_breakdown['avg']:.2f}` ← usado
+            - spot ref: `{_fx_spot:.2f}`
+            - Match exacto: `{_fx_breakdown['is_exact_match']}`
+            """)
+            d3.markdown(f"""
+            **Sanity check Revenue**
+            - USD raw XBRL: `${_rev_raw/1e9:.2f}B USD`
+            - × FX {_fx_mult:.2f} = `${_rev_mxn/1e9:.2f}B MXN`
+            - En MDP: `${_rev_mxn/1e6:,.0f}`
+            """)
+            # Validación de magnitudes razonables
+            if _rev_raw > 1e11:   # > $100B USD raw → probablemente está en MXN ya
+                st.warning(
+                    f"⚠️ **Anomalía**: revenue raw = ${_rev_raw/1e9:.0f}B "
+                    f"parece MUY alto para USD. ¿Tal vez el XBRL ya está "
+                    f"pre-convertido a MXN? Verifica el filing original."
+                )
+            elif _rev_raw < 1e8:    # < $100M USD → probablemente está en miles
+                st.warning(
+                    f"⚠️ **Anomalía**: revenue raw = ${_rev_raw/1e6:.0f}M "
+                    f"parece MUY bajo. ¿Tal vez el XBRL realmente está en "
+                    f"miles de USD (factor 1000)?"
+                )
+            else:
+                st.success(
+                    f"✅ Magnitud razonable: ${_rev_raw/1e9:.1f}B USD → "
+                    f"${_rev_mxn/1e9:.1f}B MXN aplicando FX correcto."
+                )
     else:
         _fx_mult = 1.0
+        # Para emisoras MXN: mostrar diagnóstico también
+        with st.expander("🔍 Diagnóstico FX (MXN — sin conversión)",
+                          expanded=False):
+            _rev_raw = res.dcf.revenue or 0
+            st.markdown(f"""
+            - Currency XBRL: `{res.info.currency}` (no requiere FX)
+            - Rounding declarado: `{res.info.rounding}`
+            - Revenue raw: `${_rev_raw/1e9:.2f}B MXN`
+            - En MDP: `${_rev_raw/1e6:,.0f}`
+            """)
 
     base = CompanyBase.from_parser_dcf(
         res.dcf,
