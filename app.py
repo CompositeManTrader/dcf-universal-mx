@@ -586,7 +586,23 @@ if mode == "Single DCF":
         st.stop()
 
     # ----- NON-FINANCIAL: FCFF DCF -----
-    base = CompanyBase.from_parser_dcf(res.dcf, include_leases_as_debt=True)
+    # 🔧 BUG FIX: detectar moneda y aplicar FX si reporta en USD.
+    # Emisoras como GMEXICO, CEMEX, ORBIA, KOF reportan en USD.
+    # Sin este fix, el modelo trataba 5,000 USD como 5,000 MXN.
+    _currency = (res.info.currency or "MXN").upper().strip()
+    _fx_mult = market.fx_rate_usdmxn if _currency == "USD" else 1.0
+    if _currency == "USD":
+        st.info(
+            f"💱 **Emisora reporta en USD** — aplicando FX = "
+            f"{market.fx_rate_usdmxn:.2f} MXN/USD para convertir TODOS "
+            f"los flujos monetarios a MXN. Resultado final del DCF en "
+            f"MXN/acción (compatible con precio BMV)."
+        )
+    base = CompanyBase.from_parser_dcf(
+        res.dcf,
+        include_leases_as_debt=True,
+        currency_multiplier=_fx_mult,
+    )
 
     # ========================================================================
     # TABS DEFINITION (movida desde abajo - ahora la pagina arranca con tabs)
