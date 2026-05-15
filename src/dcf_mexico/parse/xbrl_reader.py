@@ -866,6 +866,9 @@ class XBRLReader:
             # Interest income breakdown
             inf.interest_earned_quarter = idxnotes.get_or("Intereses ganados", col=1, default=0.0) * factor
             inf.interest_earned_acum    = idxnotes.get_or("Intereses ganados", col=col_acum_n, default=0.0) * factor
+            # Interest expense devengado (= BB "Interest Expense", excluye otros gastos financieros)
+            inf.interest_devengado_quarter = idxnotes.get_or("Intereses devengados a cargo", col=1, default=0.0) * factor
+            inf.interest_devengado_acum    = idxnotes.get_or("Intereses devengados a cargo", col=col_acum_n, default=0.0) * factor
             # FX gain breakdown (CNBV positivo = utilidad/gain; BB sign opuesto)
             inf.fx_gain_quarter = idxnotes.get_first(
                 "Utilidad por fluctuación cambiaria",
@@ -875,6 +878,17 @@ class XBRLReader:
             inf.fx_gain_acum = idxnotes.get_first(
                 "Utilidad por fluctuación cambiaria",
                 "Utilidad por fluctuacion cambiaria",
+                col=col_acum_n, default=0.0,
+            ) * factor
+            # FX loss breakdown (BB FX Loss = fx_loss - fx_gain neto)
+            inf.fx_loss_quarter = idxnotes.get_first(
+                "Pérdida por fluctuación cambiaria",
+                "Perdida por fluctuacion cambiaria",
+                col=1, default=0.0,
+            ) * factor
+            inf.fx_loss_acum = idxnotes.get_first(
+                "Pérdida por fluctuación cambiaria",
+                "Perdida por fluctuacion cambiaria",
                 col=col_acum_n, default=0.0,
             ) * factor
 

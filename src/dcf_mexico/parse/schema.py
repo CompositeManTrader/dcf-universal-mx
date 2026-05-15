@@ -276,8 +276,12 @@ class Informative:
     current_tax_quarter: float = 0.0                # row 28 col 1 trimestre
     interest_earned_acum: float = 0.0               # row 14 "Intereses ganados" acumulado
     interest_earned_quarter: float = 0.0            # row 14 col 1 trimestre
+    interest_devengado_acum: float = 0.0            # row 21 "Intereses devengados a cargo" acum (= BB Interest Expense)
+    interest_devengado_quarter: float = 0.0         # row 21 col 1 trimestre
     fx_gain_acum: float = 0.0                       # row 15 "Utilidad por fluctuacion cambiaria" acum
     fx_gain_quarter: float = 0.0                    # row 15 col 1 trimestre
+    fx_loss_acum: float = 0.0                       # row 22 "Perdida por fluctuacion cambiaria" acum
+    fx_loss_quarter: float = 0.0                    # row 22 col 1 trimestre
     # Hoja 800005 Distribucion de ingresos por productos
     sales_local_acum: float = 0.0                   # Mexico (acumulado)
     sales_export_acum: float = 0.0                  # USA + RoW (acumulado)

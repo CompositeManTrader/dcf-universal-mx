@@ -221,7 +221,9 @@ def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0,
                             deferred_tax_period: float = 0.0,
                             current_tax_period: float = 0.0,
                             interest_earned_period: float = 0.0,
+                            interest_devengado_period: float = 0.0,
                             fx_gain_period: float = 0.0,
+                            fx_loss_period: float = 0.0,
                             export_sales_period: float = 0.0) -> dict:
     """Reclasifica metricas CNBV -> formato Bloomberg para CUERVO (BECLE).
 
@@ -342,98 +344,128 @@ def _apply_gmexico_reclass(m: dict, disposal_period: float = 0.0,
                              deferred_tax_period: float = 0.0,
                              current_tax_period: float = 0.0,
                              interest_earned_period: float = 0.0,
+                             interest_devengado_period: float = 0.0,
                              fx_gain_period: float = 0.0,
+                             fx_loss_period: float = 0.0,
                              export_sales_period: float = 0.0) -> dict:
     """Reclasifica metricas CNBV -> formato Bloomberg para GMEXICO (minera).
 
-    Reglas GMEXICO-especificas (verificadas vs Bloomberg FY 2024):
-      1. COGS: Bloomberg incluye D&A dentro de "Cost of Goods Sold";
-         CNBV los separa. -> BB_COGS = CNBV_COGS + D&A
-         BB_Gross_Profit = Revenue - BB_COGS = CNBV_Gross_Profit - D&A
-      2. SG&A: BB usa "Selling General and Administrative Expenses" como
-         linea limpia (admin + exploration); CNBV ya separa razonablemente.
-         No se ajusta SG&A — D&A NO se foldea aqui (va en COGS).
-      3. EBIT y Net Income permanecen CONSTANTES (los cambios de COGS y D&A
-         se cancelan en margen operativo).
-      4. Interest Expense: BB reporta NETO de intereses capitalizados
-         (mining capex es enorme -> ~$145M FY24 capitalizados).
-         CNBV reporta GROSS. No tenemos parsed `capitalized_interest`,
-         dejamos el valor CNBV con nota en docstring.
-      5. Equity in JV: BB negativo cuando es ganancia, CNBV positivo.
-         Ya invertido en mapping (sign_flip=-1).
-      6. Tax breakdown: deferred_tax y current_tax derivados de hoja 800200.
-      7. Goodwill: BB lo agrupa dentro de "Total Intangible Assets - Net".
-         Ya manejado en _compute_bs_metrics: total_intangibles = goodwill + other_intang.
+    Validado vs Bloomberg FY 2024 (anual-gmexuci.xlsx, sheet 'Income - GAAP'):
 
-    Diff residual esperado vs Bloomberg: ~5% line-by-line, principalmente
-    por tratamiento de intereses capitalizados (no parseado).
+    Reglas GMEXICO-especificas:
+      1. COGS: CNBV `cost_of_sales` YA INCLUYE D&A operativa (no agregar otra vez).
+         BB lo desglosa en sub-lines:
+           - "Cost of Goods & Services" = cost_of_sales - da_12m
+           - "Depreciation & Amortization" = da_12m
+           - Header "Cost of Revenue" = cost_of_sales (CNBV original)
+      2. SG&A unchanged. R&D = 0. D&A in OpEx = 0 (todo va en COGS).
+      3. Interest Expense BB: usar `informative.interest_devengado_acum`
+         (hoja 800200 row 21) NO `inc.interest_expense` que incluye
+         "Otros gastos financieros" no relacionados.
+         BB FY24 = 598.20; CNBV row 21 = 575.51 (~match).
+      4. Interest Income BB: usar `informative.interest_earned_acum`
+         (hoja 800200 row 14) NO `inc.interest_income`.
+         BB FY24 = 415.10; CNBV = 414.43 (~match).
+      5. FX Loss BB neto = `fx_loss_acum - fx_gain_acum` (hoja 800200 rows 22,15).
+         BB FY24 = 50.90; CNBV = 50.97 (~match).
+      6. Affiliates: sign flip ya aplicado en mapping (CNBV positivo=ganancia,
+         BB negativo=ganancia).
+      7. Other Non-Op = residual: total_non_op - net_interest - fx - affiliates
+      8. Tax breakdown: current/deferred desde hoja 800200.
+      9. EBIT/Pretax/Net Income: mantener valores CNBV (BB hace ajustes que
+         no podemos replicar exacto sin notas adicionales — diff ~3%).
+
+    Match esperado vs Bloomberg: ~98% top-line (Revenue, Net Income, EBITDA);
+    ~95% mid-line (EBIT, Pretax, Tax) por reclasificaciones BB-internas.
     """
-    cogs_cnbv         = m.get("cost_of_revenue", 0) or 0
-    da_value          = m.get("dep_expense", 0) or 0
-    ebit_cnbv         = m.get("ebit", 0) or 0
-    revenue           = m.get("revenue", 0) or 0
+    cogs_cnbv  = m.get("cost_of_revenue", 0) or 0
+    da_value   = m.get("dep_expense", 0) or 0      # informative.da_12m en MDP
+    ebit_cnbv  = m.get("ebit", 0) or 0
+    revenue    = m.get("revenue", 0) or 0
+    pretax_gaap = m.get("pretax_gaap", 0) or 0
 
-    # --- 1: COGS BB = CNBV COGS + D&A (mining BB style) ---
-    # Mostrar como sub-lineas: "Cost of Goods & Services" + "Depreciation & Amortization"
-    # El header "Cost of Revenue" muestra el total agregado.
-    cogs_pure_bb     = cogs_cnbv          # COGS sin D&A
-    da_in_cogs_bb    = da_value           # D&A va dentro de COGS para mining
-    da_in_opex_bb    = 0.0                # Ninguno en OpEx para mining
-    cogs_total_bb    = cogs_pure_bb + da_in_cogs_bb
-    gross_profit_bb  = revenue - cogs_total_bb
+    # --- 1: COGS — CNBV cost_of_sales YA incluye D&A. NO sumar otra vez. ---
+    # BB desglosa en sub-lines: cogs_pure (sin D&A) + da_in_cogs.
+    cogs_pure_bb    = cogs_cnbv - da_value         # FY24: 8,816 - 1,311 = 7,505 (BB 7,508 ✓)
+    da_in_cogs_bb   = da_value                     # FY24: 1,311 (BB 1,446)
+    da_in_opex_bb   = 0.0                          # Mining: D&A va todo en COGS
+    cogs_total_bb   = cogs_cnbv                    # Header = CNBV original (sin doble suma)
+    gross_profit_bb = revenue - cogs_total_bb      # FY24: 16,170 - 8,816 = 7,354 (BB 7,216, diff 138)
 
-    # --- 2: SG&A unchanged (BB GMEXICO no foldea D&A en SG&A) ---
+    # --- 2: OpEx unchanged ---
     op_expenses_total_bb = m.get("op_expenses_total", 0) or 0
 
-    # --- 3: EBIT no cambia (los ajustes de COGS y D&A se cancelan) ---
+    # --- 3: EBIT mantener CNBV ---
     ebit_bb = ebit_cnbv
 
-    # --- 4: Interest Expense — sin ajuste (no tenemos capitalized parseado) ---
-    # BB sera ~$145M menor que CNBV en GMEXICO FY24.
-    int_exp_bb  = m.get("interest_expense", 0) or 0
-    int_inc_bb  = m.get("interest_income", 0) or 0
-    net_interest_bb = int_exp_bb - int_inc_bb
+    # --- 4: Interest Expense BB = "Intereses devengados a cargo" (hoja 800200 row 21) ---
+    # NO usar inc.interest_expense que es total gastos financieros (incluye
+    # FX losses, derivados, etc). BB solo cuenta el interest devengado puro.
+    if interest_devengado_period and interest_devengado_period > 0:
+        int_exp_bb = interest_devengado_period      # FY24: 575.51 (BB 598.20)
+    else:
+        int_exp_bb = m.get("interest_expense", 0) or 0  # fallback CNBV
 
-    # --- 5: Affiliates (JV mineras como Buenavista del Cobre) ---
-    associates_cnbv = m.get("affiliates_loss", 0) or 0  # ya -associates en compute_income
-    affiliates_loss_bb = associates_cnbv
+    # --- 5: Interest Income BB = "Intereses ganados" (hoja 800200 row 14) ---
+    if interest_earned_period and interest_earned_period > 0:
+        int_inc_bb = interest_earned_period         # FY24: 414.43 (BB 415.10)
+    else:
+        int_inc_bb = m.get("interest_income", 0) or 0
 
-    fx_loss_bb = m.get("fx_loss", 0) or 0
-    other_nop_bb = m.get("other_non_op", 0) or 0
+    net_interest_bb = int_exp_bb - int_inc_bb       # FY24: 161 (BB 183, diff 22)
+
+    # --- 6: FX Loss BB = Perdida cambiaria - Utilidad cambiaria (neto) ---
+    # CNBV reports gain (row15) y loss (row22) separados; BB usa neto (loss positive).
+    fx_loss_bb = (fx_loss_period or 0) - (fx_gain_period or 0)  # FY24: 145.48-94.51=50.97 (BB 50.90 ✓)
+
+    # --- 7: Affiliates — sign flip ya aplicado en _compute_income_metrics ---
+    # affiliates_loss = -associates_result. CNBV positivo=ganancia, BB negativo=ganancia.
+    affiliates_loss_bb = m.get("affiliates_loss", 0) or 0
+
+    # --- 8: Other Non-Op = residual para balancear total non_op_loss ---
+    # total_non_op_loss = EBIT - Pretax (constante, viene del XBRL)
+    total_non_op_loss = ebit_cnbv - pretax_gaap
+    other_nop_bb = total_non_op_loss - net_interest_bb - fx_loss_bb - affiliates_loss_bb
+
     non_op_loss_bb = net_interest_bb + fx_loss_bb + affiliates_loss_bb + other_nop_bb
 
-    # --- 6: Tax breakdown desde 800200 ---
+    # --- 9: Tax breakdown desde 800200 ---
     current_tax = current_tax_period
     deferred_tax = deferred_tax_period
 
-    # EBITDA BB recalc (EBIT + D&A)
+    # EBITDA BB = EBIT + D&A (consistente)
     ebitda_bb = ebit_bb + da_value
+    ebitda_margin_bb = (ebitda_bb / revenue) if revenue else 0.0
 
-    # Margenes recalc con valores BB
+    # Margenes recalc
     gross_margin_bb     = (gross_profit_bb / revenue) if revenue else 0.0
     operating_margin_bb = (ebit_bb / revenue) if revenue else 0.0
 
     # Update dict
-    m["cost_of_revenue"]   = cogs_total_bb     # Total agregado (sub-lineas suman a esto)
-    m["cogs_pure"]         = cogs_pure_bb
-    m["da_in_cogs"]        = da_in_cogs_bb
-    m["da_in_opex"]        = da_in_opex_bb
-    m["gross_profit"]      = gross_profit_bb
-    m["op_expenses_total"] = op_expenses_total_bb
-    m["ebit"]              = ebit_bb
-    m["ebita"]             = ebit_bb
-    m["interest_expense"]  = int_exp_bb
-    m["interest_income"]   = int_inc_bb
-    m["net_interest"]      = net_interest_bb
-    m["affiliates_loss"]   = affiliates_loss_bb
-    m["non_op_loss"]       = non_op_loss_bb
-    m["ebitda"]            = ebitda_bb
-    m["gross_margin"]      = gross_margin_bb
-    m["operating_margin"]  = operating_margin_bb
-    m["current_tax"]       = current_tax
-    m["deferred_tax"]      = deferred_tax
-    m["export_sales"]      = export_sales_period if export_sales_period else None
-    # Capitalized interest, personnel, rental no parseados — quedan como None.
+    m["cost_of_revenue"]    = cogs_total_bb        # Header = CNBV original
+    m["cogs_pure"]          = cogs_pure_bb         # Sub-line: COGS sin D&A
+    m["da_in_cogs"]         = da_in_cogs_bb        # Sub-line: D&A in COGS
+    m["da_in_opex"]         = da_in_opex_bb        # Sub-line: D&A in OpEx (= 0 mining)
+    m["gross_profit"]       = gross_profit_bb
+    m["op_expenses_total"]  = op_expenses_total_bb
+    m["ebit"]               = ebit_bb
+    m["ebita"]              = ebit_bb              # GMEXICO: ebita ≈ ebit (poca amort intang)
+    m["interest_expense"]   = int_exp_bb           # BB: Intereses devengados (hoja 800200)
+    m["interest_income"]    = int_inc_bb           # BB: Intereses ganados (hoja 800200)
+    m["net_interest"]       = net_interest_bb
+    m["fx_loss"]            = fx_loss_bb           # BB: neto loss-gain
+    m["affiliates_loss"]    = affiliates_loss_bb
+    m["other_non_op"]       = other_nop_bb         # Residual
+    m["non_op_loss"]        = non_op_loss_bb
+    m["ebitda"]             = ebitda_bb
+    m["ebitda_margin_ttm"]  = ebitda_margin_bb     # Override TTM con periodo actual
+    m["gross_margin"]       = gross_margin_bb
+    m["operating_margin"]   = operating_margin_bb
+    m["current_tax"]        = current_tax
+    m["deferred_tax"]       = deferred_tax
+    m["export_sales"]       = export_sales_period if export_sales_period else None
+    # Capitalized interest, personnel, rental: no parseables del XBRL CNBV
+    # (vienen de notas narrativas). Quedan como None.
     return m
 
 
@@ -611,16 +643,20 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
         # Resolver valores de notas para el periodo (trim o acum) usando valores ya parseados
         # del Informative del snapshot. annual_only=True usa _acum, sino _quarter.
         if annual_only:
-            interest_earned_p = (res.informative.interest_earned_acum * fx_mult) / 1_000_000
-            fx_gain_p = (res.informative.fx_gain_acum * fx_mult) / 1_000_000
-            current_tax_p = (res.informative.current_tax_acum * fx_mult) / 1_000_000
-            export_sales_p = (res.informative.sales_export_acum * fx_mult) / 1_000_000
+            interest_earned_p     = (res.informative.interest_earned_acum * fx_mult) / 1_000_000
+            interest_devengado_p  = (res.informative.interest_devengado_acum * fx_mult) / 1_000_000
+            fx_gain_p             = (res.informative.fx_gain_acum * fx_mult) / 1_000_000
+            fx_loss_p             = (res.informative.fx_loss_acum * fx_mult) / 1_000_000
+            current_tax_p         = (res.informative.current_tax_acum * fx_mult) / 1_000_000
+            export_sales_p        = (res.informative.sales_export_acum * fx_mult) / 1_000_000
         else:
-            interest_earned_p = (res.informative.interest_earned_quarter * fx_mult) / 1_000_000
-            fx_gain_p = (res.informative.fx_gain_quarter * fx_mult) / 1_000_000
-            current_tax_p = (res.informative.current_tax_quarter * fx_mult) / 1_000_000
+            interest_earned_p     = (res.informative.interest_earned_quarter * fx_mult) / 1_000_000
+            interest_devengado_p  = (res.informative.interest_devengado_quarter * fx_mult) / 1_000_000
+            fx_gain_p             = (res.informative.fx_gain_quarter * fx_mult) / 1_000_000
+            fx_loss_p             = (res.informative.fx_loss_quarter * fx_mult) / 1_000_000
+            current_tax_p         = (res.informative.current_tax_quarter * fx_mult) / 1_000_000
             # Export sales no tiene quarter en CNBV, usar acum como aproximacion
-            export_sales_p = (res.informative.sales_export_acum * fx_mult) / 1_000_000
+            export_sales_p        = (res.informative.sales_export_acum * fx_mult) / 1_000_000
 
         output = TICKER_RECLASS_RULES[ticker](
             output,
@@ -628,7 +664,9 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
             deferred_tax_period=deferred_tax_period,
             current_tax_period=current_tax_p,
             interest_earned_period=interest_earned_p,
+            interest_devengado_period=interest_devengado_p,
             fx_gain_period=fx_gain_p,
+            fx_loss_period=fx_loss_p,
             export_sales_period=export_sales_p,
         )
     return output
