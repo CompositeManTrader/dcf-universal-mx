@@ -2634,7 +2634,7 @@ if mode == "Single DCF":
                 )
                 vista_label = "FY (12M)" if use_annual_flag else "3M Quarter Pure"
                 st.markdown(f"#### Income — Adjusted (Bloomberg style) "
-                             f"• {df_is.shape[1]} periodos • {vista_label} • In MDP")
+                             f"• {df_is.shape[1]} periodos • {vista_label} • In {_ccy_label}")
                 _render_panel(df_is, kinds_is, "Income")
 
             with sub_bs:
@@ -2643,7 +2643,7 @@ if mode == "Single DCF":
                     fx_rate_usdmxn=fx_rate, max_periods=max_n,
                 )
                 st.markdown(f"#### Balance Sheet — Standardized (Bloomberg style) "
-                             f"• {df_bs.shape[1]} periodos • In MDP")
+                             f"• {df_bs.shape[1]} periodos • In {_ccy_label}")
                 _render_panel(df_bs, kinds_bs, "Balance")
 
             with sub_cf:
@@ -2653,7 +2653,7 @@ if mode == "Single DCF":
                 )
                 vista_cf = "FY accumulated" if use_annual_flag else "3M Quarter (derived)"
                 st.markdown(f"#### Cash Flow — Standardized (Bloomberg style) "
-                             f"• {df_cf.shape[1]} periodos • {vista_cf} • In MDP")
+                             f"• {df_cf.shape[1]} periodos • {vista_cf} • In {_ccy_label}")
                 _render_panel(df_cf, kinds_cf, "Cash Flow")
 
             # ============================================================
@@ -3045,7 +3045,17 @@ if mode == "Single DCF":
 
                 # Multi-period Bloomberg table
                 st.markdown("### Multi-period financial panel")
-                st.caption("Filas = metricas, columnas = periodos. Valores en MDP donde aplica (USD->MXN auto-detectado).")
+                # Currency-aware label: USD-reporting emisoras stay in native USD.
+                _hist_ccy = "MXN"
+                try:
+                    _hist_ccy = (hs.latest.parsed.info.currency or "MXN").upper().strip()
+                except Exception:
+                    pass
+                _hist_unit_label = "M USD" if _hist_ccy == "USD" else "MDP"
+                st.caption(
+                    f"Filas = metricas, columnas = periodos. Valores monetarios en {_hist_unit_label} "
+                    f"(moneda nativa del reporte: {_hist_ccy}; sin conversion FX)."
+                )
                 fx_rate = market.fx_rate_usdmxn
                 bb_hist = build_historical_bloomberg(hs, fx_rate_usdmxn=fx_rate,
                                                        annual_only=annual_only)

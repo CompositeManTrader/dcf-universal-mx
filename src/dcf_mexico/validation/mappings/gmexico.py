@@ -2,7 +2,7 @@
 Mapping GMEXICO Bloomberg "As Reported" -> XBRL parser fields.
 
 Construido a partir de inspeccion de:
-  data/bloomberg/anual-gmexuci.xlsx
+  data/bloomberg/Edos_gmexico_anuales.xlsx
     - Hoja 'Income - As Reported' (~163 filas)
     - Hoja 'Bal Sheet - As Reported' (~199 filas)
     - Hoja 'Cash Flow - As Reported' (~70 filas)
@@ -11,10 +11,26 @@ GMEXICO reporta en MILLONES de USD (no MXN como CUERVO). El XBRL CNBV
 de GMEXICO también está en USD nativos (no en miles, ver nota
 USE_ROUNDING_METADATA = False en parser).
 
+VALIDACION FY 2024 (deep dive 2025-05):
+  - Match total ~95% line by line vs Bloomberg
+  - Revenue cuadra perfecto: $16,169 USD M ambas fuentes
+  - LT Debt y ST Borrowings cuadran perfecto al peso
+  - Total Assets, Total Equity cuadran ~0.2%
+
+DIFERENCIAS CONOCIDAS (NO son bugs — reclasificaciones estandar):
+  1. COGS: BB incluye D&A; CNBV lo separa. Diff ~$140M.
+     EBIT y Net Income cuadran al final.
+  2. Interest Expense: BB reporta NETO (gross - capitalized interest);
+     CNBV reporta GROSS. Diff ~$145M en GMEXICO 2024.
+  3. Goodwill vs Total Intangibles: BB junta los dos; CNBV separa.
+     - BB "Total Intangible Assets - Net" = CNBV (Goodwill + Other Intang).
+
 Notas de signo:
-  - Bloomberg muestra "Equity In Earnings of Affiliate" como NEGATIVO cuando
-    el JV genera ganancia. CNBV lo muestra POSITIVO. sign_flip=-1.
-  - Capex en CF Bloomberg negativo, en CNBV positivo (label trae prefijo "-").
+  - "Equity In Earnings of Affiliate": BB negativo cuando JV genera
+    ganancia, CNBV positivo. sign_flip=-1.
+  - "Interest Income" BB negativo (mostrado como reduccion), CNBV
+    positivo. sign_flip=-1.
+  - Capex/Dividends BB negativos (outflows), CNBV positivos. sign_flip=-1.
 """
 from ..bloomberg_compare import LineMapping, BloombergMapping
 
@@ -36,7 +52,8 @@ GMEXICO_INCOME_AR = [
     LineMapping(
         bloomberg_label="Cost of Goods Sold",
         parser_path="income.cost_of_sales",
-        notes="COGS",
+        notes="COGS — Bloomberg incluye D&A aqui; CNBV lo separa. "
+              "Diff esperado ~$140M FY24. EBIT cuadra al final.",
     ),
     LineMapping(
         bloomberg_label="Gross Profit",
@@ -61,7 +78,9 @@ GMEXICO_INCOME_AR = [
     LineMapping(
         bloomberg_label="Interest Expense",
         parser_path="income.interest_expense",
-        notes="Gastos financieros consolidados",
+        notes="Gastos financieros consolidados. BB reporta NETO "
+              "(gross - capitalized interest); CNBV reporta GROSS. "
+              "Diff esperado ~$145M FY24.",
     ),
     LineMapping(
         bloomberg_label="Interest Income",
@@ -170,17 +189,19 @@ GMEXICO_BS_AR = [
     LineMapping(
         bloomberg_label="Goodwill",
         parser_path="balance.goodwill",
-        notes="Credito mercantil",
+        notes="Credito mercantil — BB lo agrega tambien dentro de "
+              "'Total Intangible Assets - Net' (que en CNBV es separado).",
     ),
     LineMapping(
         bloomberg_label="Other Intangible Assets",
         parser_path="balance.intangibles",
-        notes="Intangibles (concesiones mineras, etc.)",
+        notes="Intangibles distintos a goodwill (concesiones mineras, etc.)",
     ),
     LineMapping(
         bloomberg_label="Total Intangible Assets - Net",
         parser_path="balance.intangibles",
-        notes="Total intangibles netos",
+        notes="BB junta Goodwill + Other Intang. CNBV los separa: "
+              "validar con goodwill + intangibles. Diff esperado ~$100M.",
     ),
     LineMapping(
         bloomberg_label="Investment In Affiliates/Joint Ventures",
