@@ -189,6 +189,89 @@ GMEXICO_INCOME_LAYOUT = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# AC (Arca Continental — embotelladora Coca-Cola) — validado vs Bloomberg FY 2025
+# Diferencias vs CUERVO/GMEXICO:
+#   - Sin "Growth (YoY)" en header
+#   - "+ Other Revenue" sub-line
+#   - COGS solo "+ Cost of Goods & Services" (no D&A in COGS)
+#   - OpEx con sub-lines completas: SGA→Selling, G&A, R&D, D&A, Prov Doubtful, Other
+#   - Sin bloque "Pretax Adjusted" + Abnormal Losses
+#   - Reference Items con Personnel Expenses, Rental Expense
+# ---------------------------------------------------------------------------
+AC_INCOME_LAYOUT = [
+    ("Revenue",                                "revenue",            "header"),
+    ("    + Sales & Services Revenue",         "revenue",            "sub"),
+    ("    + Other Revenue",                    "other_revenue",      "sub"),
+    ("  - Cost of Revenue",                    "cost_of_revenue",    "line"),
+    ("    + Cost of Goods & Services",         "cogs_pure",          "sub"),
+    ("    + Depreciation & Amortization",      "da_in_cogs",         "sub"),
+    ("Gross Profit",                           "gross_profit",       "subtotal"),
+    ("  + Other Operating Income",             "other_op_income",    "line"),
+    ("  - Operating Expenses",                 "op_expenses_total",  "line"),
+    ("    + Selling, General & Admin",         "sga_total",          "sub"),
+    ("    + Selling & Marketing",              "selling_expenses",   "sub"),
+    ("    + General & Administrative",         "ga_expenses",        "sub"),
+    ("    + Research & Development",           "rd_in_opex",         "sub"),
+    ("    + Depreciation & Amortization",      "da_in_opex",         "sub"),
+    ("    + Prov For Doubtful Accts",          "prov_doubtful",      "sub"),
+    ("    + Other Operating Expense",          "other_op_expense",   "sub"),
+    ("Operating Income (Loss)",                "ebit",               "header"),
+    ("  - Non-Operating (Income) Loss",        "non_op_loss",        "line"),
+    ("    + Interest Expense, Net",            "net_interest",       "sub"),
+    ("    + Interest Expense",                 "interest_expense",   "sub"),
+    ("    - Interest Income",                  "interest_income",    "sub"),
+    ("    + Foreign Exch (Gain) Loss",         "fx_loss",            "sub"),
+    ("    + (Income) Loss from Affiliates",    "affiliates_loss",    "sub"),
+    ("    + Other Non-Op (Income) Loss",       "other_non_op",       "sub"),
+    ("Pretax Income",                          "pretax_gaap",        "subtotal"),
+    ("  - Income Tax Expense (Benefit)",       "tax_expense",        "line"),
+    ("    + Current Income Tax",               "current_tax",        "sub"),
+    ("    + Deferred Income Tax",              "deferred_tax",       "sub"),
+    ("Income (Loss) from Cont Ops",            "income_cont_ops",    "subtotal"),
+    ("  - Net Extraordinary Losses (Gains)",   "net_xo",             "line"),
+    ("    + Discontinued Operations",          "disc_ops",           "sub"),
+    ("    + XO & Accounting Changes",          "acc_changes",        "sub"),
+    ("Income (Loss) Incl. MI",                 "ni_incl_mi",         "subtotal"),
+    ("  - Minority Interest",                  "minority_interest",  "line"),
+    ("Net Income, GAAP",                       "net_income_gaap",    "header"),
+    ("  - Preferred Dividends",                "preferred_div",      "line"),
+    ("  - Other Adjustments",                  "other_adj",          "line"),
+    ("Net Income Avail to Common, GAAP",       "ni_common_gaap",     "header"),
+    ("",                                       None,                 "spacer"),
+    ("Net Income Avail to Common, Adj",        "ni_common_adj",      "header"),
+    ("  Net Abnormal Losses (Gains)",          "net_abnormal",       "line"),
+    ("  Net Extraordinary Losses (Gains)",     "net_xo_2",           "line"),
+    ("",                                       None,                 "spacer"),
+    ("Basic Weighted Avg Shares",              "shares_basic",       "bold_line"),
+    ("Basic EPS, GAAP",                        "eps_basic_gaap",     "ratio_eps"),
+    ("Basic EPS from Cont Ops, GAAP",          "eps_basic_cont",     "ratio_eps"),
+    ("Basic EPS from Cont Ops, Adjusted",      "eps_basic_adj",      "ratio_eps"),
+    ("",                                       None,                 "spacer"),
+    ("Diluted Weighted Avg Shares",            "shares_diluted",     "bold_line"),
+    ("Diluted EPS, GAAP",                      "eps_dil_gaap",       "ratio_eps"),
+    ("Diluted EPS from Cont Ops, GAAP",        "eps_dil_cont",       "ratio_eps"),
+    ("Diluted EPS from Cont Ops, Adjusted",    "eps_dil_adj",        "ratio_eps"),
+    ("",                                       None,                 "spacer"),
+    ("Reference Items",                        None,                 "section"),
+    ("Accounting Standard",                    "accounting_std",     "string"),
+    ("EBITDA",                                 "ebitda",             "line"),
+    ("EBITDA Margin (T12M)",                   "ebitda_margin_ttm",  "ratio"),
+    ("EBITA",                                  "ebita",              "line"),
+    ("EBIT",                                   "ebit",               "line"),
+    ("Gross Margin",                           "gross_margin",       "ratio"),
+    ("Operating Margin",                       "operating_margin",   "ratio"),
+    ("Profit Margin",                          "profit_margin",      "ratio"),
+    ("Sales per Employee",                     "sales_per_emp",      "line"),
+    ("Dividends per Share",                    "dps",                "ratio_eps"),
+    ("Total Cash Common Dividends",            "total_cash_div",     "line"),
+    ("Personnel Expenses",                     "personnel_expenses", "line"),
+    ("Export Sales",                           "export_sales",       "line"),
+    ("Depreciation Expense",                   "dep_expense",        "line"),
+    ("Rental Expense",                         "rental_expense",     "line"),
+]
+
+
 # Default = CUERVO (consumer/spirits) layout
 BLOOMBERG_INCOME_LAYOUT = CUERVO_INCOME_LAYOUT
 
@@ -197,6 +280,7 @@ BLOOMBERG_INCOME_LAYOUT = CUERVO_INCOME_LAYOUT
 TICKER_INCOME_LAYOUTS = {
     "CUERVO":  CUERVO_INCOME_LAYOUT,
     "GMEXICO": GMEXICO_INCOME_LAYOUT,
+    "AC":      AC_INCOME_LAYOUT,
 }
 
 
@@ -469,10 +553,149 @@ def _apply_gmexico_reclass(m: dict, disposal_period: float = 0.0,
     return m
 
 
+def _apply_ac_reclass(m: dict, disposal_period: float = 0.0,
+                       deferred_tax_period: float = 0.0,
+                       current_tax_period: float = 0.0,
+                       interest_earned_period: float = 0.0,
+                       interest_devengado_period: float = 0.0,
+                       fx_gain_period: float = 0.0,
+                       fx_loss_period: float = 0.0,
+                       export_sales_period: float = 0.0) -> dict:
+    """Reclasifica metricas CNBV -> formato Bloomberg para AC (Arca Continental).
+
+    Validado vs Bloomberg FY 2025 (FA1_53ov03jw.xlsx 'Income - GAAP').
+
+    Reglas AC-especificas (embotelladora Coca-Cola, IFRS):
+      1. G&A: CNBV `ga_expenses` INCLUYE D&A operativa.
+         BB G&A = CNBV ga_expenses - da_value. FY25: 11,729-10,208=1,521 (BB ✓)
+      2. D&A in OpEx = da_value (todo el D&A va en OpEx, NO en COGS — opuesto
+         a GMEXICO mining). FY25: 10,208 (BB 10,208 ✓)
+      3. D&A in COGS = 0. cogs_pure = cost_of_sales = cost_of_revenue header.
+      4. SGA_BB = selling_expenses + (ga_cnbv - da_value)
+         FY25: 65,809 + 1,521 = 67,330 (BB 67,330 ✓)
+      5. Other Operating Income/Expense BB = NETO de CNBV other_op_income - expense.
+         BB pone el neto en Income (si positivo) o Expense (si negativo).
+         FY25: 2,028 - 1,548 = +480 → BB Other Op Income = 480, Other Op Exp = 0 ✓
+      6. Interest Expense BB = informative.interest_devengado_acum (hoja 800200).
+         FY25: 4,352 (BB 4,352 ✓)
+      7. Interest Income BB = informative.interest_earned_acum.
+         FY25: 1,714 (BB 1,714 ✓)
+      8. FX Loss BB neto = fx_loss_acum - fx_gain_acum.
+         FY25: 3,015 - 3,595 = -580 (BB -580 ✓)
+      9. Affiliates: sign flip ya en mapping.
+     10. Other Non-Op = residual para balancear total non_op.
+     11. Tax breakdown: current/deferred desde hoja 800200.
+     12. EBIT, Pretax, NI: valores CNBV (match exacto vs BB para AC).
+     13. Sales per Employee: usar (employees + workers) para coincidir con BB.
+
+    Match esperado vs Bloomberg: ~99% (AC reporta muy limpio en CNBV vs BB).
+    """
+    cogs_cnbv      = m.get("cost_of_revenue", 0) or 0
+    da_value       = m.get("dep_expense", 0) or 0
+    ebit_cnbv      = m.get("ebit", 0) or 0
+    revenue        = m.get("revenue", 0) or 0
+    pretax_gaap    = m.get("pretax_gaap", 0) or 0
+    selling_cnbv   = m.get("selling_expenses", 0) or 0
+    ga_cnbv        = m.get("ga_expenses", 0) or 0
+    other_inc_cnbv = m.get("other_op_income", 0) or 0
+    other_exp_cnbv = m.get("other_op_expense", 0) or 0
+
+    # --- 1+4: SGA breakdown — G&A_BB = ga_cnbv - da_value ---
+    ga_bb       = ga_cnbv - da_value
+    selling_bb  = selling_cnbv             # Selling & Marketing tal cual
+    sga_bb      = selling_bb + ga_bb
+
+    # --- 2+3: D&A va todo en OpEx para embotelladora; COGS sin D&A ---
+    cogs_pure_bb     = cogs_cnbv           # CNBV cost_of_sales no incluye D&A en AC
+    cogs_total_bb    = cogs_cnbv
+    da_in_cogs_bb    = 0.0
+    da_in_opex_bb    = da_value            # FY25: 10,208
+    gross_profit_bb  = revenue - cogs_total_bb
+
+    # --- 5: Other Op Income/Expense — NETO ---
+    other_op_net   = other_inc_cnbv - other_exp_cnbv
+    if other_op_net >= 0:
+        other_op_income_bb  = other_op_net
+        other_op_expense_bb = 0.0
+    else:
+        other_op_income_bb  = 0.0
+        other_op_expense_bb = -other_op_net
+
+    op_expenses_total_bb = sga_bb + da_in_opex_bb + other_op_expense_bb
+
+    # --- 12: EBIT mantener CNBV (match perfecto AC) ---
+    ebit_bb = ebit_cnbv
+
+    # --- 6+7: Interest BB desde hoja 800200 ---
+    if interest_devengado_period and interest_devengado_period > 0:
+        int_exp_bb = interest_devengado_period
+    else:
+        int_exp_bb = m.get("interest_expense", 0) or 0
+    if interest_earned_period and interest_earned_period > 0:
+        int_inc_bb = interest_earned_period
+    else:
+        int_inc_bb = m.get("interest_income", 0) or 0
+    net_interest_bb = int_exp_bb - int_inc_bb
+
+    # --- 8: FX Loss BB neto (signo loss-positive) ---
+    fx_loss_bb = (fx_loss_period or 0) - (fx_gain_period or 0)
+
+    # --- 9: Affiliates (sign flip ya aplicado en _compute_income_metrics) ---
+    affiliates_loss_bb = m.get("affiliates_loss", 0) or 0
+
+    # --- 10: Other Non-Op = residual ---
+    total_non_op_loss = ebit_cnbv - pretax_gaap
+    other_nop_bb = total_non_op_loss - net_interest_bb - fx_loss_bb - affiliates_loss_bb
+    non_op_loss_bb = net_interest_bb + fx_loss_bb + affiliates_loss_bb + other_nop_bb
+
+    # --- 11: Tax breakdown desde 800200 ---
+    current_tax = current_tax_period
+    deferred_tax = deferred_tax_period
+
+    # EBITDA BB = EBIT + D&A
+    ebitda_bb = ebit_bb + da_value
+    ebitda_margin_bb = (ebitda_bb / revenue) if revenue else 0.0
+
+    # Margenes recalc
+    gross_margin_bb     = (gross_profit_bb / revenue) if revenue else 0.0
+    operating_margin_bb = (ebit_bb / revenue) if revenue else 0.0
+
+    # Update dict
+    m["cost_of_revenue"]    = cogs_total_bb
+    m["cogs_pure"]          = cogs_pure_bb
+    m["da_in_cogs"]         = da_in_cogs_bb
+    m["da_in_opex"]         = da_in_opex_bb
+    m["gross_profit"]       = gross_profit_bb
+    m["selling_expenses"]   = selling_bb
+    m["ga_expenses"]        = ga_bb
+    m["sga_total"]          = sga_bb
+    m["other_op_income"]    = other_op_income_bb
+    m["other_op_expense"]   = other_op_expense_bb
+    m["op_expenses_total"]  = op_expenses_total_bb
+    m["ebit"]               = ebit_bb
+    m["ebita"]              = ebit_bb
+    m["interest_expense"]   = int_exp_bb
+    m["interest_income"]    = int_inc_bb
+    m["net_interest"]       = net_interest_bb
+    m["fx_loss"]            = fx_loss_bb
+    m["affiliates_loss"]    = affiliates_loss_bb
+    m["other_non_op"]       = other_nop_bb
+    m["non_op_loss"]        = non_op_loss_bb
+    m["ebitda"]             = ebitda_bb
+    m["ebitda_margin_ttm"]  = ebitda_margin_bb
+    m["gross_margin"]       = gross_margin_bb
+    m["operating_margin"]   = operating_margin_bb
+    m["current_tax"]        = current_tax
+    m["deferred_tax"]       = deferred_tax
+    m["export_sales"]       = export_sales_period if export_sales_period else None
+    return m
+
+
 # Registry: ticker -> reclassification function
 TICKER_RECLASS_RULES = {
     "CUERVO":  _apply_cuervo_reclass,
     "GMEXICO": _apply_gmexico_reclass,
+    "AC":      _apply_ac_reclass,
 }
 
 
@@ -608,7 +831,7 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
         "other_op_income": other_op_income,
         "op_expenses_total": sga_total + other_op_expense,
         "sga_total": sga_total, "selling_expenses": selling, "ga_expenses": ga,
-        "rd_in_opex": 0.0, "da_in_opex": 0.0,
+        "rd_in_opex": 0.0, "da_in_opex": 0.0, "prov_doubtful": 0.0,
         "other_op_expense": other_op_expense, "ebit": ebit,
         "non_op_loss": non_op_loss, "net_interest": net_interest,
         "interest_expense": interest_exp, "interest_income": interest_inc,

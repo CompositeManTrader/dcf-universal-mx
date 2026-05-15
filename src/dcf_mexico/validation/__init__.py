@@ -19,3 +19,9 @@ from .mappings.gmexico import (  # noqa: F401
     GMEXICO_CF_AR,
     GMEXICO_FULL,
 )
+from .mappings.ac import (  # noqa: F401
+    AC_INCOME_AR,
+    AC_BS_AR,
+    AC_CF_AR,
+    AC_FULL,
+)
