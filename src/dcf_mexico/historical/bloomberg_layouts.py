@@ -25,7 +25,101 @@ from .panel import _detect_fx_mult
 # kind:  header (resaltado azul), subtotal (verde), line (normal),
 #        sub (line indentada gris claro), ratio (%), ratio_eps (4 dec),
 #        string (raw text), section (separador), spacer (vacio)
-BLOOMBERG_INCOME_LAYOUT = [
+# ===========================================================================
+# LAYOUTS POR EMISORA — cada emisora tiene su estructura especifica.
+# Si una emisora no esta en TICKER_INCOME_LAYOUTS, usa BLOOMBERG_INCOME_LAYOUT
+# (default = layout estilo CUERVO consumer/spirits, validado).
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# CUERVO (consumer/spirits) — estructura Bloomberg "Adjusted" completa
+# Validado vs Bloomberg Q4 2025 trim.
+# ---------------------------------------------------------------------------
+CUERVO_INCOME_LAYOUT = [
+    ("Revenue",                                "revenue",            "header"),
+    ("    Growth (YoY)",                       "growth_yoy",         "ratio"),
+    ("    + Sales & Services Revenue",         "revenue",            "sub"),
+    ("  - Cost of Revenue",                    "cost_of_revenue",    "line"),
+    ("    + Cost of Goods & Services",         "cost_of_revenue",    "sub"),
+    ("    + Research & Development",           "rd_in_cogs",         "sub"),
+    ("Gross Profit",                           "gross_profit",       "subtotal"),
+    ("  + Other Operating Income",             "other_op_income",    "line"),
+    ("  - Operating Expenses",                 "op_expenses_total",  "line"),
+    ("    + Selling, General & Admin",         "sga_total",          "sub"),
+    ("    + Selling & Marketing",              "selling_expenses",   "sub"),
+    ("    + General & Administrative",         "ga_expenses",        "sub"),
+    ("    + Research & Development",           "rd_in_opex",         "sub"),
+    ("    + Other Operating Expense",          "other_op_expense",   "sub"),
+    ("Operating Income (Loss)",                "ebit",               "header"),
+    ("  - Non-Operating (Income) Loss",        "non_op_loss",        "line"),
+    ("    + Interest Expense, Net",            "net_interest",       "sub"),
+    ("    + Interest Expense",                 "interest_expense",   "sub"),
+    ("    - Interest Income",                  "interest_income",    "sub"),
+    ("    + Foreign Exch (Gain) Loss",         "fx_loss",            "sub"),
+    ("    + (Income) Loss from Affiliates",    "affiliates_loss",    "sub"),
+    ("    + Other Non-Op (Income) Loss",       "other_non_op",       "sub"),
+    ("Pretax Income (Loss), Adjusted",         "pretax_adjusted",    "subtotal"),
+    ("  - Abnormal Losses (Gains)",            "abnormal_losses",    "line"),
+    ("    + Disposal of Assets",               "disposal_assets",    "sub"),
+    ("    + Asset Write-Down",                 "asset_writedown",    "sub"),
+    ("    + Unrealized Investments",           "unrealized_inv",     "sub"),
+    ("Pretax Income (Loss), GAAP",             "pretax_gaap",        "subtotal"),
+    ("  - Income Tax Expense (Benefit)",       "tax_expense",        "line"),
+    ("    + Current Income Tax",               "current_tax",        "sub"),
+    ("    + Deferred Income Tax",              "deferred_tax",       "sub"),
+    ("Income (Loss) from Cont Ops",            "income_cont_ops",    "subtotal"),
+    ("  - Net Extraordinary Losses (Gains)",   "net_xo",             "line"),
+    ("    + Discontinued Operations",          "disc_ops",           "sub"),
+    ("    + XO & Accounting Changes",          "acc_changes",        "sub"),
+    ("Income (Loss) Incl. MI",                 "ni_incl_mi",         "subtotal"),
+    ("  - Minority Interest",                  "minority_interest",  "line"),
+    ("Net Income, GAAP",                       "net_income_gaap",    "header"),
+    ("  - Preferred Dividends",                "preferred_div",      "line"),
+    ("  - Other Adjustments",                  "other_adj",          "line"),
+    ("Net Income Avail to Common, GAAP",       "ni_common_gaap",     "header"),
+    ("",                                       None,                 "spacer"),
+    ("Net Income Avail to Common, Adj",        "ni_common_adj",      "header"),
+    ("  Net Abnormal Losses (Gains)",          "net_abnormal",       "line"),
+    ("  Net Extraordinary Losses (Gains)",     "net_xo_2",           "line"),
+    ("",                                       None,                 "spacer"),
+    ("Basic Weighted Avg Shares",              "shares_basic",       "bold_line"),
+    ("Basic EPS, GAAP",                        "eps_basic_gaap",     "ratio_eps"),
+    ("Basic EPS from Cont Ops, GAAP",          "eps_basic_cont",     "ratio_eps"),
+    ("Basic EPS from Cont Ops, Adjusted",      "eps_basic_adj",      "ratio_eps"),
+    ("",                                       None,                 "spacer"),
+    ("Diluted Weighted Avg Shares",            "shares_diluted",     "bold_line"),
+    ("Diluted EPS, GAAP",                      "eps_dil_gaap",       "ratio_eps"),
+    ("Diluted EPS from Cont Ops, GAAP",        "eps_dil_cont",       "ratio_eps"),
+    ("Diluted EPS from Cont Ops, Adjusted",    "eps_dil_adj",        "ratio_eps"),
+    ("",                                       None,                 "spacer"),
+    ("Reference Items",                        None,                 "section"),
+    ("Accounting Standard",                    "accounting_std",     "string"),
+    ("EBITDA",                                 "ebitda",             "line"),
+    ("EBITDA Margin (T12M)",                   "ebitda_margin_ttm",  "ratio"),
+    ("EBITA",                                  "ebita",              "line"),
+    ("EBIT",                                   "ebit",               "line"),
+    ("Gross Margin",                           "gross_margin",       "ratio"),
+    ("Operating Margin",                       "operating_margin",   "ratio"),
+    ("Profit Margin",                          "profit_margin",      "ratio"),
+    ("Sales per Employee",                     "sales_per_emp",      "line"),
+    ("Dividends per Share",                    "dps",                "ratio_eps"),
+    ("Total Cash Common Dividends",            "total_cash_div",     "line"),
+    ("Export Sales",                           "export_sales",       "line"),
+    ("Depreciation Expense",                   "dep_expense",        "line"),
+]
+
+
+# ---------------------------------------------------------------------------
+# GMEXICO (mining) — estructura validada vs Bloomberg FY 2024
+# Diferencias vs CUERVO:
+#   - Sin "Growth (YoY)" en el header
+#   - "+ Other Revenue" sub-line
+#   - COGS desglosado: "+ Cost of Goods & Services" + "+ Depreciation & Amortization"
+#   - OpEx con sub-line "+ Depreciation & Amortization"
+#   - Sin bloque "Pretax Adjusted" + Abnormal Losses (colapsado a "Pretax Income")
+#   - Reference Items con Capitalized Interest, Personnel Expenses, Rental Expense
+# ---------------------------------------------------------------------------
+GMEXICO_INCOME_LAYOUT = [
     ("Revenue",                                "revenue",            "header"),
     ("    + Sales & Services Revenue",         "revenue",            "sub"),
     ("    + Other Revenue",                    "other_revenue",      "sub"),
@@ -90,12 +184,27 @@ BLOOMBERG_INCOME_LAYOUT = [
     ("Sales per Employee",                     "sales_per_emp",      "line"),
     ("Dividends per Share",                    "dps",                "ratio_eps"),
     ("Total Cash Common Dividends",            "total_cash_div",     "line"),
-    ("Capitalized Interest Expense",           "capitalized_interest","line"),
-    ("Personnel Expenses",                     "personnel_expenses", "line"),
     ("Export Sales",                           "export_sales",       "line"),
     ("Depreciation Expense",                   "dep_expense",        "line"),
-    ("Rental Expense",                         "rental_expense",     "line"),
 ]
+
+
+# Default = CUERVO (consumer/spirits) layout
+BLOOMBERG_INCOME_LAYOUT = CUERVO_INCOME_LAYOUT
+
+
+# Registry: ticker -> layout especifico. Si no esta, usa BLOOMBERG_INCOME_LAYOUT.
+TICKER_INCOME_LAYOUTS = {
+    "CUERVO":  CUERVO_INCOME_LAYOUT,
+    "GMEXICO": GMEXICO_INCOME_LAYOUT,
+}
+
+
+def _resolve_income_layout(ticker: Optional[str]) -> list:
+    """Devuelve el layout especifico del ticker o el default."""
+    if ticker and ticker in TICKER_INCOME_LAYOUTS:
+        return TICKER_INCOME_LAYOUTS[ticker]
+    return BLOOMBERG_INCOME_LAYOUT
 
 
 def _safe_get(obj, attr, default=0.0):
@@ -1386,8 +1495,10 @@ def build_income_adjusted_panel(series, annual_only=False,
     if ticker is None:
         ticker = series.ticker
 
-    labels = [l for l, _, _ in BLOOMBERG_INCOME_LAYOUT]
-    kinds  = [k for _, _, k in BLOOMBERG_INCOME_LAYOUT]
+    # Resolver layout especifico por emisora (CUERVO != GMEXICO != ...)
+    layout = _resolve_income_layout(ticker)
+    labels = [l for l, _, _ in layout]
+    kinds  = [k for _, _, k in layout]
 
     if not snaps:
         return pd.DataFrame(index=labels), kinds
@@ -1451,7 +1562,7 @@ def build_income_adjusted_panel(series, annual_only=False,
         )
 
         col_vals = []
-        for label, key, kind in BLOOMBERG_INCOME_LAYOUT:
+        for label, key, kind in layout:
             if key is None or kind in ("spacer", "section"):
                 col_vals.append(None)
             else:
