@@ -13,3 +13,9 @@ from .mappings.cuervo import (  # noqa: F401
     CUERVO_CF_AR,
     CUERVO_FULL,
 )
+from .mappings.gmexico import (  # noqa: F401
+    GMEXICO_INCOME_AR,
+    GMEXICO_BS_AR,
+    GMEXICO_CF_AR,
+    GMEXICO_FULL,
+)

@@ -96,6 +96,7 @@ try:
         compare_all_periods,
         find_bloomberg_file,
         CUERVO_INCOME_AR, CUERVO_BS_AR, CUERVO_CF_AR,
+        GMEXICO_INCOME_AR, GMEXICO_BS_AR, GMEXICO_CF_AR,
     )
     from dcf_mexico.config import find_all_xbrl, parse_period_tag
     HAS_VALIDATION = True
@@ -105,6 +106,11 @@ try:
             "Income - As Reported":     CUERVO_INCOME_AR,
             "Bal Sheet - As Reported":  CUERVO_BS_AR,
             "Cash Flow - As Reported":  CUERVO_CF_AR,
+        },
+        "GMEXICO": {
+            "Income - As Reported":     GMEXICO_INCOME_AR,
+            "Bal Sheet - As Reported":  GMEXICO_BS_AR,
+            "Cash Flow - As Reported":  GMEXICO_CF_AR,
         },
     }
 except ImportError as _e:
