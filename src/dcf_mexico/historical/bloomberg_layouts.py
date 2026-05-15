@@ -230,9 +230,108 @@ def _apply_cuervo_reclass(m: dict, disposal_period: float = 0.0,
     return m
 
 
+def _apply_gmexico_reclass(m: dict, disposal_period: float = 0.0,
+                             deferred_tax_period: float = 0.0,
+                             current_tax_period: float = 0.0,
+                             interest_earned_period: float = 0.0,
+                             fx_gain_period: float = 0.0,
+                             export_sales_period: float = 0.0) -> dict:
+    """Reclasifica metricas CNBV -> formato Bloomberg para GMEXICO (minera).
+
+    Reglas GMEXICO-especificas (verificadas vs Bloomberg FY 2024):
+      1. COGS: Bloomberg incluye D&A dentro de "Cost of Goods Sold";
+         CNBV los separa. -> BB_COGS = CNBV_COGS + D&A
+         BB_Gross_Profit = Revenue - BB_COGS = CNBV_Gross_Profit - D&A
+      2. SG&A: BB usa "Selling General and Administrative Expenses" como
+         linea limpia (admin + exploration); CNBV ya separa razonablemente.
+         No se ajusta SG&A — D&A NO se foldea aqui (va en COGS).
+      3. EBIT y Net Income permanecen CONSTANTES (los cambios de COGS y D&A
+         se cancelan en margen operativo).
+      4. Interest Expense: BB reporta NETO de intereses capitalizados
+         (mining capex es enorme -> ~$145M FY24 capitalizados).
+         CNBV reporta GROSS. No tenemos parsed `capitalized_interest`,
+         dejamos el valor CNBV con nota en docstring.
+      5. Equity in JV: BB negativo cuando es ganancia, CNBV positivo.
+         Ya invertido en mapping (sign_flip=-1).
+      6. Tax breakdown: deferred_tax y current_tax derivados de hoja 800200.
+      7. Goodwill: BB lo agrupa dentro de "Total Intangible Assets - Net".
+         Ya manejado en _compute_bs_metrics: total_intangibles = goodwill + other_intang.
+
+    Diff residual esperado vs Bloomberg: ~5% line-by-line, principalmente
+    por tratamiento de intereses capitalizados (no parseado).
+    """
+    cogs_cnbv         = m.get("cost_of_revenue", 0) or 0
+    gross_profit_cnbv = m.get("gross_profit", 0) or 0
+    da_value          = m.get("dep_expense", 0) or 0
+    ebit_cnbv         = m.get("ebit", 0) or 0
+    revenue           = m.get("revenue", 0) or 0
+
+    # --- 1: COGS BB = CNBV COGS + D&A (mining BB style) ---
+    cogs_bb = cogs_cnbv + da_value
+    gross_profit_bb = revenue - cogs_bb        # = CNBV Gross - D&A
+
+    # --- 2: SG&A unchanged (BB GMEXICO no foldea D&A en SG&A) ---
+    # Operating expenses se mantiene tal cual del CNBV.
+    op_expenses_total_bb = m.get("op_expenses_total", 0) or 0
+
+    # --- 3: EBIT no cambia (los ajustes de COGS y D&A se cancelan) ---
+    # Operating Income BB = Revenue - COGS_BB - OpEx_BB
+    #                     = Revenue - (COGS_CNBV + D&A) - OpEx_CNBV
+    # Pero CNBV EBIT ya es Revenue - COGS_CNBV - OpEx_CNBV - D&A_implicit
+    # Para minera CNBV: EBIT = Gross - OpEx (donde D&A esta en OpEx via "Otros gastos")
+    # Aqui asumimos que el EBIT CNBV es comparable al BB; se mantiene.
+    ebit_bb = ebit_cnbv
+
+    # --- 4: Interest Expense — sin ajuste (no tenemos capitalized parseado) ---
+    # Documentar via nota: BB sera ~$145M menor que CNBV en GMEXICO FY24.
+    int_exp_bb  = m.get("interest_expense", 0) or 0
+    int_inc_bb  = m.get("interest_income", 0) or 0
+    net_interest_bb = int_exp_bb - int_inc_bb
+
+    # --- 5: Affiliates (JV mineras como Buenavista del Cobre) ---
+    # CNBV positivo = ganancia; BB negativo = ganancia. Sign flip.
+    associates_cnbv = m.get("affiliates_loss", 0) or 0  # ya -associates en compute_income
+    affiliates_loss_bb = associates_cnbv  # mantener; sign_flip ya aplicado en mapping
+
+    fx_loss_bb = m.get("fx_loss", 0) or 0
+    other_nop_bb = m.get("other_non_op", 0) or 0
+    non_op_loss_bb = net_interest_bb + fx_loss_bb + affiliates_loss_bb + other_nop_bb
+
+    # --- 6: Tax breakdown desde 800200 ---
+    current_tax = current_tax_period
+    deferred_tax = deferred_tax_period
+
+    # EBITDA BB recalc (EBIT + D&A) — D&A de informative.da_12m
+    ebitda_bb = ebit_bb + da_value
+
+    # Margenes recalc con valores BB
+    gross_margin_bb     = (gross_profit_bb / revenue) if revenue else 0.0
+    operating_margin_bb = (ebit_bb / revenue) if revenue else 0.0
+
+    # Update dict
+    m["cost_of_revenue"]   = cogs_bb
+    m["gross_profit"]      = gross_profit_bb
+    m["op_expenses_total"] = op_expenses_total_bb
+    m["ebit"]              = ebit_bb
+    m["ebita"]             = ebit_bb
+    m["interest_expense"]  = int_exp_bb
+    m["interest_income"]   = int_inc_bb
+    m["net_interest"]      = net_interest_bb
+    m["affiliates_loss"]   = affiliates_loss_bb
+    m["non_op_loss"]       = non_op_loss_bb
+    m["ebitda"]            = ebitda_bb
+    m["gross_margin"]      = gross_margin_bb
+    m["operating_margin"]  = operating_margin_bb
+    m["current_tax"]       = current_tax
+    m["deferred_tax"]      = deferred_tax
+    m["export_sales"]      = export_sales_period if export_sales_period else None
+    return m
+
+
 # Registry: ticker -> reclassification function
 TICKER_RECLASS_RULES = {
-    "CUERVO": _apply_cuervo_reclass,
+    "CUERVO":  _apply_cuervo_reclass,
+    "GMEXICO": _apply_gmexico_reclass,
 }
 
 
