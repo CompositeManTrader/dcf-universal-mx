@@ -27,11 +27,11 @@ from .panel import _detect_fx_mult
 #        string (raw text), section (separador), spacer (vacio)
 BLOOMBERG_INCOME_LAYOUT = [
     ("Revenue",                                "revenue",            "header"),
-    ("    Growth (YoY)",                       "growth_yoy",         "ratio"),
     ("    + Sales & Services Revenue",         "revenue",            "sub"),
+    ("    + Other Revenue",                    "other_revenue",      "sub"),
     ("  - Cost of Revenue",                    "cost_of_revenue",    "line"),
-    ("    + Cost of Goods & Services",         "cost_of_revenue",    "sub"),
-    ("    + Research & Development",           "rd_in_cogs",         "sub"),
+    ("    + Cost of Goods & Services",         "cogs_pure",          "sub"),
+    ("    + Depreciation & Amortization",      "da_in_cogs",         "sub"),
     ("Gross Profit",                           "gross_profit",       "subtotal"),
     ("  + Other Operating Income",             "other_op_income",    "line"),
     ("  - Operating Expenses",                 "op_expenses_total",  "line"),
@@ -39,6 +39,7 @@ BLOOMBERG_INCOME_LAYOUT = [
     ("    + Selling & Marketing",              "selling_expenses",   "sub"),
     ("    + General & Administrative",         "ga_expenses",        "sub"),
     ("    + Research & Development",           "rd_in_opex",         "sub"),
+    ("    + Depreciation & Amortization",      "da_in_opex",         "sub"),
     ("    + Other Operating Expense",          "other_op_expense",   "sub"),
     ("Operating Income (Loss)",                "ebit",               "header"),
     ("  - Non-Operating (Income) Loss",        "non_op_loss",        "line"),
@@ -48,12 +49,7 @@ BLOOMBERG_INCOME_LAYOUT = [
     ("    + Foreign Exch (Gain) Loss",         "fx_loss",            "sub"),
     ("    + (Income) Loss from Affiliates",    "affiliates_loss",    "sub"),
     ("    + Other Non-Op (Income) Loss",       "other_non_op",       "sub"),
-    ("Pretax Income (Loss), Adjusted",         "pretax_adjusted",    "subtotal"),
-    ("  - Abnormal Losses (Gains)",            "abnormal_losses",    "line"),
-    ("    + Disposal of Assets",               "disposal_assets",    "sub"),
-    ("    + Asset Write-Down",                 "asset_writedown",    "sub"),
-    ("    + Unrealized Investments",           "unrealized_inv",     "sub"),
-    ("Pretax Income (Loss), GAAP",             "pretax_gaap",        "subtotal"),
+    ("Pretax Income",                          "pretax_gaap",        "subtotal"),
     ("  - Income Tax Expense (Benefit)",       "tax_expense",        "line"),
     ("    + Current Income Tax",               "current_tax",        "sub"),
     ("    + Deferred Income Tax",              "deferred_tax",       "sub"),
@@ -94,8 +90,11 @@ BLOOMBERG_INCOME_LAYOUT = [
     ("Sales per Employee",                     "sales_per_emp",      "line"),
     ("Dividends per Share",                    "dps",                "ratio_eps"),
     ("Total Cash Common Dividends",            "total_cash_div",     "line"),
+    ("Capitalized Interest Expense",           "capitalized_interest","line"),
+    ("Personnel Expenses",                     "personnel_expenses", "line"),
     ("Export Sales",                           "export_sales",       "line"),
     ("Depreciation Expense",                   "dep_expense",        "line"),
+    ("Rental Expense",                         "rental_expense",     "line"),
 ]
 
 
@@ -261,37 +260,34 @@ def _apply_gmexico_reclass(m: dict, disposal_period: float = 0.0,
     por tratamiento de intereses capitalizados (no parseado).
     """
     cogs_cnbv         = m.get("cost_of_revenue", 0) or 0
-    gross_profit_cnbv = m.get("gross_profit", 0) or 0
     da_value          = m.get("dep_expense", 0) or 0
     ebit_cnbv         = m.get("ebit", 0) or 0
     revenue           = m.get("revenue", 0) or 0
 
     # --- 1: COGS BB = CNBV COGS + D&A (mining BB style) ---
-    cogs_bb = cogs_cnbv + da_value
-    gross_profit_bb = revenue - cogs_bb        # = CNBV Gross - D&A
+    # Mostrar como sub-lineas: "Cost of Goods & Services" + "Depreciation & Amortization"
+    # El header "Cost of Revenue" muestra el total agregado.
+    cogs_pure_bb     = cogs_cnbv          # COGS sin D&A
+    da_in_cogs_bb    = da_value           # D&A va dentro de COGS para mining
+    da_in_opex_bb    = 0.0                # Ninguno en OpEx para mining
+    cogs_total_bb    = cogs_pure_bb + da_in_cogs_bb
+    gross_profit_bb  = revenue - cogs_total_bb
 
     # --- 2: SG&A unchanged (BB GMEXICO no foldea D&A en SG&A) ---
-    # Operating expenses se mantiene tal cual del CNBV.
     op_expenses_total_bb = m.get("op_expenses_total", 0) or 0
 
     # --- 3: EBIT no cambia (los ajustes de COGS y D&A se cancelan) ---
-    # Operating Income BB = Revenue - COGS_BB - OpEx_BB
-    #                     = Revenue - (COGS_CNBV + D&A) - OpEx_CNBV
-    # Pero CNBV EBIT ya es Revenue - COGS_CNBV - OpEx_CNBV - D&A_implicit
-    # Para minera CNBV: EBIT = Gross - OpEx (donde D&A esta en OpEx via "Otros gastos")
-    # Aqui asumimos que el EBIT CNBV es comparable al BB; se mantiene.
     ebit_bb = ebit_cnbv
 
     # --- 4: Interest Expense — sin ajuste (no tenemos capitalized parseado) ---
-    # Documentar via nota: BB sera ~$145M menor que CNBV en GMEXICO FY24.
+    # BB sera ~$145M menor que CNBV en GMEXICO FY24.
     int_exp_bb  = m.get("interest_expense", 0) or 0
     int_inc_bb  = m.get("interest_income", 0) or 0
     net_interest_bb = int_exp_bb - int_inc_bb
 
     # --- 5: Affiliates (JV mineras como Buenavista del Cobre) ---
-    # CNBV positivo = ganancia; BB negativo = ganancia. Sign flip.
     associates_cnbv = m.get("affiliates_loss", 0) or 0  # ya -associates en compute_income
-    affiliates_loss_bb = associates_cnbv  # mantener; sign_flip ya aplicado en mapping
+    affiliates_loss_bb = associates_cnbv
 
     fx_loss_bb = m.get("fx_loss", 0) or 0
     other_nop_bb = m.get("other_non_op", 0) or 0
@@ -301,7 +297,7 @@ def _apply_gmexico_reclass(m: dict, disposal_period: float = 0.0,
     current_tax = current_tax_period
     deferred_tax = deferred_tax_period
 
-    # EBITDA BB recalc (EBIT + D&A) — D&A de informative.da_12m
+    # EBITDA BB recalc (EBIT + D&A)
     ebitda_bb = ebit_bb + da_value
 
     # Margenes recalc con valores BB
@@ -309,7 +305,10 @@ def _apply_gmexico_reclass(m: dict, disposal_period: float = 0.0,
     operating_margin_bb = (ebit_bb / revenue) if revenue else 0.0
 
     # Update dict
-    m["cost_of_revenue"]   = cogs_bb
+    m["cost_of_revenue"]   = cogs_total_bb     # Total agregado (sub-lineas suman a esto)
+    m["cogs_pure"]         = cogs_pure_bb
+    m["da_in_cogs"]        = da_in_cogs_bb
+    m["da_in_opex"]        = da_in_opex_bb
     m["gross_profit"]      = gross_profit_bb
     m["op_expenses_total"] = op_expenses_total_bb
     m["ebit"]              = ebit_bb
@@ -325,6 +324,7 @@ def _apply_gmexico_reclass(m: dict, disposal_period: float = 0.0,
     m["current_tax"]       = current_tax
     m["deferred_tax"]      = deferred_tax
     m["export_sales"]      = export_sales_period if export_sales_period else None
+    # Capitalized interest, personnel, rental no parseados — quedan como None.
     return m
 
 
@@ -456,13 +456,19 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
     sales_per_emp = (revenue * 1e6 / num_emp) if num_emp else None
 
     # Ensamblar dict de salida (luego se aplica reclassification por ticker)
+    # Default: D&A NO se foldea en COGS ni OpEx (se muestra solo en Reference);
+    # ticker reclass puede mover D&A a una de las dos lineas.
     output = {
-        "revenue": revenue, "growth_yoy": growth_yoy, "rd_in_cogs": 0.0,
-        "cost_of_revenue": cost_of_revenue, "gross_profit": gross_profit,
+        "revenue": revenue, "other_revenue": 0.0, "growth_yoy": growth_yoy,
+        "rd_in_cogs": 0.0,
+        "cost_of_revenue": cost_of_revenue, "cogs_pure": cost_of_revenue,
+        "da_in_cogs": 0.0,
+        "gross_profit": gross_profit,
         "other_op_income": other_op_income,
         "op_expenses_total": sga_total + other_op_expense,
         "sga_total": sga_total, "selling_expenses": selling, "ga_expenses": ga,
-        "rd_in_opex": 0.0, "other_op_expense": other_op_expense, "ebit": ebit,
+        "rd_in_opex": 0.0, "da_in_opex": 0.0,
+        "other_op_expense": other_op_expense, "ebit": ebit,
         "non_op_loss": non_op_loss, "net_interest": net_interest,
         "interest_expense": interest_exp, "interest_income": interest_inc,
         "fx_loss": fx_result, "affiliates_loss": affiliates_loss,
@@ -487,6 +493,10 @@ def _compute_income_metrics(snap, annual_only: bool, fx_mult: float,
         "profit_margin": profit_margin, "sales_per_emp": sales_per_emp, "dps": dps,
         "total_cash_div": total_cash_div, "export_sales": None,
         "dep_expense": da_value,
+        # Reference items adicionales (Bloomberg). Default None = no parseado.
+        "capitalized_interest": None,
+        "personnel_expenses": None,
+        "rental_expense": None,
     }
     if ticker and ticker in TICKER_RECLASS_RULES:
         # Resolver valores de notas para el periodo (trim o acum) usando valores ya parseados
