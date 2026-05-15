@@ -2413,12 +2413,27 @@ if mode == "Single DCF":
     # ============================================================
     tab_estados.__enter__()
 
+    # Detectar moneda nativa para el label
+    _native_ccy = (res.info.currency or "MXN").upper().strip()
+    _ccy_label = "M USD" if _native_ccy == "USD" else "MDP"
+    _ccy_note = ("**reportados en USD** (no se convierten a MXN — "
+                  "valores tal cual el XBRL los presenta)") \
+                  if _native_ccy == "USD" \
+                  else "reportados en pesos mexicanos"
+
     st.subheader(f"Estados Financieros — {issuer.ticker}")
     st.caption(
-        "Vista historica multi-periodo estilo Bloomberg. "
-        "Selecciona Anual o Trimestral, navega entre Income / Balance / Cash Flow. "
-        "Valores en MDP (USD->MXN auto-convertido)."
+        f"Vista historica multi-periodo estilo Bloomberg. "
+        f"Selecciona Anual o Trimestral, navega entre Income / Balance / Cash Flow. "
+        f"Valores en **{_ccy_label}** ({_ccy_note})."
     )
+    if _native_ccy == "USD":
+        st.info(
+            f"💵 **{issuer.ticker} reporta en USD.** Los valores en las "
+            f"tablas están en **millones de USD nativos**, sin conversión "
+            f"a pesos. Headers '{_ccy_label}' = millones de la moneda "
+            f"reportada por la empresa."
+        )
 
     if not HAS_HISTORICAL:
         st.error(f"Historical module no disponible: {_HIST_ERR}")
@@ -5173,11 +5188,11 @@ if mode == "Single DCF":
     try:
         if not HAS_DUPONT:
             raise ImportError(f"DuPont module not available: {_DUPONT_ERR}")
-        # Calcular FX multiplier para emisoras USD
+        # NO conversión FX: usar valores nativos del XBRL tal cual los reporta.
+        # Para emisoras USD (GMEXICO, CEMEX), valores aparecerán en USD nativos.
         currency = (res.info.currency or "MXN").upper().strip()
-        fx_mult = market.fx_rate_usdmxn if currency == "USD" else 1.0
-        # DuPont siempre con balance del periodo actual
-        dp = dupont_from_parser(res, currency_multiplier=fx_mult / 1e6)  # convertir a MDP
+        # Solo convertir a "millones" (no FX), preservando la moneda nativa.
+        dp = dupont_from_parser(res, currency_multiplier=1.0 / 1e6)
         dp_table = dp.to_table()
 
         col_dp1, col_dp2 = st.columns([1, 1])

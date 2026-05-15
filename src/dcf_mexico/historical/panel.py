@@ -68,9 +68,17 @@ def _snapshot_metrics(snap, fx_mult: float = 1.0) -> dict:
 
 
 def _detect_fx_mult(snap, fx_rate_usdmxn: float = 19.5) -> float:
-    """Devuelve fx_mult correcto segun la moneda reportada en el XBRL."""
-    currency = (snap.parsed.info.currency or "MXN").upper().strip()
-    return fx_rate_usdmxn if currency == "USD" else 1.0
+    """SIEMPRE retorna 1.0 — los EEFF se muestran en su moneda nativa
+    tal como los reporta el XBRL. NO se convierte USD → MXN.
+
+    Para emisoras que reportan en USD (GMEXICO, CEMEX, ORBIA, KOF):
+    los valores aparecerán en USD raw (interpretar 'MDP' headers como
+    'M' de la moneda nativa).
+
+    El parámetro fx_rate_usdmxn se mantiene por compatibilidad de firma
+    con código que lo invoca, pero ya NO se aplica.
+    """
+    return 1.0
 
 
 def build_historical_bloomberg(
