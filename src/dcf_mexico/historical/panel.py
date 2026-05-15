@@ -67,47 +67,15 @@ def _snapshot_metrics(snap, fx_mult: float = 1.0) -> dict:
     }
 
 
-def _detect_fx_mult(snap, fx_rate_usdmxn: float = None,
-                      use_constant_currency: bool = False) -> float:
-    """Devuelve fx_mult correcto segun la moneda reportada en el XBRL.
-
-    Si la emisora reporta en USD, aplica USDMXN del PERIODO ESPECÍFICO
-    (usando period_end del snapshot) para conversión histórica precisa.
-
-    Args:
-        snap: PeriodSnapshot del histórico
-        fx_rate_usdmxn: si se pasa, usa ese (compatibilidad con código viejo).
-                        Si None, busca FX trimestral en config/fx_rates_historic.yaml
-        use_constant_currency: si True, usa el FX SPOT actual para todas
-                                las periodos (Damodaran-style: aisla
-                                desempeño operativo de ruido FX)
-
-    Returns:
-        float: fx_mult (1.0 si MXN, USDMXN del periodo si USD)
-    """
+def _detect_fx_mult(snap, fx_rate_usdmxn: float = 19.5) -> float:
+    """Devuelve fx_mult correcto segun la moneda reportada en el XBRL."""
     currency = (snap.parsed.info.currency or "MXN").upper().strip()
-    if currency != "USD":
-        return 1.0
-
-    # Override explícito (compatibilidad con código viejo)
-    if fx_rate_usdmxn is not None:
-        return fx_rate_usdmxn
-
-    # Constant currency: usar spot para todas las periodos
-    from ..fx_rates import get_spot_rate, get_usdmxn_avg
-    if use_constant_currency:
-        return get_spot_rate()
-
-    # Por periodo: buscar FX promedio del trimestre del snapshot
-    period = snap.period_end if hasattr(snap, "period_end") else None
-    if period:
-        return get_usdmxn_avg(period)
-    return get_spot_rate()
+    return fx_rate_usdmxn if currency == "USD" else 1.0
 
 
 def build_historical_bloomberg(
     series,
-    fx_rate_usdmxn: Optional[float] = None,
+    fx_rate_usdmxn: float = 19.5,
     annual_only: bool = True,
     max_periods: Optional[int] = None,
 ) -> pd.DataFrame:
@@ -134,7 +102,7 @@ def build_historical_bloomberg(
 def build_metric_timeseries(
     series,
     metric: str,
-    fx_rate_usdmxn: Optional[float] = None,
+    fx_rate_usdmxn: float = 19.5,
     annual_only: bool = True,
 ) -> pd.DataFrame:
     """Devuelve un DataFrame con cols ['period_end', 'year', 'label', 'value']

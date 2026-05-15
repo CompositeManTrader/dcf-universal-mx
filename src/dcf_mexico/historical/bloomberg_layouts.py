@@ -1168,7 +1168,7 @@ def _build_panel_with_view(
     series,
     rows_def: list,
     annual_only: bool,
-    fx_rate_usdmxn: Optional[float],
+    fx_rate_usdmxn: float,
     max_periods: Optional[int],
 ):
     """Builder generico (rows_def es estatico)."""

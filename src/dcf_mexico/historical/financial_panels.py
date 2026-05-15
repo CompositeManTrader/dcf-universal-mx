@@ -144,7 +144,7 @@ def _build_panel(
     series,
     rows_def: list,
     annual_only: bool = False,
-    fx_rate_usdmxn: Optional[float] = None,
+    fx_rate_usdmxn: float = 19.5,
     max_periods: Optional[int] = None,
 ) -> tuple[pd.DataFrame, list[str]]:
     """Devuelve (DataFrame con filas=labels, cols=periodos, valores), kinds_list.
@@ -190,21 +190,21 @@ def _build_panel(
 # ---------------------------------------------------------------------------
 
 def build_income_panel(series, annual_only: bool = False,
-                        fx_rate_usdmxn: Optional[float] = None,
+                        fx_rate_usdmxn: float = 19.5,
                         max_periods: Optional[int] = None):
     """Income Statement historico. Returns (DataFrame, kinds_list)."""
     return _build_panel(series, INCOME_LINES, annual_only, fx_rate_usdmxn, max_periods)
 
 
 def build_bs_panel(series, annual_only: bool = False,
-                    fx_rate_usdmxn: Optional[float] = None,
+                    fx_rate_usdmxn: float = 19.5,
                     max_periods: Optional[int] = None):
     """Balance Sheet historico. Returns (DataFrame, kinds_list)."""
     return _build_panel(series, BALANCE_LINES, annual_only, fx_rate_usdmxn, max_periods)
 
 
 def build_cf_panel(series, annual_only: bool = False,
-                    fx_rate_usdmxn: Optional[float] = None,
+                    fx_rate_usdmxn: float = 19.5,
                     max_periods: Optional[int] = None):
     """Cash Flow historico. Returns (DataFrame, kinds_list)."""
     return _build_panel(series, CASHFLOW_LINES, annual_only, fx_rate_usdmxn, max_periods)

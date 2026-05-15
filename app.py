@@ -586,89 +586,7 @@ if mode == "Single DCF":
         st.stop()
 
     # ----- NON-FINANCIAL: FCFF DCF -----
-    # 🔧 FX HANDLING: emisoras USD (GMEXICO, CEMEX, ORBIA, KOF) requieren
-    # conversión a MXN. Usamos el USDMXN PROMEDIO del trimestre cargado
-    # (no un FX constante arbitrario) — datos históricos Banxico en
-    # config/fx_rates_historic.yaml.
-    _currency = (res.info.currency or "MXN").upper().strip()
-    if _currency == "USD":
-        from src.dcf_mexico.fx_rates import (
-            get_usdmxn_avg, get_spot_rate, get_period_breakdown,
-        )
-        _fx_breakdown = get_period_breakdown(res.info.period_end)
-        _fx_period = _fx_breakdown["avg"]   # promedio del trimestre = flujos
-        _fx_spot = _fx_breakdown["spot_for_reference"]
-        _fx_mult = _fx_period
-
-        # Banner principal
-        st.info(
-            f"💱 **Emisora reporta en USD** — aplicando FX por periodo. "
-            f"Periodo: **{res.info.period_end}** · "
-            f"USDMXN promedio Q: **{_fx_period:.2f}** · "
-            f"Spot ref: {_fx_spot:.2f} · "
-            f"(Histórico Banxico — varía por trimestre, no es constante)"
-        )
-
-        # Panel diagnóstico FX (transparencia total para debugging)
-        with st.expander("🔍 Diagnóstico FX detallado", expanded=False):
-            _rev_raw = res.dcf.revenue or 0    # USD raw del XBRL
-            _rev_mxn = _rev_raw * _fx_mult
-            d1, d2, d3 = st.columns(3)
-            d1.markdown(f"""
-            **Detección XBRL**
-            - Currency: `{res.info.currency}`
-            - Rounding declarado: `{res.info.rounding}`
-            - Periodo: `{res.info.period_end}`
-            """)
-            d2.markdown(f"""
-            **FX aplicado**
-            - eop (cierre): `{_fx_breakdown['eop']:.2f}`
-            - avg (flujos): `{_fx_breakdown['avg']:.2f}` ← usado
-            - spot ref: `{_fx_spot:.2f}`
-            - Match exacto: `{_fx_breakdown['is_exact_match']}`
-            """)
-            d3.markdown(f"""
-            **Sanity check Revenue**
-            - USD raw XBRL: `${_rev_raw/1e9:.2f}B USD`
-            - × FX {_fx_mult:.2f} = `${_rev_mxn/1e9:.2f}B MXN`
-            - En MDP: `${_rev_mxn/1e6:,.0f}`
-            """)
-            # Validación de magnitudes razonables
-            if _rev_raw > 1e11:   # > $100B USD raw → probablemente está en MXN ya
-                st.warning(
-                    f"⚠️ **Anomalía**: revenue raw = ${_rev_raw/1e9:.0f}B "
-                    f"parece MUY alto para USD. ¿Tal vez el XBRL ya está "
-                    f"pre-convertido a MXN? Verifica el filing original."
-                )
-            elif _rev_raw < 1e8:    # < $100M USD → probablemente está en miles
-                st.warning(
-                    f"⚠️ **Anomalía**: revenue raw = ${_rev_raw/1e6:.0f}M "
-                    f"parece MUY bajo. ¿Tal vez el XBRL realmente está en "
-                    f"miles de USD (factor 1000)?"
-                )
-            else:
-                st.success(
-                    f"✅ Magnitud razonable: ${_rev_raw/1e9:.1f}B USD → "
-                    f"${_rev_mxn/1e9:.1f}B MXN aplicando FX correcto."
-                )
-    else:
-        _fx_mult = 1.0
-        # Para emisoras MXN: mostrar diagnóstico también
-        with st.expander("🔍 Diagnóstico FX (MXN — sin conversión)",
-                          expanded=False):
-            _rev_raw = res.dcf.revenue or 0
-            st.markdown(f"""
-            - Currency XBRL: `{res.info.currency}` (no requiere FX)
-            - Rounding declarado: `{res.info.rounding}`
-            - Revenue raw: `${_rev_raw/1e9:.2f}B MXN`
-            - En MDP: `${_rev_raw/1e6:,.0f}`
-            """)
-
-    base = CompanyBase.from_parser_dcf(
-        res.dcf,
-        include_leases_as_debt=True,
-        currency_multiplier=_fx_mult,
-    )
+    base = CompanyBase.from_parser_dcf(res.dcf, include_leases_as_debt=True)
 
     # ========================================================================
     # TABS DEFINITION (movida desde abajo - ahora la pagina arranca con tabs)
@@ -2561,25 +2479,7 @@ if mode == "Single DCF":
                 hs_ef_view = hs_ef
                 use_annual_flag = annual_only_ef
 
-            # 🔧 FX HANDLING: para emisoras USD (GMEXICO, CEMEX, ORBIA, KOF),
-            # _detect_fx_mult automáticamente usa el USDMXN promedio del
-            # trimestre del snapshot (config/fx_rates_historic.yaml).
-            # fx_rate=None hace que panel.py haga lookup por periodo.
-            _ef_use_constant_ccy = False
-            if (res.info.currency or "MXN").upper() == "USD":
-                _ef_use_constant_ccy = st.checkbox(
-                    "💱 Constant currency (usar FX spot para TODOS los periodos)",
-                    value=False,
-                    key=f"ef_constccy_{issuer.ticker}",
-                    help="Damodaran-style: aísla desempeño operacional del "
-                         "ruido FX. OFF = cada periodo usa su FX real "
-                         "(análisis histórico). ON = todos al FX spot "
-                         "(análisis operativo, comparable).",
-                )
-                from src.dcf_mexico.fx_rates import get_spot_rate
-                fx_rate = get_spot_rate() if _ef_use_constant_ccy else None
-            else:
-                fx_rate = None
+            fx_rate = market.fx_rate_usdmxn
 
             # Sub-tabs Income / Balance / CashFlow / Vertical & Horizontal
             sub_is, sub_bs, sub_cf, sub_vh = st.tabs([
@@ -3124,9 +3024,9 @@ if mode == "Single DCF":
 
                 # Multi-period Bloomberg table
                 st.markdown("### Multi-period financial panel")
-                st.caption("Filas = metricas, columnas = periodos. Valores en MDP donde aplica (USD→MXN auto-detectado por periodo, FX Banxico).")
-                # FX por periodo: panel.py hace lookup automático si fx_rate=None
-                bb_hist = build_historical_bloomberg(hs, fx_rate_usdmxn=None,
+                st.caption("Filas = metricas, columnas = periodos. Valores en MDP donde aplica (USD->MXN auto-detectado).")
+                fx_rate = market.fx_rate_usdmxn
+                bb_hist = build_historical_bloomberg(hs, fx_rate_usdmxn=fx_rate,
                                                        annual_only=annual_only)
                 if not bb_hist.empty:
                     # Format
