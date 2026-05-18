@@ -98,6 +98,7 @@ try:
         CUERVO_INCOME_AR, CUERVO_BS_AR, CUERVO_CF_AR,
         GMEXICO_INCOME_AR, GMEXICO_BS_AR, GMEXICO_CF_AR,
         AC_INCOME_AR, AC_BS_AR, AC_CF_AR,
+        FEMSA_INCOME_AR, FEMSA_BS_AR, FEMSA_CF_AR,
     )
     from dcf_mexico.config import find_all_xbrl, parse_period_tag
     HAS_VALIDATION = True
@@ -117,6 +118,11 @@ try:
             "Income - GAAP":            AC_INCOME_AR,
             "Bal Sheet - Standardized": AC_BS_AR,
             "Cash Flow - Standardized": AC_CF_AR,
+        },
+        "FEMSA": {
+            "Income - GAAP":            FEMSA_INCOME_AR,
+            "Bal Sheet - Standardized": FEMSA_BS_AR,
+            "Cash Flow - Standardized": FEMSA_CF_AR,
         },
     }
 except ImportError as _e:

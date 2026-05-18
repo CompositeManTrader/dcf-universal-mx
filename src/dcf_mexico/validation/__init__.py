@@ -25,3 +25,9 @@ from .mappings.ac import (  # noqa: F401
     AC_CF_AR,
     AC_FULL,
 )
+from .mappings.femsa import (  # noqa: F401
+    FEMSA_INCOME_AR,
+    FEMSA_BS_AR,
+    FEMSA_CF_AR,
+    FEMSA_FULL,
+)
