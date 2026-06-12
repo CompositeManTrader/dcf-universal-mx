@@ -68,7 +68,10 @@ class DCFAssumptions:
     sales_to_capital_y6_10: Optional[float] = None # NEW Damodaran-style
 
     # Tax
-    effective_tax_base: float = 0.27
+    # AUDIT FIX: era float=0.27 pero project_company lo IGNORABA (usaba
+    # siempre base.effective_tax_rate). Ahora Optional: si el analista lo
+    # define (Input Sheet sec C), se usa; si None, cae a base.effective_tax_rate.
+    effective_tax_base: Optional[float] = None
     marginal_tax_current: float = MARGINAL_TAX_MX   # BUG #13: usado en Hamada (current)
     marginal_tax_terminal: float = MARGINAL_TAX_MX  # usado en NOPAT terminal y fade
 
@@ -299,23 +302,43 @@ class DCFOutput:
         return pd.DataFrame(rows)
 
     def bridge_table(self) -> pd.DataFrame:
-        """Bridge desglosado EV → Equity Value (Damodaran-style)."""
+        """Bridge desglosado EV → Equity Value (Damodaran-style).
+
+        AUDIT FIX: cuando probability_of_failure > 0, el blend se hace a
+        NIVEL EQUITY (no EV), asi que el bridge muestra explicitamente
+        equity_going_concern, equity_distress y el blend — antes las filas
+        (-debt +cash...) sobre el EV blend no sumaban al equity_value."""
         a = self.assumptions
         b = self.base
         net_debt = b.financial_debt - b.cash
         cash_haircut = a.trapped_cash * a.trapped_cash_tax_rate if a.trapped_cash > 0 else 0
+        equity_gc = (self.operating_value_dcf - net_debt - cash_haircut
+                     - b.minority_interest + b.non_operating_assets)
         rows = [
             ("Sum PV FCFF (10y)",              self.sum_pv_fcff),
             ("PV(Terminal Value)",             self.pv_terminal),
             ("DCF Operating Value",            self.operating_value_dcf),
-            ("(× P_failure adj)",
-                f"  p={a.probability_of_failure:.2%}, distress={self.distress_proceeds:,.1f} MDP" if a.probability_of_failure > 0 else "n/a"),
-            ("Final Operating Value (EV)",     self.enterprise_value),
             ("(-) Total Debt",                 -b.financial_debt),
             ("(+) Cash",                        b.cash),
             ("(-) Trapped Cash haircut",       -cash_haircut if cash_haircut > 0 else "n/a"),
             ("(-) Minority Interest",          -b.minority_interest),
             ("(+) Non-Operating Assets",        b.non_operating_assets),
+            ("Equity (going concern)",          equity_gc),
+        ]
+        if a.probability_of_failure > 0:
+            equity_distress = max(
+                0.0,
+                self.distress_proceeds - b.financial_debt - b.minority_interest,
+            )
+            rows += [
+                ("Distress proceeds (total firm)",  self.distress_proceeds),
+                ("Equity en distress (residual)",   equity_distress),
+                (f"Blend: (1-p)×GC + p×distress (p={a.probability_of_failure:.1%})",
+                                                    self.equity_value),
+            ]
+        rows += [
+            ("(-) Employee options",            -self.options_value_subtracted
+                                                  if self.options_value_subtracted > 0 else "n/a"),
             ("Equity Value",                    self.equity_value),
             ("÷ Shares (M)",                    b.shares_outstanding / 1e6),
             ("Estimated Value/Share (MXN)",     self.value_per_share),
@@ -449,7 +472,12 @@ def project_company(
     base_margin = base.ebit / base.revenue if base.revenue else a.target_op_margin
     # BUG #3 fix: clamp effective_tax_rate a [0, 0.50] para evitar refunds
     # negativos o tax rates inflados que distorsionarían NOPAT.
-    base_tax = max(0.0, min(0.50, base.effective_tax_rate))
+    # AUDIT FIX: respetar a.effective_tax_base si el analista lo definio
+    # en el Input Sheet (antes se ignoraba silenciosamente).
+    _tax_source = (a.effective_tax_base
+                   if a.effective_tax_base is not None
+                   else base.effective_tax_rate)
+    base_tax = max(0.0, min(0.50, _tax_source))
 
     out = DCFOutput(
         base=base,
@@ -522,6 +550,17 @@ def project_company(
         base.revenue / a.sales_to_capital if a.sales_to_capital > 0 else 1.0
     )
 
+    # ===== AUDIT FIX: reinvestment_lag ahora SI se implementa =====
+    # Damodaran: la inversion de HOY genera el crecimiento de MAÑANA.
+    # Con lag=L, Reinvestment_t se dimensiona con ΔRevenue_{t+L}.
+    # Precomputamos el revenue path Y1..Y(n+L); mas alla de Y_n el growth
+    # se extiende con terminal_growth.
+    lag = max(0, int(getattr(a, "reinvestment_lag", 0) or 0))
+    _rev_path = [base.revenue]          # indice 0 = año base
+    for _t in range(1, n + lag + 1):
+        _g_t = _g(_t) if _t <= n else a.terminal_growth
+        _rev_path.append(_rev_path[-1] * (1 + _g_t))
+
     prev_rev = base.revenue
     for t in range(1, n + 1):
         g = _g(t)
@@ -535,7 +574,17 @@ def project_company(
 
         # ===== NOL Logic (Damodaran #6) =====
         # NOL reduce taxable income; tax_shield = nol_used × tax_t
-        if nol_remaining > 0 and ebit_t > 0:
+        # AUDIT FIX (EBIT negativo): antes nopat = ebit*(1-tax) generaba un
+        # "refund" implicito del 30% de la perdida (irreal: el fisco no
+        # devuelve efectivo) y el NOL no crecia. Damodaran ginzu: en años de
+        # perdida tax=0 y la perdida SE ACUMULA al NOL para escudar
+        # utilidades futuras.
+        if ebit_t < 0:
+            nol_used_t = 0
+            tax_shield_t = 0
+            nol_remaining += -ebit_t        # la perdida engorda el NOL
+            nopat_t = ebit_t                 # sin beneficio fiscal inmediato
+        elif nol_remaining > 0:
             nol_used_t = min(nol_remaining, ebit_t)
             taxable_inc = ebit_t - nol_used_t
             nol_remaining -= nol_used_t
@@ -552,7 +601,12 @@ def project_company(
         # "des-invierte" (las fábricas no se desconstruyen gratis). Damodaran:
         # en años de declive, reinvestment floor = 0 (a menos que se modele
         # explícitamente liquidación de PPE, que no es nuestro caso).
-        reinvest_t = max(0.0, delta_rev / s2c_t) if s2c_t > 0 else 0.0
+        # AUDIT FIX: con reinvestment_lag, dimensionar con ΔRev futuro.
+        if lag > 0:
+            delta_rev_for_reinv = _rev_path[t + lag] - _rev_path[t + lag - 1]
+        else:
+            delta_rev_for_reinv = delta_rev
+        reinvest_t = max(0.0, delta_rev_for_reinv / s2c_t) if s2c_t > 0 else 0.0
         fcff_t = nopat_t - reinvest_t
 
         # ===== Invested Capital evolutivo (Hoja 2 implied) =====

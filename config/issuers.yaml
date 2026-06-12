@@ -10,7 +10,9 @@ market_defaults:
   erp: 0.0610                 # ERP MX = ERP US + CRP MX (calibrado)
   marginal_tax: 0.30
   terminal_growth: 0.03       # ~ inflacion MX largo plazo
-  terminal_wacc_override: 0.0850   # Fade a costo maduro (replica analista)
+  terminal_wacc_override: null     # AUDIT FIX: 8.5% era < rf MXN 9.21% (imposible) e inflaba TV.
+                              # null => la app usa rf + 4.5% (mature co. Damodaran, base MXN).
+                              # Fija un numero solo si quieres forzar un terminal WACC global.
   revenue_growth_high: 0.05   # Default conservador 5y
   forecast_years: 10
   high_growth_years: 5

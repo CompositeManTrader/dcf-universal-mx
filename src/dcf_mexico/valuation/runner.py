@@ -102,7 +102,10 @@ def assumptions_from_config(
         terminal_growth=market.terminal_growth,
         target_op_margin=target_margin,
         sales_to_capital=s2c,
-        effective_tax_base=market.marginal_tax,
+        # AUDIT FIX: None => el motor usa base.effective_tax_rate (tasa
+        # efectiva real de la empresa). Antes se pasaba market.marginal_tax
+        # pero el motor lo ignoraba; pasar None preserva el comportamiento.
+        effective_tax_base=None,
         marginal_tax_terminal=market.marginal_tax,
         risk_free=market.risk_free,
         erp=market.erp,
@@ -186,7 +189,11 @@ def value_one(
                 market_price=issuer.market_price,
                 risk_free=market.risk_free,
                 erp=market.erp,
-                levered_beta=sector.beta_unlevered,   # uso beta sectorial directa
+                # AUDIT NOTE: para financieras Hamada no aplica (la deuda es
+                # materia prima, no apalancamiento). El beta sectorial del
+                # yaml se usa DIRECTO como levered beta (practica estandar
+                # para bancos: beta de regresion/industria ~1.0-1.2).
+                levered_beta=sector.beta_unlevered,
                 growth_terminal=market.terminal_growth,
             )
             return ValuationRow(

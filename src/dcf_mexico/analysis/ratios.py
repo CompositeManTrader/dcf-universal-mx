@@ -1154,19 +1154,24 @@ def _per_share(snap) -> List[RatioInfo]:
     if shares == 0:
         return []
 
-    ni_ctrl = inc.net_income_controlling or inc.net_income or 0
-    cfo = cf.cfo or 0
-    fcf = cfo - (cf.capex_ppe or 0)
-    div = abs(cf.dividends_paid or 0)
+    # AUDIT FIX: flujos del XBRL son acumulados YTD — anualizar en Q1-Q3
+    # para que "TTM" no muestre 3-9 meses como si fuera el año completo.
+    _q = str(getattr(snap, "quarter", "4D"))
+    _qnum = 4 if _q.startswith("4") else int(_q) if _q.isdigit() else 4
+    _annualize = 4.0 / _qnum
+    ni_ctrl = (inc.net_income_controlling or inc.net_income or 0) * _annualize
+    cfo = (cf.cfo or 0) * _annualize
+    fcf = cfo - (cf.capex_ppe or 0) * _annualize
+    div = abs(cf.dividends_paid or 0) * _annualize
     bv = bs.equity_controlling or 0
-    rev = inc.revenue or 0
+    rev = (inc.revenue or 0) * _annualize
 
     out = []
 
     out.append(RatioInfo(
         name="EPS Basic (TTM)",
         value=ni_ctrl / shares,
-        formula="Net Income Controlling / Shares Outstanding",
+        formula="Net Income Controlling anualizado / Shares Outstanding",
         description="Utilidad por accion basica. La metrica MAS conocida del mercado. "
                     "Es lo que cada accion 'gano' en el periodo.",
         interpretation="Comparar con EPS prior periods (crecimiento) y con consensus.",
@@ -1276,14 +1281,20 @@ def _valuation_multiples(snap, market_price: Optional[float]) -> List[RatioInfo]
     inf = snap.parsed.informative
 
     shares = inf.shares_outstanding or 1e-9
-    ni_ctrl = inc.net_income_controlling or inc.net_income or 0
-    rev_ttm = inf.revenue_12m or inc.revenue or 0
-    ebit_ttm = inf.ebit_12m or inc.ebit or 0
+    # AUDIT FIX: NI/CFO/FCF del XBRL son ACUMULADOS YTD. En snapshots Q1-Q3
+    # un P/E con NI de 3-9 meses queda inflado 1.3x-4x. Anualizamos por 4/q
+    # (aprox. — ignora estacionalidad, pero corrige el orden de magnitud).
+    _q = str(getattr(snap, "quarter", "4D"))
+    _qnum = 4 if _q.startswith("4") else int(_q) if _q.isdigit() else 4
+    _annualize = 4.0 / _qnum
+    ni_ctrl = (inc.net_income_controlling or inc.net_income or 0) * _annualize
+    rev_ttm = inf.revenue_12m or (inc.revenue or 0) * _annualize
+    ebit_ttm = inf.ebit_12m or (inc.ebit or 0) * _annualize
     da_ttm = inf.da_12m or 0
     ebitda_ttm = ebit_ttm + da_ttm
     bv = bs.equity_controlling or 1e-9
-    cfo = cf.cfo or 0
-    fcf = cfo - (cf.capex_ppe or 0)
+    cfo = (cf.cfo or 0) * _annualize
+    fcf = cfo - (cf.capex_ppe or 0) * _annualize
 
     market_cap = market_price * shares
     debt = bs.total_debt_with_leases

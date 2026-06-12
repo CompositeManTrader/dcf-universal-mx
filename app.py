@@ -604,7 +604,23 @@ if mode == "Single DCF":
         st.stop()
 
     # ----- NON-FINANCIAL: FCFF DCF -----
-    base = CompanyBase.from_parser_dcf(res.dcf, include_leases_as_debt=True)
+    # AUDIT FIX (critico): para emisoras que reportan en USD (GMEXICO, CEMEX,
+    # ORBIA...) el DCF mezclaba flujos USD con precio de mercado MXN, dejando
+    # el value/share y el upside sin sentido (~19x off). Convertimos el
+    # CompanyBase a MXN al spot del config (igual que runner.py). Los tabs de
+    # EEFF NO se tocan: siguen mostrando la moneda nativa del XBRL.
+    _dcf_ccy = (res.info.currency or "MXN").upper().strip()
+    _dcf_fx_mult = market.fx_rate_usdmxn if _dcf_ccy == "USD" else 1.0
+    base = CompanyBase.from_parser_dcf(res.dcf, include_leases_as_debt=True,
+                                         currency_multiplier=_dcf_fx_mult)
+    if _dcf_ccy == "USD":
+        st.info(
+            f"💱 **{issuer.ticker} reporta en USD.** Para la valuación DCF los "
+            f"flujos se convierten a MXN al spot del config "
+            f"(USDMXN = {market.fx_rate_usdmxn:.2f}) para que el value/share "
+            f"sea comparable con el precio BMV en pesos. Los Estados "
+            f"Financieros siguen en USD nativo."
+        )
 
     # ========================================================================
     # TABS DEFINITION (movida desde abajo - ahora la pagina arranca con tabs)
@@ -1098,8 +1114,22 @@ if mode == "Single DCF":
     # BUG FIX: usar _default_beta del override yaml en lugar de sector.beta_unlevered
     beta_unlev    = float(_ss_num("beta_u", _default_beta))
     erp           = _ss_pct("erp", market.erp)
-    terminal_wacc = _ss_pct("term_wacc",
-                              market.terminal_wacc_override or 0.085)
+    # AUDIT FIX (critico): el default anterior era 8.5% — copiado del ginzu
+    # de Damodaran calibrado a rf USD ~4% (4% + 4.5% mature = 8.5%). Con
+    # rf MXN ~9.2%, un terminal WACC de 8.5% queda DEBAJO del bono soberano
+    # (imposible) e inflaba el valor terminal de todas las valuaciones.
+    # Default correcto en MXN: rf + 4.5% (heuristica mature-company Damodaran).
+    _term_wacc_default = (market.terminal_wacc_override
+                           if market.terminal_wacc_override
+                           else rf + 0.045)
+    terminal_wacc = _ss_pct("term_wacc", _term_wacc_default)
+    if terminal_wacc < rf:
+        st.warning(
+            f"⚠️ Terminal WACC ({terminal_wacc:.2%}) < risk-free MXN "
+            f"({rf:.2%}). Ninguna empresa puede tener costo de capital "
+            f"nominal menor que el bono soberano en la misma moneda — "
+            f"esto INFLA el valor terminal. Sugerido: ≥ rf + 3-4.5%."
+        )
 
     # Effective tax rate desde Section C (depende del método LTM vs Avg)
     _tax_method_state = st.session_state.get(

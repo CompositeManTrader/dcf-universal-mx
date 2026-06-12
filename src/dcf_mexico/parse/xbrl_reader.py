@@ -968,7 +968,15 @@ class XBRLReader:
         op_margin = ebit / revenue if revenue else 0.0
         invested_capital = bs.invested_capital
         s2c = revenue / invested_capital if invested_capital else 0.0
-        coverage = ebit / is_.interest_expense if is_.interest_expense else float("inf")
+        # AUDIT FIX: para interest coverage (synthetic rating Damodaran) usar
+        # "Intereses devengados a cargo" (hoja 800200) — el interes PURO —
+        # en vez del total de gastos financieros que incluye perdidas FX y
+        # derivados. Con el gross se subestimaba coverage => rating peor =>
+        # Kd inflado. Fallback al gross si la nota no esta disponible.
+        interest_for_coverage = (inf.interest_devengado_acum
+                                  if inf.interest_devengado_acum > 0
+                                  else is_.interest_expense)
+        coverage = ebit / interest_for_coverage if interest_for_coverage else float("inf")
 
         return DCFInputs(
             ticker=info.ticker,
@@ -983,7 +991,7 @@ class XBRLReader:
             da=round(da / m, 2),
             capex_gross=round(cf.capex_gross / m, 2),
             capex_net=round(cf.capex_net / m, 2),
-            interest_expense=round(is_.interest_expense / m, 2),
+            interest_expense=round(interest_for_coverage / m, 2),
             pretax_income=round(is_.pretax_income / m, 2),
             tax_expense=round(is_.tax_expense / m, 2),
             effective_tax_rate=round(is_.effective_tax_rate, 4),

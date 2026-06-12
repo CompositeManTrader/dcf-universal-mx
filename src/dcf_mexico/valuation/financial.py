@@ -97,10 +97,14 @@ class FinancialOutput:
 
 # -------------------------------------------------------------------
 def justified_pb(roe: float, growth: float, cost_of_equity: float) -> float:
-    """Gordon-style justified P/B = (ROE - g) / (Re - g)."""
+    """Gordon-style justified P/B = (ROE - g) / (Re - g).
+
+    AUDIT FIX: clamp a >= 0. Si ROE < g la formula da P/B negativo
+    (valor por accion negativo, sin sentido economico) — en ese caso el
+    supuesto g es insostenible para ese ROE y devolvemos 0 como señal."""
     if cost_of_equity <= growth + 0.001:
         return 0.0
-    return (roe - growth) / (cost_of_equity - growth)
+    return max(0.0, (roe - growth) / (cost_of_equity - growth))
 
 
 def value_financial(
@@ -128,7 +132,6 @@ def value_financial(
 
     n = a.forecast_years
     high_n = a.high_growth_years
-    retention = 1 - a.payout_ratio  # fraccion de NI que se reinvierte (aumenta BV)
     # Asumimos ROE constante en a.roe (simplificacion); en modelos completos converge
     roe = a.roe
 
@@ -141,10 +144,19 @@ def value_financial(
             steps_remaining = n - high_n
             g = a.growth_high + (a.growth_terminal - a.growth_high) * (step / steps_remaining)
 
+        # AUDIT FIX: antes `g` se calculaba pero NUNCA se usaba — el BV
+        # crecia siempre a roe×(1−payout) y el input growth_high era inerte.
+        # Identidad de crecimiento sostenible: g = ROE × retention, por lo
+        # tanto retention_t = g_t / ROE (clamp [0,1]); el payout queda
+        # IMPLICITO (= 1 − g/ROE). Si ROE <= 0, fallback al payout del input.
+        if roe > 1e-9:
+            retention_t = min(1.0, max(0.0, g / roe))
+        else:
+            retention_t = 1 - a.payout_ratio
+
         # BV evoluciona por retencion: BV_t = BV_{t-1} + retained_earnings_t
-        # ni_t = roe * bv[t-1]; retained = ni_t * retention
         ni_t = roe * bv[-1]
-        retained = ni_t * retention
+        retained = ni_t * retention_t
         bv_new = bv[-1] + retained
         bv.append(bv_new)
 

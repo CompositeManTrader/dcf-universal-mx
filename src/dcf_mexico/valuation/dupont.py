@@ -55,7 +55,7 @@ class DuPontResult:
             ("",                                   ""),
             ("--- Reference ---",                ""),
             ("ROE actual (NI/Equity directo)",   f"{self.actual_roe_check:.2%}"),
-            ("Consistency (5step - actual)",     f"{self.consistency_pp:+.4f}pp"),
+            ("Consistency (5step - actual)",     f"{self.consistency_pp*100:+.4f}pp"),
             ("ROA (NI/Assets)",                   f"{self.roa:.2%}"),
             ("ROIC (NOPAT/IC)",                   f"{self.roic:.2%}"),
         ]

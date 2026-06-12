@@ -363,10 +363,12 @@ class ProjectionResult:
         rows = [
             ("Net Income",       [self.base.net_income] + [y.net_income for y in self.years]),
             ("(+) D&A",          [self.base.da] + [y.da for y in self.years]),
-            ("(-) ΔWorking Cap", [0.0] + [y.delta_wc for y in self.years]),
+            # AUDIT FIX: la fila se etiqueta "(-)" — mostrar el flujo con signo
+            # (ΔWC > 0 consume caja => valor negativo en la tabla).
+            ("(-) ΔWorking Cap", [0.0] + [-y.delta_wc for y in self.years]),
             ("Cash from Ops",    [self.base.cfo] + [y.cfo for y in self.years]),
             ("(-) CapEx",        [-self.base.capex] + [-y.capex for y in self.years]),
-            ("FCFF",             [self.base.cfo - self.base.capex] + [y.fcff for y in self.years]),
+            ("FCFF (unlevered)", [self.base.cfo - self.base.capex] + [y.fcff for y in self.years]),
             ("FCFE",             ["—"] + [y.fcfe for y in self.years]),
             ("(-) Dividends",    [-self.base.dividends_paid] + [-y.dividends_paid for y in self.years]),
             ("Net Change Cash",  ["—"] + [y.net_change_cash for y in self.years]),
@@ -439,6 +441,9 @@ def project_financials(
     14. FCFE_t = FCFF_t + Net Debt Change - Interest × (1-tax)
     """
     n = horizon or drivers.horizon
+    # AUDIT FIX: si el caller pide horizon > longitud de los paths,
+    # antes lanzaba IndexError. Clamp al path disponible.
+    n = min(n, len(drivers.revenue_growth_path))
     years = []
     prev_revenue = base.revenue
     prev_wc = base.accounts_receivable + base.inventories - base.accounts_payable
@@ -446,6 +451,13 @@ def project_financials(
     prev_cash = base.cash
     prev_ppe = base.ppe_net
     prev_equity = base.equity_controlling
+    # AUDIT FIX: tasa de interes implicita de la empresa (antes hardcode 10%).
+    # Si la base tiene deuda e intereses reales, usar la tasa implicita.
+    _int_rate = drivers.interest_rate_on_debt
+    if base.total_debt > 0 and base.interest_expense > 0:
+        _implied = base.interest_expense / base.total_debt
+        if 0.01 <= _implied <= 0.30:        # sanity: 1%-30%
+            _int_rate = _implied
 
     for i in range(n):
         year_label = base.year + i + 1
@@ -465,8 +477,8 @@ def project_financials(
         ebit = rev * op_margin
 
         da = rev * drivers.da_pct_revenue_path[i]
-        # Interest sobre deuda BoP
-        interest = prev_debt * drivers.interest_rate_on_debt
+        # Interest sobre deuda BoP (tasa implicita de la empresa, no hardcode)
+        interest = prev_debt * _int_rate
 
         pretax = ebit - interest
         tax_rate = drivers.tax_rate_path[i]
@@ -486,15 +498,22 @@ def project_financials(
         # CFO indirect simplificado: NI + D&A - ΔWC
         cfo = ni + da - delta_wc
 
-        # FCFF (BB-style): CFO - CapEx
-        fcff = cfo - capex
+        # ===== AUDIT FIX (error metodologico) =====
+        # ANTES: fcff = cfo - capex = NI + D&A - ΔWC - CapEx. Pero NI ya
+        # resto el interes => eso es un flujo APALANCADO, no FCFF. Si ese
+        # "FCFF" se descuenta con WACC, se castiga el interes DOS veces
+        # (en el flujo y en la tasa).
+        # AHORA (Damodaran): FCFF = EBIT×(1-t) + D&A - ΔWC - CapEx
+        #        y FCFE = FCFF - interes×(1-t) + Δdeuda
+        nopat_unlevered = ebit * (1 - tax_rate) if ebit > 0 else ebit
+        fcff = nopat_unlevered + da - delta_wc - capex
 
         # Debt change & FCFE
         debt_change = 0.0
         if drivers.debt_change_pct_path:
             debt_change = rev * drivers.debt_change_pct_path[i]
         new_debt = prev_debt + debt_change
-        fcfe = fcff + debt_change - interest * (1 - tax_rate)
+        fcfe = fcff - interest * (1 - tax_rate) + debt_change
 
         # Dividendos
         payout = drivers.payout_ratio_path[i] if drivers.payout_ratio_path else 0.30
